@@ -1,4 +1,7 @@
-# 雾屿灯塔 / Isle of Quiet Signals
+# 技术探索 #01：雾屿灯塔 / Isle of Quiet Signals
+
+远端仓库：[yydshly/0728_practical-skill-notebook](https://github.com/yydshly/0728_practical-skill-notebook)  
+当前项目是这个技术探索笔记的第一个案例；后续案例可以作为同一仓库中的独立目录或分支继续加入。
 
 一个由原生滚动驱动的电影式微型网站：七张对齐的 2.5D 图层维持同一片暮蓝海面，叙事在滚动中进入与退场，最后落在可拖拽、可键盘操作的四条航线档案。
 
