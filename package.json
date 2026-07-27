@@ -5,8 +5,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --pool=forks --maxWorkers=1 --no-file-parallelism",
+    "test:watch": "vitest --pool=forks --maxWorkers=1 --no-file-parallelism",
     "test:browser": "playwright test",
     "validate:assets": "node scripts/validate-assets.mjs"
   },

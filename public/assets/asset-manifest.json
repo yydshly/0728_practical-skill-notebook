@@ -1,0 +1,18 @@
+{
+  "masterAspect": "16:9",
+  "scene": [
+    { "role": "00", "file": "/assets/scene/00-sky.webp", "width": 1672, "height": 941, "alpha": false, "anchor": "center bottom", "depth": "background" },
+    { "role": "10", "file": "/assets/scene/10-distant-island.webp", "width": 1672, "height": 941, "alpha": true, "anchor": "center horizon", "depth": "distant" },
+    { "role": "20", "file": "/assets/scene/20-sea-midground.webp", "width": 1672, "height": 941, "alpha": true, "anchor": "center bottom", "depth": "midground" },
+    { "role": "30", "file": "/assets/scene/30-lighthouse.webp", "width": 1672, "height": 941, "alpha": true, "anchor": "center bottom", "depth": "subject" },
+    { "role": "40", "file": "/assets/scene/40-foreground-left.webp", "width": 1672, "height": 941, "alpha": true, "anchor": "left bottom", "depth": "foreground" },
+    { "role": "41", "file": "/assets/scene/41-foreground-right.webp", "width": 1672, "height": 941, "alpha": true, "anchor": "right bottom", "depth": "foreground" },
+    { "role": "50", "file": "/assets/scene/50-edge-frame.webp", "width": 1672, "height": 941, "alpha": true, "anchor": "center edges", "depth": "nearest" }
+  ],
+  "routes": [
+    { "id": "tidal-garden", "file": "/assets/routes/tidal-garden.webp", "width": 1200, "height": 900, "source": "master-crop placeholder" },
+    { "id": "echo-bay", "file": "/assets/routes/echo-bay.webp", "width": 1200, "height": 900, "source": "master-crop placeholder" },
+    { "id": "keeper-house", "file": "/assets/routes/keeper-house.webp", "width": 1200, "height": 900, "source": "master-crop placeholder" },
+    { "id": "north-wind-path", "file": "/assets/routes/north-wind-path.webp", "width": 1200, "height": 900, "source": "master-crop placeholder" }
+  ]
+}
