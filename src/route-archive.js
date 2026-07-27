@@ -1,4 +1,5 @@
 const wrapIndex = (index, length) => (index % length + length) % length;
+const ARCHIVE_CONTROLLER = "__isleRouteArchiveController";
 
 function cardMarkup(route, index) {
   return `
@@ -15,6 +16,8 @@ function cardMarkup(route, index) {
 }
 
 export function createRouteArchive({ root, routes }) {
+  root[ARCHIVE_CONTROLLER]?.destroy();
+
   const track = root.querySelector("#route-track");
   const previousButton = root.querySelector("#route-prev");
   const nextButton = root.querySelector("#route-next");
@@ -149,7 +152,7 @@ export function createRouteArchive({ root, routes }) {
 
   updateActive();
 
-  return {
+  const controller = {
     next,
     previous,
     goTo,
@@ -164,6 +167,12 @@ export function createRouteArchive({ root, routes }) {
       track.removeEventListener("pointerup", onPointerEnd);
       track.removeEventListener("pointercancel", onPointerEnd);
       resizeObserver?.disconnect();
+      if (root[ARCHIVE_CONTROLLER] === controller) {
+        delete root[ARCHIVE_CONTROLLER];
+      }
     },
   };
+
+  root[ARCHIVE_CONTROLLER] = controller;
+  return controller;
 }

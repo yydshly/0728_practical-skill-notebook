@@ -28,6 +28,7 @@ export function deriveSceneFrame(progress, pointer = { x: 0, y: 0 }) {
     storyBOpacity,
     focusAmount: storyAOpacity * 0.45 + storyBOpacity,
     archive,
+    archiveInteractive: archive > 0.05,
     controlsOpacity: smoothstep(0.91, 1, p),
   };
 }
@@ -53,6 +54,8 @@ function writeFrame(root, frame) {
   for (const [name, value] of Object.entries(variables)) {
     root.style.setProperty(name, String(value));
   }
+
+  root.classList.toggle("archive-active", frame.archiveInteractive);
 }
 
 export function createStage({

@@ -8,6 +8,20 @@ describe("asset readiness", () => {
 
     await expect(waitForCriticalImages(root)).resolves.toEqual({ failed: [] });
   });
+
+  it("marks a critical image as failed when it cannot be decoded", async () => {
+    const root = document.createElement("div");
+    const image = document.createElement("img");
+    image.dataset.critical = "";
+    Object.defineProperty(image, "complete", { value: false });
+    root.append(image);
+
+    const ready = waitForCriticalImages(root);
+    image.dispatchEvent(new Event("error"));
+
+    await expect(ready).resolves.toEqual({ failed: [image] });
+    expect(image.dataset.failed).toBe("true");
+  });
 });
 
 describe("stage calculations", () => {
@@ -24,5 +38,11 @@ describe("stage calculations", () => {
     expect(second).toEqual(first);
     expect(first.storyAOpacity).toBe(0);
     expect(first.storyBOpacity).toBeGreaterThan(0.9);
+    expect(first.archiveInteractive).toBe(false);
+  });
+
+  it("only exposes archive controls after the archive begins entering", () => {
+    expect(deriveSceneFrame(0.75).archiveInteractive).toBe(false);
+    expect(deriveSceneFrame(0.9).archiveInteractive).toBe(true);
   });
 });
