@@ -335,7 +335,7 @@ Save the approved full-resolution result as `public/assets/originals/lighthouse-
 
 - [ ] **Step 2: Derive seven aligned scene layers from the master**
 
-For each edit, use the master as the only reference, preserve the exact camera, horizon, lighting, and object positions, remove all unrequested objects, and request transparency where appropriate:
+For each edit, use the master as the only reference, preserve the exact camera, horizon, lighting, and object positions, remove all unrequested objects, and use a perfectly flat chroma-key green background (`#00FF00`) for every non-opaque layer. Remove that color locally with the built-in image-generation skill's chroma-key helper and inspect the result before choosing WebP or PNG:
 
 ```text
 00-sky: opaque sky and far sea color field only; remove islands, lighthouse, rocks, buildings, and text.
@@ -347,7 +347,7 @@ For each edit, use the master as the only reference, preserve the exact camera, 
 50-edge-frame: sparse nearest grass and dark rock edge accents only on transparent background; no continuous opaque border.
 ```
 
-Inspect every layer at full resolution for white/black alpha fringes, mismatched horizon, accidental text, and insufficient bleed. Regenerate only the failed layer.
+Inspect every layer at full resolution for white/black alpha fringes, residual green, mismatched horizon, accidental text, and insufficient bleed. Regenerate only the failed layer. Do not use the API-key-dependent true-native-transparency fallback without new user authorization.
 
 - [ ] **Step 3: Generate four route archive images**
 
