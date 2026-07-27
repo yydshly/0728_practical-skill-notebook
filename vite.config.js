@@ -1,0 +1,12 @@
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  server: { host: "127.0.0.1", port: 4173, strictPort: true },
+  preview: { host: "127.0.0.1", port: 4173, strictPort: true },
+  test: {
+    environment: "jsdom",
+    pool: "forks",
+    maxWorkers: 1,
+    fileParallelism: false,
+  },
+});

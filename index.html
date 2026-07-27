@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN" class="no-js">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b1b29" />
+    <meta name="description" content="雾屿灯塔：一封写给远方的海上视觉书信。" />
+    <title>雾屿灯塔 · Isle of Quiet Signals</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#route-archive">跳至航线档案</a>
+    <main>
+      <section id="cinematic-scroll" class="cinematic-scroll" aria-label="雾屿灯塔视觉叙事">
+        <div id="cinematic-stage" class="cinematic-stage">
+          <header class="site-header">
+            <a class="wordmark" href="#cinematic-scroll" aria-label="回到雾屿灯塔开场">
+              <span>雾屿灯塔</span>
+              <span>ISLE OF QUIET SIGNALS</span>
+            </a>
+            <nav id="site-nav" aria-label="场景导航">
+              <button type="button" data-progress="0">灯塔</button>
+              <button type="button" data-progress="0.5">信号</button>
+              <button type="button" data-progress="1">航线</button>
+            </nav>
+          </header>
+
+          <div class="world" aria-hidden="true">
+            <img data-layer="sky" data-critical src="/assets/scene/00-sky.webp" width="2400" height="1350" alt="" decoding="async" fetchpriority="high" />
+            <img data-layer="distant" src="/assets/scene/10-distant-island.webp" width="2400" height="1350" alt="" decoding="async" />
+            <img data-layer="midground" data-critical src="/assets/scene/20-sea-midground.webp" width="2400" height="1350" alt="" decoding="async" fetchpriority="high" />
+            <img data-layer="lighthouse" data-critical src="/assets/scene/30-lighthouse.webp" width="2400" height="1350" alt="暮蓝海面上亮起暖光的雾屿灯塔" decoding="async" fetchpriority="high" />
+            <img data-layer="foreground-left" src="/assets/scene/40-foreground-left.webp" width="2400" height="1350" alt="" decoding="async" />
+            <img data-layer="foreground-right" src="/assets/scene/41-foreground-right.webp" width="2400" height="1350" alt="" decoding="async" />
+            <img data-layer="edge-frame" src="/assets/scene/50-edge-frame.webp" width="2400" height="1350" alt="" decoding="async" />
+            <div class="world-grade"></div>
+            <div class="world-grain"></div>
+          </div>
+
+          <article id="intro" class="intro-copy narrative-copy">
+            <p class="eyebrow">北纬 31° · 雾季航线</p>
+            <h1>雾屿灯塔</h1>
+            <p class="lede">有些光，不为抵达，只为让远方知道方向仍在。</p>
+            <p class="scroll-cue"><span></span>向雾中前行</p>
+          </article>
+
+          <article id="story-a" class="narrative-panel narrative-panel-a" aria-labelledby="story-a-title">
+            <p class="eyebrow">01 / 守灯的人</p>
+            <h2 id="story-a-title">每一次点亮，<br />都是一次回答。</h2>
+            <p>日落之后，守灯人沿一百二十七级石阶上行。没有掌声，也没有观众；只有海面在远处接住那束光。</p>
+            <p class="fact">自 1912 年起，每晚亮起。</p>
+          </article>
+
+          <article id="story-b" class="narrative-panel narrative-panel-b" aria-labelledby="story-b-title">
+            <p class="eyebrow">02 / 雾中的信号</p>
+            <h2 id="story-b-title">看不见岸时，<br />方向仍然存在。</h2>
+            <p>浓雾会藏起岛屿，却藏不住光的节奏。三次短闪，一次长明，是这里写给夜航者的名字。</p>
+            <p class="fact">可见距离 18 海里。</p>
+          </article>
+
+          <section id="route-archive" class="route-archive" aria-labelledby="route-title" tabindex="-1">
+            <header class="archive-heading">
+              <p class="eyebrow">航线档案 / 04</p>
+              <h2 id="route-title">沿着光，<br />认识这座岛。</h2>
+              <p>四条短途航线，从潮汐、回声、日常与风开始。</p>
+            </header>
+            <div class="archive-viewport">
+              <div id="route-track" class="route-track" role="list" aria-label="岛屿航线"></div>
+            </div>
+            <div class="archive-controls" aria-label="航线控制">
+              <button id="route-prev" type="button" aria-label="查看上一条航线">←</button>
+              <p id="route-status" class="sr-only" aria-live="polite"></p>
+              <p class="route-count" aria-hidden="true"><span>01</span> / 04</p>
+              <button id="route-next" type="button" aria-label="查看下一条航线">→</button>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
