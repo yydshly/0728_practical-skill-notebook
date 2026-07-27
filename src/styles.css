@@ -170,7 +170,17 @@ h2 { font-size: clamp(2.2rem, 5.6vw, 5.5rem); }
 .archive-heading h2 { font-size: clamp(2rem, 4vw, 4rem); }
 .archive-heading > p:last-child { color: var(--ink-muted); font-size: 0.9rem; line-height: 1.65; }
 .archive-viewport { min-width: 0; overflow: hidden; }
-.route-track { display: flex; gap: 1rem; min-height: 15rem; }
+.route-track { display: flex; gap: 1rem; min-height: 15rem; touch-action: pan-y; transform: translate3d(calc(var(--route-offset, 0px) + var(--route-drag-x, 0px)), 0, 0); transition: transform 420ms cubic-bezier(.2,.75,.2,1); will-change: transform; }
+.route-archive[data-dragging="true"] .route-track { transition: none; cursor: grabbing; }
+.route-card { position: relative; display: grid; flex: 0 0 min(76%, 27rem); min-height: 18rem; overflow: hidden; border: 1px solid rgb(245 241 232 / 0.28); background: #0c202d; opacity: 0.48; transform: scale(0.96); transform-origin: left bottom; transition: opacity 260ms ease, transform 260ms ease; }
+.route-card[aria-current="true"] { opacity: 1; transform: scale(1); }
+.route-card > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.58; }
+.route-card::after { position: absolute; inset: 0; background: linear-gradient(0deg, rgb(3 11 18 / 0.85), rgb(3 11 18 / 0.08) 78%); content: ""; pointer-events: none; }
+.route-card-copy { position: relative; z-index: 1; align-self: end; padding: 1.25rem; }
+.route-card-copy h3 { margin: 0; font-family: var(--serif); font-size: clamp(1.65rem, 3vw, 2.35rem); font-weight: 500; }
+.route-card-copy > p:not(.eyebrow) { max-width: 21rem; margin: 0.55rem 0 0; color: #dbe2dd; font-size: 0.86rem; line-height: 1.55; }
+.route-card-copy button { margin-top: 1rem; padding: 0.45rem 0; border: 0; border-bottom: 1px solid var(--amber); color: var(--paper); background: transparent; cursor: pointer; font-size: 0.77rem; }
+.route-detail { color: var(--fog) !important; }
 .archive-controls { grid-column: 2; display: flex; align-items: center; gap: 1rem; opacity: var(--controls-opacity); pointer-events: auto; }
 .archive-controls button { border: 1px solid var(--line); border-radius: 50%; }
 .route-count { margin: 0; font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.12em; }

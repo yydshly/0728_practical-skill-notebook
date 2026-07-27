@@ -1,6 +1,7 @@
 import { NAV_POINTS, ROUTES, SCENE } from "./scene-config.js";
 import { waitForCriticalImages } from "./assets.js";
 import { createStage } from "./stage.js";
+import { createRouteArchive } from "./route-archive.js";
 
 export async function initApp(documentRef = document) {
   documentRef.documentElement.style.setProperty("--scroll-length", `${SCENE.scrollLength}px`);
@@ -9,6 +10,8 @@ export async function initApp(documentRef = document) {
   const stage = documentRef.querySelector("#cinematic-stage");
   const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
   let stageController = null;
+  const archiveRoot = documentRef.querySelector("#route-archive");
+  const archiveController = archiveRoot ? createRouteArchive({ root: archiveRoot, routes: ROUTES }) : null;
 
   if (root && stage) {
     const { failed } = await waitForCriticalImages(root);
@@ -22,7 +25,11 @@ export async function initApp(documentRef = document) {
     navPoints: NAV_POINTS,
     routes: ROUTES,
     stage: stageController,
-    destroy: () => stageController?.destroy(),
+    archive: archiveController,
+    destroy: () => {
+      stageController?.destroy();
+      archiveController?.destroy();
+    },
   };
 }
 
