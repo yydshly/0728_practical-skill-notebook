@@ -33,6 +33,14 @@ export interface InspectorSceneDiagnostics {
   readonly lastError: string | null;
   readonly action: InspectorActionStatus | null;
   readonly overlayNodeCount: number;
+  readonly reducedMotion: boolean;
+  /** Camera placement is immediate; no smoothing or easing is implemented. */
+  readonly cameraEasing: "none";
+  readonly renderer: Readonly<{
+    pixelRatio: number;
+    memory: Readonly<{ geometries: number; textures: number }>;
+    render: Readonly<{ calls: number; triangles: number; points: number; lines: number }>;
+  }>;
 }
 
 export interface InspectorScene {
@@ -149,6 +157,21 @@ export function createInspectorScene(
         ? Object.freeze({ ...current.getActionState(), paused: currentPaused })
         : null,
       overlayNodeCount: current?.root.getObjectByName("review-overlays") ? 1 : 0,
+      reducedMotion: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+      cameraEasing: "none",
+      renderer: Object.freeze({
+        pixelRatio: renderer.getPixelRatio(),
+        memory: Object.freeze({
+          geometries: renderer.info.memory.geometries,
+          textures: renderer.info.memory.textures,
+        }),
+        render: Object.freeze({
+          calls: renderer.info.render.calls,
+          triangles: renderer.info.render.triangles,
+          points: renderer.info.render.points,
+          lines: renderer.info.render.lines,
+        }),
+      }),
     });
 
   const placeCamera = () => {
@@ -356,6 +379,13 @@ function createUnavailableScene(error: unknown): InspectorScene {
         lastError,
         action: null,
         overlayNodeCount: 0,
+        reducedMotion: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+        cameraEasing: "none",
+        renderer: Object.freeze({
+          pixelRatio: 0,
+          memory: Object.freeze({ geometries: 0, textures: 0 }),
+          render: Object.freeze({ calls: 0, triangles: 0, points: 0, lines: 0 }),
+        }),
       }),
     dispose() {},
   };

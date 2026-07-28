@@ -41,16 +41,18 @@ npm run build
 git diff --check
 ```
 
-### 产品实现后启用的预留入口
+### 当前可运行：Monster Forge｜怪物铸造所
 
-以下精确命令是三个产品实现后的预留入口，**当前不能执行，也不能作为基础层通过条件**。产品功能、开发服务器和浏览器旅程测试建立后，README 会更新为可执行说明：
+Monster Forge 已完成本地可运行的 3D 资产审阅流程。它包含四张透明目录 PNG、一个可复用的实时 Three.js 检查器、五个确定性动作、三项技术叠加和 WebGL 回退；完整的浏览器、性能与无障碍证据见[验证记录](apps/monster-forge/docs/VALIDATION.md)。在本套件根目录执行：
 
 ```powershell
 npm run dev:forge
-npm run dev:arena
-npm run dev:atelier
-npm run test:browser
+npm test --workspace @showcase/monster-forge
+npm run test:browser --workspace @showcase/monster-forge
+npm run build --workspace @showcase/monster-forge
 ```
+
+Ashfall Arena 与 Mech Atelier 的命令仍是未来入口，尚不能作为可运行产品或验证通过条件。
 
 已有演示仍在套件外独立运行：
 
