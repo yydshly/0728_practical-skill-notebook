@@ -591,11 +591,20 @@ test("production camera path consumes occlusion, lock, and shake events", async 
     occluded.camera.desiredDistance,
   );
 
+  const canvas = page.locator("[data-game-canvas]");
+  await canvas.dispatchEvent("pointerdown", {
+    pointerId: 92,
+    pointerType: "mouse",
+    button: 2,
+  });
+  await expect
+    .poll(async () => (await snapshot(page)).action)
+    .toBe("guard");
   const unlockedTarget = occluded.camera.target;
   await page.keyboard.press("q");
   await expect
     .poll(async () => (await snapshot(page)).lockTargetId)
-    .toBe("training-lock-target");
+    .toBe("training-crawler");
   const locked = await snapshot(page);
   expect(locked.camera.lockFraming).toBe(true);
   expect(locked.camera.target).not.toEqual(unlockedTarget);
@@ -604,6 +613,15 @@ test("production camera path consumes occlusion, lock, and shake events", async 
   await expect
     .poll(async () => (await snapshot(page)).camera.lockFraming)
     .toBe(false);
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerId: 92,
+        pointerType: "mouse",
+        button: 2,
+      }),
+    ),
+  );
 
   await page.evaluate(() =>
     window.__ashfallDiagnostics!.triggerCameraShake(),

@@ -34,6 +34,18 @@ export function createInitialState(seed: number): GameState {
     encounter: {
       phase: "training",
       gateOpen: false,
+      trainingSpawned: false,
+      trainingAttackSeen: false,
+      trainingGuardSeen: false,
+      spawnedIds: [],
+      completedIds: [],
+      bossThresholds: { 65: false, 30: false },
+      phaseEntryTick: 0,
+    },
+    enemyAi: {
+      meleeSlotOwner: null,
+      rangedWindow: -1,
+      rangedSlotOwner: null,
     },
     drops: [],
     combat: {

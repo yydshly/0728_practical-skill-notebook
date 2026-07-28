@@ -6,6 +6,8 @@ import type {
   Vec2,
 } from "./types";
 import { stepCombat } from "./combat";
+import { stepEnemyAi } from "./enemy-ai";
+import { stepEncounter } from "./encounters";
 import { resolveArenaMovement } from "./resolve-movement";
 
 const FIXED_DELTA = 1 / 60;
@@ -240,21 +242,23 @@ export function stepGame(
           ...state,
           player: steppedPlayer,
         };
-  const combat = stepCombat(movedState, intent, [], content);
+  const aiState = stepEnemyAi(movedState, content);
+  const combat = stepCombat(aiState, intent, [], content);
+  const encounter = stepEncounter(combat.state, combat.events);
   const lockTargetId = canHandleLockIntent(state)
-    ? nextLockTarget(combat.state, intent.lockPressed)
-    : combat.state.player.lockTargetId;
+    ? nextLockTarget(encounter.state, intent.lockPressed)
+    : encounter.state.player.lockTargetId;
   const player =
-    combat.state.player.lockTargetId === lockTargetId
-      ? combat.state.player
-      : { ...combat.state.player, lockTargetId };
+    encounter.state.player.lockTargetId === lockTargetId
+      ? encounter.state.player
+      : { ...encounter.state.player, lockTargetId };
 
   return {
     state: {
-      ...combat.state,
+      ...encounter.state,
       tick: state.tick + 1,
       player,
     },
-    events: combat.events,
+    events: [...combat.events, ...encounter.events],
   };
 }

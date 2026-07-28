@@ -1,4 +1,7 @@
-import { createVesperKnight } from "@showcase/game-assets";
+import {
+  createProceduralMonster,
+  createVesperKnight,
+} from "@showcase/game-assets";
 import { PerspectiveCamera, Vector3 } from "three";
 import { arenaContent } from "./content/arena-content";
 import { createInputAdapter } from "./input/create-input-adapter";
@@ -7,9 +10,14 @@ import { createArenaScene } from "./scene/create-arena-scene";
 import { createGameCamera } from "./scene/create-game-camera";
 import { resolveCameraOcclusion } from "./scene/resolve-camera-occlusion";
 import { createEntitySynchronizer } from "./scene/sync-entities";
-import { createInitialState } from "./simulation/create-initial-state";
+import {
+  createEncounterFixture,
+  type EncounterFixture,
+} from "./simulation/encounters";
+import { requestEnemyMove } from "./simulation/enemy-ai";
 import { stepGame } from "./simulation/step-game";
 import type {
+  EnemyMoveId,
   GameEvent,
   GameIntent,
   GameState,
@@ -17,6 +25,10 @@ import type {
 import "./styles.css";
 
 interface AshfallSnapshot {
+  status: GameState["status"];
+  encounterPhase: GameState["encounter"]["phase"];
+  gateOpen: boolean;
+  playerHealth: number;
   player: { x: number; z: number };
   cameraTarget: { x: number; z: number };
   canvasCount: number;
@@ -32,6 +44,20 @@ interface AshfallSnapshot {
   action: GameState["player"]["action"];
   activeAttackId: string | null;
   projectileCount: number;
+  enemyModelRootCount: number;
+  enemyFallbackRootCount: number;
+  enemies: Array<{
+    id: string;
+    kind: GameState["enemies"][string]["kind"];
+    health: number;
+    action: GameState["enemies"][string]["action"];
+    intent: GameState["enemies"][string]["intent"];
+    currentMoveId: EnemyMoveId | null;
+    movePhase: GameState["enemies"][string]["movePhase"];
+    moveElapsedTicks: number;
+    cooldownTicks: number;
+  }>;
+  recentEvents: Array<{ tick: number; event: GameEvent }>;
   camera: {
     target: { x: number; y: number; z: number };
     desiredDistance: number;
@@ -53,6 +79,9 @@ interface AshfallSnapshot {
 interface AshfallReviewApi {
   snapshot(): AshfallSnapshot;
   triggerCameraShake(): void;
+  getSerializableState(): GameState;
+  queueEnemyMove(enemyId: string, moveId: EnemyMoveId): string;
+  drivePlayerStrike(enemyId: string): void;
 }
 
 declare global {
@@ -65,13 +94,22 @@ const app = document.querySelector<HTMLElement>("#app");
 if (!app) throw new Error("Ashfall Arena requires #app");
 
 const query = new URLSearchParams(window.location.search);
-const fixture = query.get("fixture") ?? "fresh";
+const requestedFixture = query.get("fixture") ?? "fresh";
+const allowedFixtures = new Set<EncounterFixture>([
+  "fresh",
+  "wave-one",
+  "elite",
+  "boss",
+  "complete",
+]);
+if (!allowedFixtures.has(requestedFixture as EncounterFixture)) {
+  throw new Error(`Unknown encounter fixture: ${requestedFixture}`);
+}
+const fixture = requestedFixture as EncounterFixture;
 const reviewControls = query.get("reviewControls") === "1";
 const captureMode = query.get("capture") === "1";
+const forcedMonsterFailure = query.get("forceEnemyModelFailure");
 document.documentElement.dataset.reviewControls = reviewControls ? "on" : "off";
-if (fixture !== "fresh") {
-  console.warn(`Unknown Task 2 fixture "${fixture}", using fresh.`);
-}
 
 app.innerHTML = `
   <main class="arena-shell">
@@ -101,7 +139,10 @@ app.innerHTML = `
           <span>治疗瓶 × 3</span>
         </div>
       </aside>
-      <section class="objective-card" aria-live="polite">
+      <div class="enemy-telegraph-banner" data-enemy-telegraph hidden>
+        敌人正在蓄力——准备格挡或闪避
+      </div>
+      <section class="objective-card" data-objective aria-live="polite">
         <p class="objective-card__kicker">当前目标</p>
         <h2>进入第一个琥珀训练环</h2>
         <p>使用 WASD 或左侧摇杆移动。攻击、格挡与闪避将在训练环内依次解锁。</p>
@@ -118,14 +159,32 @@ const healthMeter = app.querySelector<HTMLElement>("[data-health-meter]")!;
 const staminaMeter = app.querySelector<HTMLElement>("[data-stamina-meter]")!;
 const weapon = app.querySelector<HTMLElement>("[data-weapon]")!;
 const action = app.querySelector<HTMLElement>("[data-action]")!;
+const objectiveTitle = app.querySelector<HTMLElement>(".objective-card h2")!;
+const arenaStatus = app.querySelector<HTMLElement>(".arena-status")!;
+const telegraphBanner = app.querySelector<HTMLElement>(
+  "[data-enemy-telegraph]",
+)!;
 
-let state: GameState = createInitialState(7481);
+let state: GameState = createEncounterFixture(
+  7481,
+  fixture,
+  { accelerated: reviewControls && fixture !== "fresh" },
+);
 const arena = createArenaScene(canvas, {
   preserveDrawingBuffer: reviewControls || captureMode,
 });
 const player = createVesperKnight();
 arena.scene.add(player.root);
-const synchronizer = createEntitySynchronizer(player);
+const synchronizer = createEntitySynchronizer(player, arena.scene, {
+  createMonster(definition) {
+    if (forcedMonsterFailure === definition.id) {
+      throw new Error(
+        `forced shared model failure for ${definition.id}`,
+      );
+    }
+    return createProceduralMonster(definition);
+  },
+});
 const camera = new PerspectiveCamera(42, 1, 0.1, 80);
 let cameraOccluderId: string | null = null;
 const cameraController = createGameCamera(camera, {
@@ -163,6 +222,7 @@ type PresentationEvent = {
   duration: number;
 };
 const presentationEvents: PresentationEvent[] = [];
+const recentEvents: Array<{ tick: number; event: GameEvent }> = [];
 let previousTimestamp: number | null = null;
 let frameRequest = 0;
 let frameCount = 0;
@@ -173,6 +233,12 @@ const dispatchPresentationEvent = (event: PresentationEvent) => {
 };
 
 const routeGameplayEvents = (events: readonly GameEvent[]) => {
+  for (const event of events) {
+    recentEvents.push({ tick: state.tick, event });
+  }
+  if (recentEvents.length > 256) {
+    recentEvents.splice(0, recentEvents.length - 256);
+  }
   if (
     events.some(
       (event) => event.type === "damage" && event.targetId === state.player.id,
@@ -252,6 +318,30 @@ const updateHud = () => {
   healthMeter.style.width = `${100 * state.player.health / state.player.maxHealth}%`;
   staminaMeter.style.width = `${100 * state.player.stamina / state.player.maxStamina}%`;
   document.documentElement.dataset.paused = state.paused ? "true" : "false";
+  const objectiveLabels: Record<
+    GameState["encounter"]["phase"],
+    string
+  > = {
+    training: state.encounter.trainingSpawned
+      ? "完成攻击与格挡训练"
+      : "进入第一个琥珀训练环",
+    "wave-one": "击败第一波敌人",
+    elite:
+      state.status === "upgrade"
+        ? "选择升级后进入精英战"
+        : "击败钟甲精英并开启王庭闸门",
+    boss: "击败钟鸣君主",
+    complete: "竞技场挑战完成",
+  };
+  objectiveTitle.textContent = objectiveLabels[state.encounter.phase];
+  arenaStatus.textContent =
+    `${state.encounter.phase} · 闸门${state.encounter.gateOpen ? "开启" : "关闭"}`;
+  const entityDiagnostics = synchronizer.getDiagnostics();
+  telegraphBanner.hidden = entityDiagnostics.telegraphIds.length === 0;
+  telegraphBanner.textContent =
+    entityDiagnostics.telegraphIds.length === 0
+      ? ""
+      : `敌人正在蓄力：${entityDiagnostics.telegraphIds.join("、")}`;
 };
 
 const consumePresentationEvents = () => {
@@ -270,7 +360,7 @@ const frame = (timestamp: number) => {
       : Math.max(0, (timestamp - previousTimestamp) / 1000);
   previousTimestamp = timestamp;
   accumulator.advance(frameDelta, step);
-  synchronizer.sync(state);
+  synchronizer.sync(state, frameDelta);
   arena.setGateOpen(state.encounter.gateOpen);
   playerTarget.set(state.player.position.x, 0, state.player.position.y);
   cameraController.setLockTarget(currentLockTarget());
@@ -299,7 +389,12 @@ if (reviewControls) {
     snapshot() {
       const cameraDiagnostics = cameraController.getDiagnostics();
       const arenaDiagnostics = arena.getDiagnostics();
+      const entityDiagnostics = synchronizer.getDiagnostics();
       return {
+        status: state.status,
+        encounterPhase: state.encounter.phase,
+        gateOpen: state.encounter.gateOpen,
+        playerHealth: state.player.health,
         player: {
           x: state.player.position.x,
           z: state.player.position.y,
@@ -323,6 +418,25 @@ if (reviewControls) {
         action: state.player.action,
         activeAttackId: state.combat.activeAttack?.id ?? null,
         projectileCount: state.combat.projectiles.length,
+        enemyModelRootCount: entityDiagnostics.modelRootCount,
+        enemyFallbackRootCount: entityDiagnostics.fallbackRootCount,
+        enemies: Object.values(state.enemies)
+          .sort((left, right) => left.id.localeCompare(right.id))
+          .map((enemy) => ({
+            id: enemy.id,
+            kind: enemy.kind,
+            health: enemy.health,
+            action: enemy.action,
+            intent: enemy.intent,
+            currentMoveId: enemy.currentMoveId,
+            movePhase: enemy.movePhase,
+            moveElapsedTicks: enemy.moveElapsedTicks,
+            cooldownTicks: enemy.cooldownTicks,
+          })),
+        recentEvents: recentEvents.map(({ tick, event }) => ({
+          tick,
+          event: { ...event },
+        })),
         camera: {
           target: {
             x: cameraDiagnostics.target.x,
@@ -346,6 +460,132 @@ if (reviewControls) {
         amplitude: 0.2,
         duration: 0.45,
       });
+    },
+    getSerializableState() {
+      return JSON.parse(JSON.stringify(state)) as GameState;
+    },
+    queueEnemyMove(enemyId, moveId) {
+      const enemy = state.enemies[enemyId];
+      if (!enemy) throw new Error(`Unknown enemy: ${enemyId}`);
+      if (enemy.currentMoveId !== null || enemy.cooldownTicks !== 0) {
+        throw new Error(`${enemyId} is not ready for a move`);
+      }
+      const contactDistance =
+        moveId === "warden-bolt"
+          ? 4.5
+          : moveId === "sovereign-shockwave"
+            ? 3.4
+            : 1.25;
+      const forward = {
+        x: Math.sin(state.player.facingRadians),
+        y: Math.cos(state.player.facingRadians),
+      };
+      const position = {
+        x: state.player.position.x + forward.x * contactDistance,
+        y: state.player.position.y + forward.y * contactDistance,
+      };
+      const facingRadians = Math.atan2(
+        state.player.position.x - position.x,
+        state.player.position.y - position.y,
+      );
+      const requested = requestEnemyMove(
+        {
+          ...enemy,
+          position,
+          facingRadians,
+          lockedFacingRadians: facingRadians,
+          aiEnabled: false,
+          targetId: state.player.id,
+          action: "idle",
+          actionTime: 0,
+        },
+        moveId,
+        state.tick,
+      );
+      state = {
+        ...state,
+        enemies: {
+          ...state.enemies,
+          [enemyId]: requested,
+        },
+      };
+      return `${enemyId}:${moveId}:${requested.attackSequence}`;
+    },
+    drivePlayerStrike(enemyId) {
+      const enemy = state.enemies[enemyId];
+      if (!enemy) throw new Error(`Unknown enemy: ${enemyId}`);
+      if (state.status !== "playing") {
+        throw new Error("Player strike requires a playing simulation");
+      }
+      const forward = {
+        x: Math.sin(state.player.facingRadians),
+        y: Math.cos(state.player.facingRadians),
+      };
+      const position = {
+        x: state.player.position.x + forward.x * 1.2,
+        y: state.player.position.y + forward.y * 1.2,
+      };
+      state = {
+        ...state,
+        player: {
+          ...state.player,
+          action: "idle",
+          actionTime: 0,
+          stamina: state.player.maxStamina,
+        },
+        enemies: Object.fromEntries(
+          Object.entries(state.enemies).map(([id, current]) => [
+            id,
+            id === enemyId
+              ? {
+                  ...current,
+                  position,
+                  health: Math.min(current.health, 18),
+                  aiEnabled: false,
+                  action: "idle" as const,
+                  actionTime: 0,
+                  intent: "observe" as const,
+                  currentMoveId: null,
+                  movePhase: "none" as const,
+                  moveElapsedTicks: 0,
+                  cooldownTicks: 0,
+                  staggerTicks: 0,
+                  targetId: state.player.id,
+                }
+              : { ...current, aiEnabled: false },
+          ]),
+        ),
+        combat: {
+          ...state.combat,
+          activeAttack: null,
+          attackInputHeld: false,
+        },
+      };
+      const neutral: GameIntent = {
+        moveX: 0,
+        moveY: 0,
+        attackPressed: false,
+        guardHeld: false,
+        dodgePressed: false,
+        lockPressed: false,
+        healPressed: false,
+        switchWeaponPressed: false,
+        pausePressed: false,
+      };
+      for (let tick = 0; tick < 60; tick += 1) {
+        const result = stepGame(
+          state,
+          {
+            ...neutral,
+            attackPressed: tick === 0,
+          },
+          1 / 60,
+          arenaContent,
+        );
+        state = result.state;
+        routeGameplayEvents(result.events);
+        if (state.status !== "playing") break;
+      }
     },
   };
 }

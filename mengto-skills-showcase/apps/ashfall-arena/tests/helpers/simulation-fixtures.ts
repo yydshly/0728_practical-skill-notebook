@@ -1,7 +1,8 @@
 import { arenaContent } from "../../src/content/arena-content";
 import { stepGame } from "../../src/simulation/step-game";
+import { createEncounterEnemy } from "../../src/simulation/encounters";
 import type {
-  ActorState,
+  EnemyState,
   EnemyKind,
   GameEvent,
   GameIntent,
@@ -22,24 +23,14 @@ export const neutralIntent: GameIntent = {
 
 export function createEnemyState(
   kind: EnemyKind,
-  overrides: Partial<ActorState> = {},
+  overrides: Partial<EnemyState> = {},
 ): GameState["enemies"][string] {
-  return {
-    id: "enemy-1",
+  return createEncounterEnemy(
+    overrides.id ?? "enemy-1",
     kind,
-    position: { x: 0, y: 1.4 },
-    facingRadians: Math.PI,
-    health: 36,
-    maxHealth: 36,
-    stamina: 100,
-    maxStamina: 100,
-    action: "idle",
-    actionTime: 0,
-    collisionLayer: "enemy",
-    intent: "observe",
-    cooldown: 0,
-    ...overrides,
-  };
+    overrides.position ?? { x: 0, y: 1.4 },
+    { aiEnabled: false, ...overrides },
+  );
 }
 
 export function runTicks(

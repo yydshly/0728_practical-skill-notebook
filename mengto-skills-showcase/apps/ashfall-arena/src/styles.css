@@ -364,3 +364,26 @@ html[data-paused="true"] .arena-status::after {
     animation-duration: 0.001ms !important;
   }
 }
+
+.enemy-telegraph-banner {
+  position: absolute;
+  left: 50%;
+  top: 7.25rem;
+  z-index: 6;
+  max-width: min(78vw, 34rem);
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 189, 96, 0.78);
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  background: rgba(41, 21, 18, 0.88);
+  color: #ffe2a6;
+  font-size: 0.78rem;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  text-align: center;
+  pointer-events: none;
+}
+
+.enemy-telegraph-banner[hidden] {
+  display: none;
+}

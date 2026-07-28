@@ -1,4 +1,5 @@
 import { arenaContent } from "../content/arena-content";
+import { enemyMoves } from "../content/enemy-definitions";
 import type {
   ActorState,
   AttackActionId,
@@ -14,6 +15,7 @@ import type {
   StepGameResult,
   Vec2,
 } from "./types";
+import { hasEnemyLineOfSight } from "./enemy-ai";
 
 const TIME_EPSILON = 1e-9;
 const PROJECTILE_TOI_TIE_EPSILON = 1e-9;
@@ -148,7 +150,10 @@ export function resolveIncomingDamage(
   const frontal =
     Math.abs(hit.angleDegrees) <= guard.facingHalfAngleDegrees + TIME_EPSILON;
   const guardAttempted = guardHeld && frontal;
-  const guarded = guardAttempted && actor.stamina >= guard.staminaPerHit;
+  const guarded =
+    guardAttempted &&
+    !hit.guardBreak &&
+    actor.stamina >= guard.staminaPerHit;
   const guardBroken = guardAttempted && !guarded;
   const damage = guarded
     ? Math.round(hit.damage * guard.damageReceivedMultiplier)
@@ -387,6 +392,14 @@ const applyEnemyDamage = (
     health,
     action: health === 0 ? "dead" as const : "hit" as const,
     actionTime: 0,
+    intent: health === 0 ? "dead" as const : "stagger" as const,
+    intentTicks: 0,
+    targetId: health === 0 ? null : target.targetId,
+    currentMoveId: null,
+    movePhase: "none" as const,
+    moveElapsedTicks: 0,
+    hitTargetIds: [],
+    staggerTicks: health === 0 ? 0 : 18,
   };
   const events: GameEvent[] = [
     {
@@ -856,6 +869,227 @@ const stepGuard = (
   };
 };
 
+const signedAngleDegrees = (
+  facingRadians: number,
+  origin: Readonly<Vec2>,
+  target: Readonly<Vec2>,
+): number => {
+  const targetRadians = Math.atan2(
+    target.x - origin.x,
+    target.y - origin.y,
+  );
+  let delta = targetRadians - facingRadians;
+  while (delta > Math.PI) delta -= Math.PI * 2;
+  while (delta < -Math.PI) delta += Math.PI * 2;
+  return delta * 180 / Math.PI;
+};
+
+const enemyAttackId = (
+  enemy: GameState["enemies"][string],
+): string =>
+  `${enemy.id}:${enemy.currentMoveId}:${enemy.attackSequence}`;
+
+const canEnemyMoveContactPlayer = (
+  state: GameState,
+  enemy: GameState["enemies"][string],
+  content: GameContent,
+): boolean => {
+  if (
+    enemy.currentMoveId === null ||
+    enemy.targetId !== state.player.id ||
+    state.player.health <= 0 ||
+    enemy.health <= 0
+  ) {
+    return false;
+  }
+  const move = enemyMoves[enemy.currentMoveId];
+  if (move.contactKind === "summon") return false;
+  const playerDistance = Math.hypot(
+    state.player.position.x - enemy.position.x,
+    state.player.position.y - enemy.position.y,
+  );
+  if (
+    playerDistance + TIME_EPSILON < move.minimumRange ||
+    playerDistance >
+      move.maximumRange +
+        content.playerMovement.actorRadius +
+        TIME_EPSILON
+  ) {
+    return false;
+  }
+  if (
+    !hasEnemyLineOfSight(
+      enemy.position,
+      state.player.position,
+      content.arena,
+      state.encounter.gateOpen,
+    )
+  ) {
+    return false;
+  }
+  return (
+    move.contactKind === "shockwave" ||
+    isInFacingCone(
+      enemy.position,
+      enemy.lockedFacingRadians,
+      state.player.position,
+      move.facingHalfAngleDegrees,
+    )
+  );
+};
+
+export function stepEnemyCombat(
+  state: GameState,
+  intent: GameIntent,
+  events: readonly GameEvent[],
+  content: GameContent,
+): StepGameResult {
+  let working = state;
+  const produced: GameEvent[] = [...events];
+
+  for (const enemyId of Object.keys(working.enemies).sort()) {
+    let enemy = working.enemies[enemyId];
+    if (!enemy || enemy.currentMoveId === null) continue;
+    if (enemy.health <= 0 || enemy.staggerTicks > 0) {
+      const interrupted = {
+        ...enemy,
+        intent: enemy.health <= 0 ? "dead" as const : "stagger" as const,
+        currentMoveId: null,
+        movePhase: "none" as const,
+        moveElapsedTicks: 0,
+        hitTargetIds: [],
+      };
+      working = {
+        ...working,
+        enemies: { ...working.enemies, [enemyId]: interrupted },
+      };
+      continue;
+    }
+
+    const move = enemyMoves[enemy.currentMoveId];
+    const attackId = enemyAttackId(enemy);
+    if (enemy.movePhase === "telegraph") {
+      if (enemy.moveElapsedTicks === 0) {
+        produced.push({
+          type: "enemy-telegraph",
+          enemyId,
+          moveId: enemy.currentMoveId,
+          attackId,
+        });
+      }
+      const elapsed = enemy.moveElapsedTicks + 1;
+      const complete =
+        elapsed >= ticksFor(move.telegraphSeconds, content);
+      enemy = {
+        ...enemy,
+        intent: complete ? "attack" : "telegraph",
+        movePhase: complete ? "active" : "telegraph",
+        moveElapsedTicks: complete ? 0 : elapsed,
+        action: complete ? "attack" : "idle",
+        actionTime: complete
+          ? 0
+          : elapsed / content.combat.fixedHz,
+      };
+      working = {
+        ...working,
+        enemies: { ...working.enemies, [enemyId]: enemy },
+      };
+      continue;
+    }
+
+    if (enemy.movePhase === "active") {
+      if (
+        !enemy.hitTargetIds.includes(state.player.id) &&
+        canEnemyMoveContactPlayer(working, enemy, content)
+      ) {
+        const damage = enemy.nonlethal
+          ? Math.max(0, Math.min(move.damage, working.player.health - 1))
+          : move.damage;
+        if (damage > 0) {
+          const result = applyIncomingDamage(
+            working,
+            {
+              attackId,
+              attackerId: enemy.id,
+              damage,
+              angleDegrees: signedAngleDegrees(
+                working.player.facingRadians,
+                working.player.position,
+                enemy.position,
+              ),
+              collisionLayer: "enemy",
+              guardBreak: move.guardBreak,
+            },
+            intent.guardHeld,
+            content,
+          );
+          working = result.state;
+          produced.push(...result.events);
+        }
+        const contacted = working.enemies[enemyId];
+        if (contacted) {
+          enemy = {
+            ...contacted,
+            hitTargetIds: [state.player.id],
+          };
+          working = {
+            ...working,
+            enemies: { ...working.enemies, [enemyId]: enemy },
+          };
+        }
+      }
+
+      const latest = working.enemies[enemyId];
+      if (!latest || latest.currentMoveId === null) continue;
+      const elapsed = latest.moveElapsedTicks + 1;
+      const complete =
+        elapsed >= ticksFor(move.activeSeconds, content);
+      enemy = {
+        ...latest,
+        intent: complete ? "recover" : "attack",
+        movePhase: complete ? "recover" : "active",
+        moveElapsedTicks: complete ? 0 : elapsed,
+        action: complete ? "idle" : "attack",
+        actionTime: complete
+          ? 0
+          : elapsed / content.combat.fixedHz,
+      };
+      working = {
+        ...working,
+        enemies: { ...working.enemies, [enemyId]: enemy },
+      };
+      continue;
+    }
+
+    if (enemy.movePhase === "recover") {
+      const elapsed = enemy.moveElapsedTicks + 1;
+      const complete =
+        elapsed >= ticksFor(move.recoverySeconds, content);
+      enemy = {
+        ...enemy,
+        intent: "recover",
+        currentMoveId: complete ? null : enemy.currentMoveId,
+        movePhase: complete ? "none" : "recover",
+        moveElapsedTicks: complete ? 0 : elapsed,
+        cooldownTicks: complete
+          ? ticksFor(move.cooldownSeconds, content)
+          : enemy.cooldownTicks,
+        hitTargetIds: complete ? [] : enemy.hitTargetIds,
+        action: "idle",
+        actionTime: complete
+          ? 0
+          : elapsed / content.combat.fixedHz,
+      };
+      working = {
+        ...working,
+        enemies: { ...working.enemies, [enemyId]: enemy },
+      };
+    }
+  }
+
+  return { state: working, events: produced };
+}
+
 export function stepCombat(
   state: GameState,
   intent: GameIntent,
@@ -962,6 +1196,10 @@ export function stepCombat(
   const projectileResult = stepProjectiles(working, content);
   working = projectileResult.state;
   produced.push(...projectileResult.events);
+
+  const enemyResult = stepEnemyCombat(working, intent, produced, content);
+  working = enemyResult.state;
+  produced.splice(0, produced.length, ...enemyResult.events);
 
   if (
     !attackEdge &&

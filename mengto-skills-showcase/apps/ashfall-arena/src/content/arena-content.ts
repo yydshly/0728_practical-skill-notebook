@@ -1,5 +1,6 @@
 import type { GameContent } from "../simulation/types";
 import { ARENA_LEVEL } from "./arena-level";
+import { enemyDefinitions } from "./enemy-definitions";
 
 export const arenaContent: GameContent = {
   arena: {
@@ -75,10 +76,12 @@ export const arenaContent: GameContent = {
       facingHalfAngleDegrees: 70,
     },
   },
-  enemyHealth: {
-    "glass-crawler": 36,
-    "ash-warden": 44,
-    "bell-elite": 110,
-    "bell-sovereign": 360,
-  },
+  enemyHealth: Object.freeze(
+    Object.fromEntries(
+      Object.entries(enemyDefinitions).map(([id, definition]) => [
+        id,
+        definition.maxHealth,
+      ]),
+    ) as GameContent["enemyHealth"],
+  ),
 };

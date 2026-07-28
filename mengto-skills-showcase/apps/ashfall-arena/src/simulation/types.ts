@@ -43,6 +43,40 @@ export type AttackActionId =
   | "oathblade-light-2"
   | "ember-bow-shot";
 export type AttackPhase = "startup" | "active" | "recovery" | "complete";
+export type EnemyIntent =
+  | "observe"
+  | "approach"
+  | "orbit"
+  | "telegraph"
+  | "attack"
+  | "recover"
+  | "retreat"
+  | "stagger"
+  | "dead";
+export type EnemyMovePhase =
+  | "none"
+  | "telegraph"
+  | "active"
+  | "recover";
+export type EnemyMoveId =
+  | "crawler-lunge"
+  | "warden-bolt"
+  | "elite-sweep"
+  | "sovereign-sweep"
+  | "sovereign-shockwave"
+  | "sovereign-summon";
+export type EnemyRole = "skirmisher" | "ranged" | "elite" | "boss";
+export type EnemyRewardId =
+  | "crawler-reward"
+  | "warden-reward"
+  | "elite-reward"
+  | "sovereign-reward";
+export type EncounterPhase =
+  | "training"
+  | "wave-one"
+  | "elite"
+  | "boss"
+  | "complete";
 
 export interface GameIntent extends PlayerIntent {
   healPressed: boolean;
@@ -61,6 +95,28 @@ export interface ActorState {
   action: ActorAction;
   actionTime: number;
   collisionLayer: CollisionLayer;
+}
+
+export interface EnemyState extends ActorState {
+  kind: EnemyKind;
+  definitionId: EnemyKind;
+  intent: EnemyIntent;
+  intentTicks: number;
+  visibleTicks: number;
+  cooldownTicks: number;
+  targetId: string | null;
+  currentMoveId: EnemyMoveId | null;
+  movePhase: EnemyMovePhase;
+  moveElapsedTicks: number;
+  attackSequence: number;
+  hitTargetIds: string[];
+  lockedFacingRadians: number;
+  pathFailureTicks: number;
+  staggerTicks: number;
+  aiEnabled: boolean;
+  nonlethal: boolean;
+  bossPhase: 1 | 2 | 3;
+  spawnedBy: string | null;
 }
 
 export interface AttackInstance {
@@ -106,6 +162,7 @@ export interface IncomingHit {
   damage: number;
   angleDegrees: number;
   collisionLayer: CollisionLayer;
+  guardBreak?: boolean;
 }
 
 export interface GameState {
@@ -122,17 +179,22 @@ export interface GameState {
     upgradeId: "vitality" | "power" | null;
     lockTargetId: string | null;
   };
-  enemies: Record<
-    string,
-    ActorState & {
-      kind: EnemyKind;
-      intent: string;
-      cooldown: number;
-    }
-  >;
+  enemies: Record<string, EnemyState>;
   encounter: {
-    phase: "training" | "wave-one" | "elite" | "boss" | "complete";
+    phase: EncounterPhase;
     gateOpen: boolean;
+    trainingSpawned: boolean;
+    trainingAttackSeen: boolean;
+    trainingGuardSeen: boolean;
+    spawnedIds: string[];
+    completedIds: string[];
+    bossThresholds: { 65: boolean; 30: boolean };
+    phaseEntryTick: number;
+  };
+  enemyAi: {
+    meleeSlotOwner: string | null;
+    rangedWindow: number;
+    rangedSlotOwner: string | null;
   };
   drops: Array<{
     id: string;
@@ -154,7 +216,24 @@ export type GameEvent =
   | { type: "defeated"; actorId: string }
   | { type: "drop"; dropId: string }
   | { type: "upgrade-offered" }
-  | { type: "encounter-complete" };
+  | { type: "encounter-complete" }
+  | { type: "encounter-phase"; phase: EncounterPhase }
+  | {
+      type: "enemy-telegraph";
+      enemyId: string;
+      moveId: EnemyMoveId;
+      attackId: string;
+    }
+  | {
+      type: "boss-phase";
+      phase: 2 | 3;
+      threshold: 65 | 30;
+    }
+  | {
+      type: "enemy-summoned";
+      enemyId: string;
+      threshold: 65 | 30;
+    };
 
 export interface GameContent {
   arena: {
@@ -221,6 +300,41 @@ export interface CombatActionContent {
   recovery: number;
   damage: number;
   stamina: number;
+}
+
+export interface EnemyMoveDefinition {
+  readonly id: EnemyMoveId;
+  readonly ownerKinds: readonly EnemyKind[];
+  readonly slot: "melee" | "ranged" | "summon";
+  readonly contactKind: "lunge" | "projectile" | "sweep" | "shockwave" | "summon";
+  readonly minimumRange: number;
+  readonly maximumRange: number;
+  readonly telegraphSeconds: number;
+  readonly activeSeconds: number;
+  readonly recoverySeconds: number;
+  readonly cooldownSeconds: number;
+  readonly minimumCommitmentSeconds: number;
+  readonly damage: number;
+  readonly guardBreak: boolean;
+  readonly facingHalfAngleDegrees: number;
+}
+
+export interface EnemyDefinition {
+  readonly id: EnemyKind;
+  readonly role: EnemyRole;
+  readonly maxHealth: number;
+  readonly speed: number;
+  readonly actorRadius: number;
+  readonly perceptionSeconds: number;
+  readonly preferredRange: Readonly<{ minimum: number; maximum: number }>;
+  readonly moveIds: readonly EnemyMoveId[];
+  readonly rewardId: EnemyRewardId | string;
+  readonly presentation: Readonly<{
+    monsterId: "glass-crawler" | "ash-warden" | "bell-knight";
+    provenance: "shared-procedural";
+    footprintRadius: number;
+    visualScale: number;
+  }>;
 }
 
 export interface StepGameResult {
