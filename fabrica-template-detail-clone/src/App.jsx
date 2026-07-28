@@ -44,11 +44,11 @@ export default function App() {
         <section className="template-details" aria-label="Template metadata">
           <MetadataTable rows={pageData.details} />
         </section>
-        <section className="content-section" aria-labelledby="recommendations-heading">
+        <section className="content-section content-section--recommendations" aria-labelledby="recommendations-heading">
           <h2 id="recommendations-heading">MORE LIKE THIS</h2>
           <TemplateGrid templates={pageData.recommendations} />
         </section>
-        <section className="content-section" aria-labelledby="related-posts-heading">
+        <section className="content-section content-section--related" aria-labelledby="related-posts-heading">
           <h2 id="related-posts-heading">RELATED BLOGS</h2>
           <BlogRail posts={pageData.blogs} />
         </section>

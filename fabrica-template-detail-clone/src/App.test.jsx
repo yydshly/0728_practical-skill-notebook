@@ -108,10 +108,7 @@ test('wires representative content links, footer, and local image metadata', () 
     'href',
     '/templates/framer/deformo',
   );
-  expect(within(deformoCard).getByRole('link', { name: 'Visit' })).toHaveAttribute(
-    'href',
-    'https://www.framer.com/marketplace/templates/deformo/',
-  );
+  expect(within(deformoCard).getByText('$99')).toBeInTheDocument();
   expect(within(deformoCard).getByRole('img', { name: 'Deformo template preview' })).toHaveAttribute(
     'src',
     '/assets/templates/deformo-1440x810.webp',

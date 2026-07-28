@@ -13,3 +13,4 @@ The user expressly authorized copying the source-page media into this local clon
 | `icons/site-mark.svg` | `https://bestwebsitetemplate.com/icon.svg` | User authorization | copied locally |
 | `icons/menu.svg` | `https://bestwebsitetemplate.com/burger-menu.svg` | User authorization | copied locally |
 | `icons/{linkedin,instagram,tiktok,x,youtube,facebook,pinterest,bluesky,threads}.svg` | `https://bestwebsitetemplate.com/social/<name>.svg` | User authorization | copied locally |
+| `fonts/poppins-{400,500,600}.ttf` | `https://fonts.gstatic.com/s/poppins/v24/...` | User authorization | copied locally |

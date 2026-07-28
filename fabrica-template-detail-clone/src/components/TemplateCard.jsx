@@ -1,5 +1,5 @@
 export default function TemplateCard({ item }) {
-  const { name, score, price, href, visitHref, imageSrc, imageAlt } = item;
+  const { name, score, price, href, imageSrc, imageAlt } = item;
 
   return (
     <article className="template-card">
@@ -8,13 +8,10 @@ export default function TemplateCard({ item }) {
         <img className="template-card__image" src={imageSrc} alt={imageAlt} />
       </a>
       <div className="template-card__bottom">
-        <div>
+        <div className="template-card__name">
           <h3>{name}</h3>
-          <p>{price}</p>
         </div>
-        <a className="template-card__visit" href={visitHref} target="_blank" rel="noreferrer">
-          Visit <span aria-hidden="true">↗</span>
-        </a>
+        <p>{price}</p>
       </div>
     </article>
   );

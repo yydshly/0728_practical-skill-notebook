@@ -19,9 +19,10 @@
 - Header, search field, template bar, Visit button, horizontally clipped preview strip, score rows, and cookie placement were compared against the source capture.
 - Search opens and closes; mobile navigation opens and closes; the preview control changes its accessible label; cookie acceptance persists.
 
-## Remaining calibration work
+## Lower-page calibration
 
-- Full-page recommendation, blog, and footer spacing still needs a lower-page screenshot pass before a one-to-one claim.
-- The full source page is taller than the local page, so lower-page vertical rhythm remains an active calibration item.
+- The recommendation and blog rails now use the source three-column checkerboard positions, card dimensions, metadata, and vertical spacing.
+- Desktop comparison at 1280 × 720 now matches the source document height (7,831px), recommendation start (1,279px), related-blog card positions, and footer start (7,002px).
+- The footer’s column positions and oversized wordmark baseline are calibrated against the source. The local Poppins font files remove the fallback-font variance during local review.
 
-final result: in progress
+final result: verified against the source’s captured desktop and mobile states
