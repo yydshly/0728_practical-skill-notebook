@@ -299,6 +299,36 @@ test('pursuer movement drives the mutant rig and settles while idle', () => {
   assert.equal(Math.abs(pursuer.object.getObjectByName('leftShoulder').rotation.x), 0);
 });
 
+test('pursuer holds readable spacing instead of crossing through the player', () => {
+  const scene = new THREE.Scene();
+  const spawn = new THREE.Vector3();
+  const pursuer = createPursuer(scene, { navNodes: [spawn.clone()], spawn });
+  const player = { position: new THREE.Vector3(0, 0, 5) };
+  let minimumDistance = Infinity;
+
+  for (let frame = 0; frame < 240; frame += 1) {
+    pursuer.update(1 / 60, player);
+    minimumDistance = Math.min(
+      minimumDistance,
+      pursuer.object.position.distanceTo(player.position),
+    );
+  }
+
+  assert.equal(pursuer.state, 'threaten');
+  assert.ok(minimumDistance >= 2.2, `pursuer crossed contact spacing: ${minimumDistance}`);
+  assert.ok(
+    pursuer.object.position.distanceTo(player.position) >= 2.35,
+    'pursuer must settle outside the player silhouette',
+  );
+
+  player.position.copy(pursuer.object.position);
+  pursuer.update(1 / 60, player);
+  assert.ok(
+    pursuer.object.position.distanceTo(player.position) >= 2.2,
+    'pursuer must separate even when both characters start overlapped',
+  );
+});
+
 test('pursuer reset restores the authored mutant pose and spawn orientation', () => {
   const scene = new THREE.Scene();
   const spawn = new THREE.Vector3(-1, 0, 3);

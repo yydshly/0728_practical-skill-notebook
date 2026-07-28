@@ -378,6 +378,35 @@ try {
   });
   if (pursuerState !== 'chase') throw new Error(`Expected pursuer chase state, got ${pursuerState}`);
 
+  const pursuerContact = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    game.pursuer.reset();
+    game.pursuer.object.position.set(0, 0, 0);
+    game.setPlayerForTest(0, 5);
+    let minimumDistance = Infinity;
+    for (let frame = 0; frame < 240; frame += 1) {
+      game.updatePursuerForTest(1 / 60);
+      minimumDistance = Math.min(
+        minimumDistance,
+        game.pursuer.object.position.distanceTo(game.player.position),
+      );
+    }
+    return {
+      state: game.pursuer.state,
+      distance: game.pursuer.object.position.distanceTo(game.player.position),
+      minimumDistance,
+    };
+  });
+  if (pursuerContact.state !== 'threaten') {
+    throw new Error(`Expected close pursuer to threaten, got ${pursuerContact.state}`);
+  }
+  if (pursuerContact.minimumDistance < 2.2 || pursuerContact.distance < 2.35) {
+    throw new Error(
+      `Expected readable player-pursuer spacing, got min ${pursuerContact.minimumDistance} `
+      + `and final ${pursuerContact.distance}`,
+    );
+  }
+
   await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-11.2, 32.8));
   const oldObjectivePromptHidden = await page.evaluate(() => document.querySelector('#interaction').hidden);
   if (!oldObjectivePromptHidden) throw new Error('Expected completed radio prompt to stay hidden');
@@ -449,6 +478,16 @@ try {
       pursuerPosition: [-1, 3],
       pursuerYaw: Math.atan2(1, 5),
       freezePursuer: true,
+      objective: 'escape_south_gate',
+      flags: { radio: true, neighbour: true, flashlight: true },
+      objectiveText: '沿主路逃往南侧村口。',
+    },
+    {
+      id: 'contact',
+      position: [0, 8],
+      pursuerPosition: [0, 5.6],
+      contactPursuer: true,
+      minimumPursuerDistance: 2.35,
       objective: 'escape_south_gate',
       flags: { radio: true, neighbour: true, flashlight: true },
       objectiveText: '沿主路逃往南侧村口。',
@@ -563,6 +602,52 @@ try {
         throw new Error(
           `Expected ${evidenceCase.id} readable pursuer spacing, got `
           + `${stablePursuer.playerDistance}`,
+        );
+      }
+    }
+
+    if (evidenceCase.contactPursuer) {
+      await page.waitForTimeout(600);
+      const contactPursuer = await page.evaluate(() => {
+        const game = window.__RURAL_ESCAPE__;
+        const shellElement = document.querySelector('.game-shell');
+        return {
+          position: [game.pursuer.object.position.x, game.pursuer.object.position.z],
+          state: game.pursuer.state,
+          playerDistance: game.pursuer.object.position.distanceTo(game.player.position),
+          datasetState: shellElement.dataset.pursuerState,
+          datasetDistance: Number(shellElement.dataset.pursuerDistance),
+        };
+      });
+      if (
+        Math.hypot(
+          contactPursuer.position[0] - evidenceCase.pursuerPosition[0],
+          contactPursuer.position[1] - evidenceCase.pursuerPosition[1],
+        ) > 0.05
+      ) {
+        throw new Error(
+          `Expected ${evidenceCase.id} pursuer to hold contact position `
+          + `${evidenceCase.pursuerPosition}, got ${contactPursuer.position}`,
+        );
+      }
+      if (
+        contactPursuer.state !== 'threaten'
+        || contactPursuer.datasetState !== 'threaten'
+      ) {
+        throw new Error(
+          `Expected ${evidenceCase.id} threaten state, got `
+          + `${contactPursuer.state}/${contactPursuer.datasetState}`,
+        );
+      }
+      if (
+        !Number.isFinite(contactPursuer.playerDistance)
+        || contactPursuer.playerDistance < evidenceCase.minimumPursuerDistance
+        || !Number.isFinite(contactPursuer.datasetDistance)
+        || contactPursuer.datasetDistance < evidenceCase.minimumPursuerDistance
+      ) {
+        throw new Error(
+          `Expected ${evidenceCase.id} readable live spacing, got `
+          + `${contactPursuer.playerDistance}/${contactPursuer.datasetDistance}`,
         );
       }
     }

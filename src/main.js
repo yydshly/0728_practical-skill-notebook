@@ -67,6 +67,16 @@ const evidenceFixtures = {
     flags: { radio: true, neighbour: true, flashlight: true },
     objective: 'escape_south_gate',
   },
+  contact: {
+    position: new THREE.Vector3(0, 0, 8),
+    pursuer: {
+      position: new THREE.Vector3(0, 0, 5.6),
+      yaw: 0,
+      frozen: false,
+    },
+    flags: { radio: true, neighbour: true, flashlight: true },
+    objective: 'escape_south_gate',
+  },
   'south-gate': {
     position: new THREE.Vector3(0, 0, -32),
     flags: { radio: true, neighbour: true, flashlight: true },
@@ -165,6 +175,10 @@ function frame(now) {
   if (hasEvidenceParam) {
     shell.dataset.renderCalls = String(renderer.info.render.calls);
     shell.dataset.renderTriangles = String(renderer.info.render.triangles);
+    shell.dataset.pursuerState = pursuer.state;
+    shell.dataset.pursuerDistance = String(
+      pursuer.object.position.distanceTo(player.position),
+    );
   }
   requestAnimationFrame(frame);
 }
