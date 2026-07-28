@@ -1,0 +1,23 @@
+node_modules/
+dist/
+tmp/
+artifacts/
+coverage/
+.vite/
+.DS_Store
+Thumbs.db
+*.log
+*.local
+.env
+.env.*
+!.env.example
+public/audio/*.mp3
+public/audio/*.wav
+public/audio/*.m4a
+public/audio/*.ogg
+!public/audio/README.md
+
+# Superseded generated asset iterations kept locally for reference
+public/walls/*-wall.webp
+public/walls/*-wall-windows.webp
+public/walls/sky-edge-mask-v2.webp

@@ -1,0 +1,32 @@
+{
+  "name": "world-cup-letter-flags",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Interactive typographic flags built from the 2026 World Cup final four squads.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amirmushichge/world-cup-letter-flags.git"
+  },
+  "homepage": "https://github.com/amirmushichge/world-cup-letter-flags#readme",
+  "bugs": {
+    "url": "https://github.com/amirmushichge/world-cup-letter-flags/issues"
+  },
+  "keywords": [
+    "canvas",
+    "creative-coding",
+    "football",
+    "typography",
+    "verlet-physics",
+    "vite"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}

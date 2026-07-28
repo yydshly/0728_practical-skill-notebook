@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ede6d8" />
+    <meta
+      name="description"
+      content="Interactive typographic flags built from the names of the 2026 World Cup final four squads."
+    />
+    <title>Final Four — Typographic Flags</title>
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="wordmark" href="#top" aria-label="Final Four home">
+        <span>Final Four</span>
+        <small>North America · 2026</small>
+      </a>
+
+      <nav class="team-nav" aria-label="Select a national team"></nav>
+
+      <div class="header-actions">
+        <div class="mode-switch" role="group" aria-label="Choose background mode">
+          <button type="button" data-scene-mode="architecture" aria-pressed="true">Scene</button>
+          <button type="button" data-scene-mode="plaster" aria-pressed="false">Plaster</button>
+        </div>
+        <button class="roster-toggle" type="button" aria-controls="roster-panel" aria-expanded="false">
+          Squad <span aria-hidden="true">↗</span>
+        </button>
+      </div>
+    </header>
+
+    <main id="top" class="experience">
+      <section class="editorial" aria-live="polite">
+        <p class="eyebrow">World Cup 2026 · Final four study</p>
+        <h1 class="country-title">Spain</h1>
+        <p class="country-poem">Red earth, gold light — a flag held together by twenty-six names.</p>
+        <dl class="country-facts">
+          <div><dt>Code</dt><dd class="country-code">ESP</dd></div>
+          <div><dt>Players</dt><dd>26</dd></div>
+          <div><dt>Study</dt><dd class="country-index">01 / 04</dd></div>
+        </dl>
+      </section>
+
+      <section class="flag-shell" aria-label="Interactive typographic flag">
+        <div class="country-sky" aria-hidden="true"></div>
+        <div class="country-wall" aria-hidden="true"></div>
+        <div class="canopy" aria-hidden="true"></div>
+        <canvas id="flag-canvas"></canvas>
+        <div class="interaction-hint" aria-hidden="true">
+          <span class="hint-dot"></span>
+          Brush across the hanging names
+        </div>
+        <div class="audio-caption" aria-live="polite" aria-atomic="true" hidden>
+          <span>Live commentary</span>
+          <p></p>
+          <a class="audio-source" target="_blank" rel="noreferrer">Official highlight ↗</a>
+        </div>
+      </section>
+
+      <div class="weather-front" aria-hidden="true"></div>
+
+      <div class="scene-controls" aria-label="Team navigation controls">
+        <button class="arrow-button previous" type="button" aria-label="Previous team">←</button>
+        <p><span class="current-number">01</span><i></i><span>04</span></p>
+        <button class="arrow-button next" type="button" aria-label="Next team">→</button>
+      </div>
+
+      <p class="build-note">Every glyph belongs to a player in the tournament squad.</p>
+    </main>
+
+    <aside id="roster-panel" class="roster-panel" aria-hidden="true" aria-label="Team squad">
+      <div class="roster-panel__head">
+        <div>
+          <p class="eyebrow">The complete 26</p>
+          <h2 class="roster-title">Spain squad</h2>
+        </div>
+        <button class="roster-close" type="button" aria-label="Close squad panel">×</button>
+      </div>
+      <div class="roster-groups"></div>
+      <p class="roster-source"></p>
+    </aside>
+    <button class="panel-scrim" type="button" aria-label="Close squad panel" tabindex="-1"></button>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

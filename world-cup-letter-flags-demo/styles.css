@@ -1,0 +1,914 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600&family=Playfair+Display:ital,wght@0,500;0,700;1,500&display=swap");
+
+:root {
+  color-scheme: light;
+  font-family: "Manrope", system-ui, sans-serif;
+  --paper: #ede6d8;
+  --ink: #171714;
+  --muted: #69665d;
+  --line: rgba(23, 23, 20, 0.17);
+  --team-ink: #6e171a;
+  --team-wash: #e9d4b0;
+  --wall-opacity: .84;
+  --sky-opacity: .78;
+  --flag-a: #aa151b;
+  --flag-b: #f1bf00;
+  --flag-c: #aa151b;
+  --plaster-image: url("/plaster/spain-plaster.webp");
+  --motion-carousel: 540ms;
+  --motion-carousel-ease: cubic-bezier(.4, 0, .2, 1);
+  --motion-snap: 260ms;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+
+html { min-width: 320px; background: var(--paper); scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow: hidden;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 72% 48%, color-mix(in srgb, var(--team-wash) 52%, transparent) 0, transparent 38%),
+    linear-gradient(135deg, #f4efe5 0%, var(--paper) 52%, #e5ddcf 100%);
+  transition: background 600ms ease;
+}
+
+button, a { font: inherit; }
+button { color: inherit; }
+a { color: inherit; }
+
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  opacity: .1;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.88' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.48'/%3E%3C/svg%3E");
+}
+
+.site-header {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 15;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 24px;
+  height: 82px;
+  padding: 0 34px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 13px;
+  width: max-content;
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: -.02em;
+  font-weight: 600;
+}
+
+.wordmark small, .eyebrow {
+  color: var(--muted);
+  font: 500 9px/1.2 "DM Mono", monospace;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+.team-nav { display: flex; align-items: center; gap: 2px; }
+
+.team-nav button {
+  position: relative;
+  border: 0;
+  padding: 10px 12px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: .02em;
+  transition: color 220ms ease, opacity 220ms ease;
+}
+
+.team-nav button::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 4px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 260ms ease;
+}
+
+.team-nav button span { display: none; }
+.team-nav button:not([aria-pressed="true"]) { color: var(--muted); opacity: .64; }
+.team-nav button[aria-pressed="true"] { color: var(--team-ink); }
+.team-nav button[aria-pressed="true"]::after, .team-nav button:hover::after { transform: scaleX(1); }
+
+.header-actions {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--paper) 76%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.mode-switch button {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font: 500 8px "DM Mono", monospace;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.mode-switch button[aria-pressed="true"] {
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.roster-toggle {
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  padding: 9px 14px 9px 16px;
+  background: var(--ink);
+  color: var(--paper);
+  cursor: pointer;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.roster-toggle:hover { transform: translateY(-2px); background: var(--team-ink); }
+
+.experience {
+  position: relative;
+  min-height: 100dvh;
+  padding-top: 82px;
+  isolation: isolate;
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+.is-carousel-dragging .experience { cursor: grabbing; }
+
+.experience::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background-image: var(--plaster-image);
+  background-position: center;
+  background-size: cover;
+  filter: saturate(.82) contrast(.97);
+  transform: translateZ(0);
+  transition: opacity 320ms ease;
+}
+
+.mode-plaster .experience::before { opacity: .94; }
+
+.editorial {
+  --country-title-size: clamp(44px, 5vw, 80px);
+  position: absolute;
+  z-index: 6;
+  top: 30%;
+  left: 4.4vw;
+  width: min(245px, 19vw);
+  transition: opacity 180ms ease, transform 380ms cubic-bezier(.22,.7,.22,1);
+}
+
+body[data-team="argentina"] .editorial {
+  --country-title-size: clamp(40px, 4.4vw, 68px);
+  width: min(235px, 18vw);
+}
+
+.eyebrow { margin: 0 0 13px; }
+
+.country-title {
+  margin: 0;
+  max-width: none;
+  color: var(--team-ink);
+  font: 500 var(--country-title-size)/.82 "Playfair Display", Georgia, serif;
+  letter-spacing: -.068em;
+  white-space: nowrap;
+}
+
+.country-poem {
+  margin: 22px 0 28px;
+  max-width: 235px;
+  font: 500 13px/1.6 "Manrope", sans-serif;
+  letter-spacing: -.01em;
+}
+
+.country-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0; padding-top: 14px; border-top: 1px solid var(--line); }
+.country-facts div { display: grid; gap: 4px; }
+.country-facts dt { color: var(--muted); font: 400 8px "DM Mono", monospace; text-transform: uppercase; letter-spacing: .1em; }
+.country-facts dd { margin: 0; font: 500 10px "DM Mono", monospace; }
+
+.flag-shell {
+  position: absolute;
+  z-index: 2;
+  inset: 82px 0 0;
+  margin: auto;
+  width: min(74vw, 1050px);
+  height: calc(100dvh - 82px);
+  min-height: 580px;
+  transition: opacity 180ms ease, transform 480ms cubic-bezier(.22,.7,.22,1);
+}
+
+.flag-shell::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  mix-blend-mode: multiply;
+  transform: translateZ(0);
+  transition: opacity 700ms ease, transform 900ms cubic-bezier(.22,.7,.22,1);
+  display: none;
+}
+
+.flag-shell::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 24%;
+  left: 22%;
+  width: 73%;
+  height: 68%;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    linear-gradient(134deg, rgba(43, 36, 28, .3) 0%, rgba(43, 36, 28, .2) 31%, rgba(43, 36, 28, .09) 58%, transparent 82%);
+  clip-path: polygon(0 0, 70% 0, 100% 43%, 100% 100%, 82% 100%, 0 20%);
+  mix-blend-mode: multiply;
+  transform-origin: 0 0;
+  filter: blur(10px);
+  transform: translate3d(0, 0, 0) rotate(-.4deg) skewX(-2deg);
+  transition: opacity 700ms ease, transform 900ms cubic-bezier(.22,.7,.22,1);
+  display: block;
+}
+
+.country-wall {
+  position: absolute;
+  z-index: 1;
+  top: 27%;
+  right: 11%;
+  bottom: -5%;
+  left: 11%;
+  overflow: hidden;
+  opacity: var(--wall-opacity);
+  filter: saturate(.96) contrast(1.04);
+  -webkit-mask-image: url("/walls/plaster-edge-mask.webp");
+  mask-image: url("/walls/plaster-edge-mask.webp");
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  transform: translateZ(0);
+  transition: opacity 240ms ease, visibility 240ms;
+}
+
+.country-sky {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 29%;
+  overflow: hidden;
+  opacity: var(--sky-opacity);
+  filter: saturate(.78) contrast(.94);
+  -webkit-mask-image: url("/walls/sky-edge-mask-v3.webp");
+  mask-image: url("/walls/sky-edge-mask-v3.webp");
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  transform: translateZ(0);
+  transition: opacity 240ms ease, visibility 240ms;
+}
+
+.mode-plaster .country-wall,
+.mode-plaster .country-sky {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.country-sky img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 50%;
+  user-select: none;
+}
+
+.country-wall img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 50%;
+  user-select: none;
+}
+
+.canopy {
+  position: absolute;
+  z-index: 4;
+  /* A taller shared fitting box makes every source image width-bound instead
+     of height-bound. Their visible roofs therefore keep one common span even
+     though the original WEBPs use different aspect ratios. */
+  top: -11%;
+  left: 9%;
+  width: 82%;
+  height: 55%;
+  pointer-events: none;
+  transform-origin: 50% 90%;
+  filter:
+    saturate(.97)
+    contrast(1.04)
+    drop-shadow(3px 6px 2px rgba(48, 35, 24, .28))
+    drop-shadow(24px 29px 7px rgba(48, 35, 24, .13))
+    drop-shadow(58px 67px 13px rgba(48, 35, 24, .08));
+}
+
+.canopy img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: 50% 100%;
+  transform-origin: 50% 100%;
+  user-select: none;
+}
+
+@media (min-width: 681px) {
+  /* Equalise the alpha-bounded width of the four source images. These tiny
+     horizontal corrections compensate for their unequal transparent edges. */
+  body[data-team="spain"] .canopy img { transform: scaleX(.992); }
+  /* The English source has a larger transparent lower margin. Correct the
+     optical baseline without stretching the architecture. */
+  body[data-team="england"] .canopy img { transform: translateY(11.5%) scaleX(.998); }
+  body[data-team="france"] .canopy img { transform: translateY(-2%) scaleX(1.023); }
+  body[data-team="argentina"] .canopy img { transform: scaleX(1.008); }
+}
+
+.mode-plaster .canopy {
+  filter:
+    saturate(1.02)
+    contrast(1.08)
+    drop-shadow(3px 6px 2px rgba(24, 18, 12, .3))
+    drop-shadow(24px 29px 7px rgba(24, 18, 12, .14))
+    drop-shadow(58px 67px 13px rgba(24, 18, 12, .08));
+}
+
+#flag-canvas,
+.flag-canvas-clone {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  display: block;
+  /* The strands may swing well past the resting flag. Give the physics an
+     overscan stage so they are clipped only by the real viewport, never by
+     an invisible canvas edge inside the composition. */
+  width: calc(100% + min(54vw, 760px));
+  height: 100%;
+  transform: translateX(-50%);
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.mode-plaster #flag-canvas,
+.mode-plaster .flag-canvas-clone {
+  filter:
+    contrast(1.12)
+    saturate(1.05)
+    drop-shadow(3px 5px 1.5px rgba(21, 17, 13, .3))
+    drop-shadow(22px 27px 6px rgba(21, 17, 13, .12))
+    drop-shadow(52px 61px 11px rgba(21, 17, 13, .07));
+}
+
+/* Country light studies: the broad shadow lives on the wall while the
+   alpha-aware drop shadows continue to follow every moving glyph. */
+body[data-team="spain"] .flag-shell::before {
+  top: 30%;
+  left: 16%;
+  width: 61%;
+  height: 61%;
+  opacity: .62;
+  background: radial-gradient(ellipse at 54% 8%, rgba(66, 42, 24, .33) 0 12%, rgba(66, 42, 24, .2) 38%, rgba(66, 42, 24, .05) 67%, transparent 78%);
+  clip-path: polygon(12% 0, 94% 3%, 77% 100%, 0 83%);
+  filter: blur(6px);
+  transform: rotate(-1.5deg) skewX(-4deg);
+}
+
+body[data-team="spain"] .canopy {
+  filter:
+    saturate(1.04)
+    contrast(1.09)
+    drop-shadow(4px 7px 2px rgba(38, 24, 15, .38))
+    drop-shadow(34px 44px 3px rgba(38, 24, 15, .34))
+    drop-shadow(108px 132px 10px rgba(38, 24, 15, .24));
+}
+
+body[data-team="spain"] #flag-canvas {
+  filter:
+    contrast(1.12)
+    saturate(1.06)
+    drop-shadow(3px 6px 2px rgba(38, 24, 15, .34))
+    drop-shadow(18px 24px 2.5px rgba(38, 24, 15, .25))
+    drop-shadow(45px 55px 7px rgba(38, 24, 15, .12));
+}
+
+body[data-team="spain"] .flag-shell::after {
+  opacity: .34;
+  filter: blur(9px);
+}
+
+body[data-team="england"] .flag-shell::before {
+  top: 27%;
+  left: 18%;
+  width: 66%;
+  height: 57%;
+  opacity: .31;
+  background: radial-gradient(ellipse at 50% 2%, rgba(31, 38, 40, .3), rgba(31, 38, 40, .13) 43%, transparent 76%);
+  filter: blur(25px);
+  transform: translate(4px, 7px) scaleX(1.04);
+}
+
+body[data-team="england"] .canopy {
+  filter:
+    saturate(.91)
+    contrast(1.08)
+    drop-shadow(2px 6px 4px rgba(18, 25, 26, .36))
+    drop-shadow(34px 44px 5px rgba(18, 25, 26, .32))
+    drop-shadow(108px 132px 12px rgba(18, 25, 26, .23));
+}
+
+body[data-team="england"] #flag-canvas {
+  filter:
+    contrast(1.13)
+    saturate(1.02)
+    drop-shadow(2px 5px 4px rgba(18, 25, 26, .25))
+    drop-shadow(16px 22px 7px rgba(18, 25, 26, .19))
+    drop-shadow(38px 48px 12px rgba(18, 25, 26, .12));
+}
+
+body[data-team="england"] .flag-shell::after {
+  opacity: .48;
+  filter: blur(9px);
+}
+
+body[data-team="france"] .flag-shell::before {
+  top: 27%;
+  left: 13%;
+  width: 74%;
+  height: 60%;
+  opacity: .27;
+  background:
+    radial-gradient(ellipse at 48% 4%, rgba(27, 31, 34, .27), rgba(27, 31, 34, .1) 45%, transparent 76%),
+    radial-gradient(ellipse at 18% 44%, rgba(45, 52, 55, .1), transparent 60%);
+  filter: blur(31px);
+  transform: translateY(6px);
+}
+
+body[data-team="france"] .canopy {
+  filter:
+    saturate(.94)
+    contrast(1.08)
+    drop-shadow(1px 6px 4px rgba(23, 26, 27, .35))
+    drop-shadow(34px 44px 4px rgba(23, 26, 27, .32))
+    drop-shadow(108px 132px 11px rgba(23, 26, 27, .23));
+}
+
+body[data-team="france"] #flag-canvas {
+  filter:
+    contrast(1.12)
+    saturate(1.02)
+    drop-shadow(1px 4px 4px rgba(23, 26, 27, .24))
+    drop-shadow(16px 23px 7px rgba(23, 26, 27, .19))
+    drop-shadow(40px 51px 12px rgba(23, 26, 27, .12));
+}
+
+body[data-team="france"] .flag-shell::after {
+  opacity: .46;
+  filter: blur(9px);
+}
+
+body[data-team="argentina"] .flag-shell::before {
+  top: 27%;
+  left: 20%;
+  width: 64%;
+  height: 61%;
+  opacity: .4;
+  background: radial-gradient(ellipse at 45% 5%, rgba(38, 46, 45, .27), rgba(38, 46, 45, .11) 47%, transparent 76%);
+  filter: blur(17px);
+  transform: translate(10px, 9px) rotate(.5deg);
+}
+
+body[data-team="argentina"].mode-plaster .experience::before {
+  opacity: .98;
+  filter: saturate(.46) brightness(.9) contrast(1.04);
+}
+
+body[data-team="argentina"].mode-plaster .flag-shell::before {
+  top: 24%;
+  left: 15%;
+  width: 72%;
+  height: 69%;
+  opacity: .84;
+  background: radial-gradient(ellipse at 50% 39%, rgba(48, 45, 40, .5) 0%, rgba(48, 45, 40, .36) 40%, rgba(48, 45, 40, .16) 64%, transparent 82%);
+  filter: blur(22px);
+  transform: translate(8px, 10px) rotate(.4deg);
+}
+
+body[data-team="argentina"] .canopy {
+  filter:
+    saturate(1.02)
+    contrast(1.08)
+    drop-shadow(4px 7px 3px rgba(24, 29, 28, .36))
+    drop-shadow(34px 44px 4px rgba(24, 29, 28, .33))
+    drop-shadow(108px 132px 10px rgba(24, 29, 28, .24));
+}
+
+body[data-team="argentina"] #flag-canvas {
+  filter:
+    contrast(1.12)
+    saturate(1.05)
+    drop-shadow(4px 7px 3px rgba(24, 29, 28, .28))
+    drop-shadow(18px 24px 5px rgba(24, 29, 28, .21))
+    drop-shadow(43px 53px 10px rgba(24, 29, 28, .13));
+}
+
+body[data-team="argentina"] .flag-shell::after {
+  opacity: .38;
+  filter: blur(9px);
+}
+
+.weather-front {
+  position: absolute;
+  z-index: 5;
+  inset: 82px 0 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 750ms ease;
+}
+
+.weather-front::before,
+.weather-front::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+body[data-team="england"] .weather-front { opacity: .42; }
+
+body[data-team="england"] .weather-front::before {
+  inset: -25% -12%;
+  background:
+    radial-gradient(ellipse 1px 14px at 4% 16%, rgba(49, 65, 69, .65), transparent 72%),
+    radial-gradient(ellipse 1px 11px at 13% 58%, rgba(235, 244, 246, .78), transparent 72%),
+    radial-gradient(ellipse 1px 17px at 19% 31%, rgba(49, 65, 69, .56), transparent 72%),
+    radial-gradient(ellipse 1px 12px at 29% 79%, rgba(235, 244, 246, .72), transparent 72%),
+    radial-gradient(ellipse 1px 15px at 36% 9%, rgba(49, 65, 69, .6), transparent 72%),
+    radial-gradient(ellipse 1px 10px at 43% 52%, rgba(235, 244, 246, .78), transparent 72%),
+    radial-gradient(ellipse 1px 18px at 51% 87%, rgba(49, 65, 69, .56), transparent 72%),
+    radial-gradient(ellipse 1px 13px at 58% 24%, rgba(235, 244, 246, .74), transparent 72%),
+    radial-gradient(ellipse 1px 16px at 66% 66%, rgba(49, 65, 69, .6), transparent 72%),
+    radial-gradient(ellipse 1px 11px at 73% 39%, rgba(235, 244, 246, .8), transparent 72%),
+    radial-gradient(ellipse 1px 17px at 81% 91%, rgba(49, 65, 69, .58), transparent 72%),
+    radial-gradient(ellipse 1px 12px at 88% 13%, rgba(235, 244, 246, .76), transparent 72%),
+    radial-gradient(ellipse 1px 15px at 94% 72%, rgba(49, 65, 69, .6), transparent 72%),
+    radial-gradient(ellipse 1px 10px at 98% 43%, rgba(235, 244, 246, .78), transparent 72%);
+  filter: blur(.35px);
+  animation: england-rain-far 1.45s linear infinite;
+}
+
+body[data-team="england"] .weather-front::after {
+  inset: -18% -8%;
+  opacity: .65;
+  background:
+    radial-gradient(ellipse 1px 13px at 9% 24%, rgba(238, 246, 247, .75), transparent 72%),
+    radial-gradient(ellipse 1px 18px at 24% 65%, rgba(238, 246, 247, .6), transparent 72%),
+    radial-gradient(ellipse 1px 11px at 46% 14%, rgba(238, 246, 247, .72), transparent 72%),
+    radial-gradient(ellipse 1px 16px at 67% 48%, rgba(238, 246, 247, .62), transparent 72%),
+    radial-gradient(ellipse 1px 12px at 84% 76%, rgba(238, 246, 247, .72), transparent 72%),
+    radial-gradient(ellipse 1px 19px at 94% 31%, rgba(238, 246, 247, .58), transparent 72%);
+  filter: blur(.4px);
+  transform: rotate(-8deg);
+  animation: england-rain-near 2.2s linear infinite;
+}
+
+body[data-team="france"] .weather-front {
+  opacity: .11;
+  mix-blend-mode: multiply;
+}
+
+body[data-team="france"] .weather-front::before {
+  inset: -12% -25%;
+  background:
+    radial-gradient(ellipse at 27% 46%, rgba(39, 47, 51, .32), transparent 36%),
+    radial-gradient(ellipse at 71% 32%, rgba(39, 47, 51, .24), transparent 40%);
+  filter: blur(50px);
+  animation: france-cloud-pass 19s ease-in-out infinite alternate;
+}
+
+.is-changing .weather-front,
+.is-changing .flag-shell::before,
+.is-changing .flag-shell::after { opacity: 0; }
+
+@keyframes england-rain-far {
+  from { transform: translate3d(-15px, -90px, 0); }
+  to { transform: translate3d(15px, 90px, 0); }
+}
+
+@keyframes england-rain-near {
+  from { transform: translate3d(-18px, -150px, 0) rotate(-8deg); }
+  to { transform: translate3d(18px, 150px, 0) rotate(-8deg); }
+}
+
+@keyframes france-cloud-pass {
+  from { transform: translate3d(-7%, 0, 0) scale(1.02); }
+  to { transform: translate3d(7%, 2%, 0) scale(1.08); }
+}
+
+.interaction-hint {
+  position: absolute;
+  z-index: 5;
+  right: 5%;
+  bottom: 7%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font: 400 8px "DM Mono", monospace;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+}
+
+
+.audio-caption {
+  display: none;
+  position: absolute;
+  z-index: 8;
+  left: 50%;
+  bottom: 8.2%;
+  width: min(420px, 72%);
+  padding: 13px 16px 14px;
+  border: 1px solid color-mix(in srgb, var(--team-ink) 26%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 44px rgba(45, 38, 26, .09);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 12px);
+  transition: opacity 180ms ease, transform 260ms cubic-bezier(0, 0, .2, 1);
+}
+
+.audio-caption.is-visible { opacity: 1; transform: translate(-50%, 0); }
+.audio-caption.is-visible:has(.audio-source:not([hidden])) { pointer-events: auto; }
+.audio-caption span { display: block; margin-bottom: 5px; color: var(--team-ink); font: 500 8px "DM Mono", monospace; letter-spacing: .1em; text-transform: uppercase; }
+.audio-caption p { margin: 0; font: italic 500 15px/1.35 "Playfair Display", Georgia, serif; }
+.audio-source { display: inline-block; margin-top: 9px; color: var(--team-ink); font: 500 8px "DM Mono", monospace; letter-spacing: .08em; text-decoration: none; text-transform: uppercase; }
+.audio-source:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.hint-dot { width: 6px; height: 6px; border: 1px solid var(--team-ink); border-radius: 50%; box-shadow: 0 0 0 5px color-mix(in srgb, var(--team-ink) 12%, transparent); animation: pulse 1.8s ease-in-out infinite; }
+
+.scene-controls {
+  position: absolute;
+  z-index: 7;
+  top: 50%;
+  right: 3.2vw;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  transform: translateY(-50%);
+}
+
+.arrow-button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--paper) 64%, transparent);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: color 180ms ease, border 180ms ease, transform 180ms ease;
+}
+
+.arrow-button:hover { color: var(--team-ink); border-color: var(--team-ink); transform: scale(1.08); }
+.scene-controls p { display: grid; place-items: center; gap: 7px; margin: 0; color: var(--muted); font: 400 8px "DM Mono", monospace; }
+.scene-controls p i { display: block; width: 1px; height: 22px; background: var(--line); }
+.current-number { color: var(--team-ink); }
+
+.build-note {
+  position: absolute;
+  z-index: 5;
+  left: 34px;
+  bottom: 25px;
+  margin: 0;
+  color: var(--muted);
+  font: 400 8px "DM Mono", monospace;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.roster-panel {
+  position: fixed;
+  z-index: 31;
+  top: 0;
+  right: 0;
+  width: min(560px, 92vw);
+  height: 100dvh;
+  overflow-y: auto;
+  padding: 32px 34px 40px;
+  color: #f3eee4;
+  background: #171714;
+  transform: translateX(102%);
+  visibility: hidden;
+  transition: transform 480ms cubic-bezier(.22,.7,.22,1), visibility 480ms;
+}
+
+.roster-panel[aria-hidden="false"] { visibility: visible; transform: translateX(0); }
+.roster-panel__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; margin-bottom: 34px; padding-bottom: 26px; border-bottom: 1px solid rgba(255,255,255,.18); }
+.roster-panel .eyebrow { color: #9d9c95; }
+.roster-title { margin: 0; font: 500 42px/1 "Playfair Display", Georgia, serif; letter-spacing: -.04em; }
+.roster-close { width: 42px; height: 42px; border: 1px solid rgba(255,255,255,.32); border-radius: 50%; color: white; background: transparent; font-size: 24px; cursor: pointer; }
+.roster-group { margin-bottom: 28px; }
+.roster-group h3 { display: flex; justify-content: space-between; margin: 0 0 10px; color: #9d9c95; font: 500 9px "DM Mono", monospace; letter-spacing: .1em; text-transform: uppercase; }
+.roster-group ol { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 26px; }
+.roster-group li { break-inside: avoid; display: grid; grid-template-columns: 25px 1fr; gap: 7px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 12px; }
+.roster-group li span { color: #74746e; font: 400 9px "DM Mono", monospace; }
+.roster-source { margin: 34px 0 0; color: #878780; font-size: 10px; line-height: 1.6; }
+.roster-source a { color: #e8e0d4; text-decoration-color: #686862; text-underline-offset: 3px; }
+
+.panel-scrim {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  border: 0;
+  visibility: hidden;
+  opacity: 0;
+  background: rgba(18,18,16,.45);
+  backdrop-filter: blur(4px);
+  transition: opacity 360ms ease, visibility 360ms;
+}
+
+.panel-open .panel-scrim { visibility: visible; opacity: 1; }
+
+.carousel-ghost {
+  position: absolute;
+  z-index: 9;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 1;
+  transform: translate3d(var(--carousel-release-x, 0px), 0, 0);
+  transition:
+    transform var(--motion-carousel) var(--motion-carousel-ease),
+    opacity 420ms ease;
+}
+
+.carousel-ghost.is-leaving[data-direction="forward"] {
+  opacity: .72;
+  transform: translate3d(-108vw, 0, 0);
+}
+
+.carousel-ghost.is-leaving[data-direction="backward"] {
+  opacity: .72;
+  transform: translate3d(108vw, 0, 0);
+}
+
+.is-carousel-dragging .experience > .flag-shell,
+.is-carousel-dragging .experience > .editorial {
+  transition: none;
+  transform: translate3d(var(--carousel-drag-x, 0px), 0, 0);
+}
+
+.is-carousel-snapping .experience > .flag-shell,
+.is-carousel-snapping .experience > .editorial {
+  transform: translate3d(var(--carousel-drag-x, 0px), 0, 0);
+  transition: transform var(--motion-snap) cubic-bezier(.22, .7, .22, 1);
+}
+
+.is-changing.is-entering .experience > .flag-shell,
+.is-changing.is-entering .experience > .editorial {
+  opacity: 0;
+  transform: translate3d(var(--carousel-enter-x), 0, 0);
+  transition: none;
+}
+
+.is-changing.is-entering.is-settling .experience > .flag-shell {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--motion-carousel) var(--motion-carousel-ease),
+    opacity 310ms ease-out;
+}
+
+.is-changing.is-entering.is-settling .experience > .editorial {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform 470ms cubic-bezier(0, 0, .2, 1) 45ms,
+    opacity 280ms ease-out 70ms;
+}
+
+@keyframes pulse { 0%,100% { transform: scale(.9); opacity: .65; } 50% { transform: scale(1.12); opacity: 1; } }
+
+@media (max-width: 980px) {
+  .site-header { grid-template-columns: 1fr auto; padding: 0 20px; background: color-mix(in srgb, var(--paper) 96%, transparent); backdrop-filter: none; }
+  .team-nav { position: fixed; left: 50%; bottom: 18px; z-index: 18; transform: translateX(-50%); padding: 5px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--paper) 84%, transparent); backdrop-filter: blur(18px); }
+  .team-nav button { padding: 8px 10px; font-size: 0; }
+  .team-nav button span { display: block; font: 500 9px "DM Mono", monospace; }
+  .team-nav button::after { left: 9px; right: 9px; bottom: 3px; }
+  .editorial { top: 20%; left: 24px; width: 180px; }
+  body[data-team="argentina"] .editorial { width: 180px; }
+  .country-title { font-size: clamp(38px, 6vw, 56px); }
+  body[data-team="argentina"] .country-title { font-size: clamp(36px, 5.2vw, 50px); }
+  .country-poem { font-size: 11px; }
+  .country-facts { grid-template-columns: repeat(2,1fr); }
+  .country-facts div:last-child { display: none; }
+  .flag-shell { width: 100vw; }
+  .scene-controls { right: 16px; }
+  .build-note { display: none; }
+}
+
+@media (max-width: 680px) {
+  body { overflow-y: auto; }
+  .site-header { height: 68px; }
+  .wordmark small { display: none; }
+  .roster-toggle { padding: 8px 12px; }
+  .header-actions { gap: 6px; }
+  .mode-switch button { padding: 6px 7px; font-size: 7px; }
+  .experience { min-height: 100svh; padding-top: 68px; overflow: hidden; }
+  .editorial { top: 12.5%; left: 18px; width: calc(100% - 36px); text-align: center; }
+  body[data-team="argentina"] .editorial { right: 18px; width: auto; }
+  .editorial .eyebrow { margin-bottom: 8px; }
+  .country-title { max-width: none; font-size: 48px; white-space: normal; }
+  body[data-team="argentina"] .country-title { font-size: 44px; }
+  .country-poem { max-width: 300px; margin: 13px auto 0; line-height: 1.45; }
+  .country-facts { display: none; }
+  .flag-shell { inset: 68px 0 0; height: calc(100svh - 68px); min-height: 580px; }
+  .weather-front { inset: 68px 0 0; }
+  .canopy { top: 15%; left: 4%; width: 92%; height: 34%; }
+  .country-wall { top: 37%; right: 6%; bottom: 0; left: 6%; }
+  .country-sky { top: 3%; right: 2%; left: 2%; height: 35%; opacity: .5; }
+  body[data-team] .flag-shell::before,
+  body[data-team] .flag-shell::after,
+  body.mode-plaster[data-team] .flag-shell::before { opacity: 0; }
+  .scene-controls { top: auto; right: 0; bottom: 72px; left: 0; grid-template-columns: auto auto auto; transform: none; }
+  .scene-controls p { grid-template-columns: auto 26px auto; }
+  .scene-controls p i { width: 26px; height: 1px; }
+  .interaction-hint { right: 50%; bottom: 128px; transform: translateX(50%); white-space: nowrap; }
+  .audio-caption { bottom: 19%; width: calc(100% - 38px); }
+  .roster-panel { padding: 24px 20px 36px; }
+  .roster-panel__head { margin-bottom: 24px; }
+  .roster-title { font-size: 34px; }
+  .roster-group ol { columns: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .interaction-hint { display: none; }
+  body[data-team="england"] .weather-front { opacity: .12; }
+}
