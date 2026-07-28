@@ -35,6 +35,7 @@ export function createEnemyState(
     maxStamina: 100,
     action: "idle",
     actionTime: 0,
+    collisionLayer: "enemy",
     intent: "observe",
     cooldown: 0,
     ...overrides,

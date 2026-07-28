@@ -17,6 +17,7 @@ export const arenaContent: GameContent = {
     actorRadius: 0.35,
     dodge: {
       speed: 9,
+      startup: 0.04,
       duration: 0.24,
       staminaCost: 24,
       invulnerabilityStart: 0.08,
@@ -25,18 +26,52 @@ export const arenaContent: GameContent = {
   },
   weapons: {
     oathblade: {
-      damage: 18,
-      stamina: 12,
-      startup: 0.16,
-      active: 0.12,
-      recovery: 0.28,
+      light1: {
+        startup: 0.16,
+        active: 0.12,
+        recovery: 0.28,
+        damage: 18,
+        stamina: 12,
+      },
+      light2: {
+        startup: 0.18,
+        active: 0.14,
+        recovery: 0.34,
+        damage: 24,
+        stamina: 16,
+      },
+      range: 1.8,
+      targetRadius: 0.35,
+      facingHalfAngleDegrees: 55,
+      comboWindow: {
+        recoveryStart: 0.1,
+        recoveryEnd: 0.28,
+      },
     },
     "ember-bow": {
-      damage: 15,
-      stamina: 10,
-      startup: 0.28,
-      active: 0,
-      recovery: 0.42,
+      shot: {
+        startup: 0.28,
+        active: 0,
+        recovery: 0.42,
+        damage: 15,
+        stamina: 10,
+      },
+      projectile: {
+        speed: 12,
+        radius: 0.16,
+        targetRadius: 0.35,
+        lifetime: 1.25,
+      },
+    },
+  },
+  combat: {
+    fixedHz: 60,
+    staminaRegenPerSecond: 18,
+    guard: {
+      releaseRecovery: 0.12,
+      damageReceivedMultiplier: 0.35,
+      staminaPerHit: 9,
+      facingHalfAngleDegrees: 70,
     },
   },
   enemyHealth: {

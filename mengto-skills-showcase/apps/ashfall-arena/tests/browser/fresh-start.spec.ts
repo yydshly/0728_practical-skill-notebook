@@ -62,6 +62,19 @@ test("fresh start renders a live arena and moves authoritative state", async ({
   await expect(page.getByText("进入第一个琥珀训练环")).toBeVisible();
   await expect(page.getByText("105 / 105")).toBeVisible();
   await expect(page.locator("[data-game-canvas]")).toHaveCount(1);
+  await expect(page.locator("[data-weapon]")).toHaveText("誓约刃");
+  await expect(page.locator("[data-action]")).toHaveText("待机");
+
+  await page.keyboard.press("Digit2");
+  await expect(page.locator("[data-weapon]")).toHaveText("余烬弓");
+  await page.locator("[data-game-canvas]").click({ position: { x: 80, y: 80 } });
+  await expect(page.locator("[data-action]")).toHaveText("攻击");
+  await expect
+    .poll(async () => (await snapshot(page)).weaponId)
+    .toBe("ember-bow");
+  await expect
+    .poll(async () => (await snapshot(page)).action)
+    .toBe("idle");
 
   const pixels = await page.locator("[data-game-canvas]").evaluate(
     (canvas: HTMLCanvasElement) => {

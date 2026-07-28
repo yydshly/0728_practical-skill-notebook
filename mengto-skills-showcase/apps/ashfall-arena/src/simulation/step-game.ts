@@ -5,6 +5,7 @@ import type {
   StepGameResult,
   Vec2,
 } from "./types";
+import { stepCombat } from "./combat";
 import { resolveArenaMovement } from "./resolve-movement";
 
 const FIXED_DELTA = 1 / 60;
@@ -119,6 +120,15 @@ function stepPlayer(
     };
   }
 
+  if (
+    state.player.action === "attack" ||
+    state.player.action === "guard" ||
+    state.player.action === "hit" ||
+    state.player.action === "dead"
+  ) {
+    return state.player;
+  }
+
   const action = hasMovement ? "move" : "idle";
   const actionTime =
     action === "idle"
@@ -211,18 +221,26 @@ export function stepGame(
   }
 
   const steppedPlayer = stepPlayer(state, intent, content);
-  const lockTargetId = nextLockTarget(state, intent.lockPressed);
+  const movedState =
+    steppedPlayer === state.player
+      ? state
+      : {
+          ...state,
+          player: steppedPlayer,
+        };
+  const combat = stepCombat(movedState, intent, [], content);
+  const lockTargetId = nextLockTarget(combat.state, intent.lockPressed);
   const player =
-    steppedPlayer.lockTargetId === lockTargetId
-      ? steppedPlayer
-      : { ...steppedPlayer, lockTargetId };
+    combat.state.player.lockTargetId === lockTargetId
+      ? combat.state.player
+      : { ...combat.state.player, lockTargetId };
 
   return {
     state: {
-      ...state,
+      ...combat.state,
       tick: state.tick + 1,
       player,
     },
-    events: [],
+    events: combat.events,
   };
 }

@@ -36,6 +36,13 @@ export type ActorAction =
   | "dodge"
   | "hit"
   | "dead";
+export type CollisionLayer = "player" | "enemy";
+export type WeaponId = "oathblade" | "ember-bow";
+export type AttackActionId =
+  | "oathblade-light-1"
+  | "oathblade-light-2"
+  | "ember-bow-shot";
+export type AttackPhase = "startup" | "active" | "recovery" | "complete";
 
 export interface GameIntent extends PlayerIntent {
   healPressed: boolean;
@@ -53,6 +60,51 @@ export interface ActorState {
   maxStamina: number;
   action: ActorAction;
   actionTime: number;
+  collisionLayer: CollisionLayer;
+}
+
+export interface AttackInstance {
+  id: string;
+  ownerId: string;
+  actionId: AttackActionId;
+  weaponId: WeaponId;
+  startedTick: number;
+  elapsedTicks: number;
+  hitTargetIds: string[];
+  comboQueued: boolean;
+  projectileSpawned: boolean;
+}
+
+export interface ProjectileState {
+  id: string;
+  attackId: string;
+  ownerId: string;
+  position: Vec2;
+  direction: Vec2;
+  speed: number;
+  radius: number;
+  ageTicks: number;
+  lifetimeTicks: number;
+  targetLayer: CollisionLayer;
+  hitTargetIds: string[];
+}
+
+export interface CombatState {
+  attackSequence: number;
+  activeAttack: AttackInstance | null;
+  projectiles: ProjectileState[];
+  receivedAttackIds: string[];
+  attackInputHeld: boolean;
+  switchInputHeld: boolean;
+  guardReleaseTicks: number;
+}
+
+export interface IncomingHit {
+  attackId: string;
+  attackerId: string;
+  damage: number;
+  angleDegrees: number;
+  collisionLayer: CollisionLayer;
 }
 
 export interface GameState {
@@ -62,7 +114,7 @@ export interface GameState {
   status: GameStatus;
   paused: boolean;
   player: ActorState & {
-    weaponId: "oathblade" | "ember-bow";
+    weaponId: WeaponId;
     healingCharges: number;
     souls: number;
     powerMultiplier: 1 | 1.2;
@@ -87,6 +139,7 @@ export interface GameState {
     kind: "souls" | "healing";
     amount: number;
   }>;
+  combat: CombatState;
 }
 
 export type GameEvent =
@@ -118,23 +171,54 @@ export interface GameContent {
     actorRadius: number;
     dodge: {
       speed: number;
+      startup: number;
       duration: number;
       staminaCost: number;
       invulnerabilityStart: number;
       invulnerabilityEnd: number;
     };
   };
-  weapons: Record<
-    "oathblade" | "ember-bow",
-    {
-      damage: number;
-      stamina: number;
-      startup: number;
-      active: number;
-      recovery: number;
-    }
-  >;
+  weapons: {
+    oathblade: {
+      light1: CombatActionContent;
+      light2: CombatActionContent;
+      range: number;
+      targetRadius: number;
+      facingHalfAngleDegrees: number;
+      comboWindow: {
+        recoveryStart: number;
+        recoveryEnd: number;
+      };
+    };
+    "ember-bow": {
+      shot: CombatActionContent;
+      projectile: {
+        speed: number;
+        radius: number;
+        targetRadius: number;
+        lifetime: number;
+      };
+    };
+  };
+  combat: {
+    fixedHz: 60;
+    staminaRegenPerSecond: number;
+    guard: {
+      releaseRecovery: number;
+      damageReceivedMultiplier: number;
+      staminaPerHit: number;
+      facingHalfAngleDegrees: number;
+    };
+  };
   enemyHealth: Record<EnemyKind, number>;
+}
+
+export interface CombatActionContent {
+  startup: number;
+  active: number;
+  recovery: number;
+  damage: number;
+  stamina: number;
 }
 
 export interface StepGameResult {

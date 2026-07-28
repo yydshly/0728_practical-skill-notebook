@@ -28,6 +28,10 @@ interface AshfallSnapshot {
   preserveDrawingBuffer: boolean;
   input: GameIntent;
   lockTargetId: string | null;
+  weaponId: GameState["player"]["weaponId"];
+  action: GameState["player"]["action"];
+  activeAttackId: string | null;
+  projectileCount: number;
   camera: {
     target: { x: number; y: number; z: number };
     desiredDistance: number;
@@ -92,7 +96,8 @@ app.innerHTML = `
           <span class="hud__meter hud__meter--stamina"><i data-stamina-meter></i></span>
         </div>
         <div class="hud__loadout">
-          <span>誓约刃</span>
+          <span data-weapon>誓约刃</span>
+          <span data-action>待机</span>
           <span>治疗瓶 × 3</span>
         </div>
       </aside>
@@ -111,6 +116,8 @@ const health = app.querySelector<HTMLElement>("[data-health]")!;
 const stamina = app.querySelector<HTMLElement>("[data-stamina]")!;
 const healthMeter = app.querySelector<HTMLElement>("[data-health-meter]")!;
 const staminaMeter = app.querySelector<HTMLElement>("[data-stamina-meter]")!;
+const weapon = app.querySelector<HTMLElement>("[data-weapon]")!;
+const action = app.querySelector<HTMLElement>("[data-action]")!;
 
 let state: GameState = createInitialState(7481);
 const arena = createArenaScene(canvas, {
@@ -226,8 +233,22 @@ const step = (fixedDelta: number) => {
 };
 
 const updateHud = () => {
+  const actionLabels: Record<GameState["player"]["action"], string> = {
+    idle: "待机",
+    move: "移动",
+    attack: "攻击",
+    guard: "格挡",
+    dodge: "闪避",
+    hit: "受击",
+    dead: "倒下",
+  };
   health.textContent = `${state.player.health} / ${state.player.maxHealth}`;
   stamina.textContent = `${Math.round(state.player.stamina)} / ${state.player.maxStamina}`;
+  weapon.textContent =
+    state.player.weaponId === "oathblade" ? "誓约刃" : "余烬弓";
+  action.textContent = actionLabels[state.player.action];
+  weapon.dataset.weaponId = state.player.weaponId;
+  action.dataset.actionId = state.player.action;
   healthMeter.style.width = `${100 * state.player.health / state.player.maxHealth}%`;
   staminaMeter.style.width = `${100 * state.player.stamina / state.player.maxStamina}%`;
   document.documentElement.dataset.paused = state.paused ? "true" : "false";
@@ -298,6 +319,10 @@ if (reviewControls) {
         preserveDrawingBuffer: arenaDiagnostics.preserveDrawingBuffer,
         input: input.getDiagnostics(),
         lockTargetId: state.player.lockTargetId,
+        weaponId: state.player.weaponId,
+        action: state.player.action,
+        activeAttackId: state.combat.activeAttack?.id ?? null,
+        projectileCount: state.combat.projectiles.length,
         camera: {
           target: {
             x: cameraDiagnostics.target.x,

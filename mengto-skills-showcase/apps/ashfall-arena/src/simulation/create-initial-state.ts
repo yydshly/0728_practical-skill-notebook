@@ -22,6 +22,7 @@ export function createInitialState(seed: number): GameState {
       maxStamina: 100,
       action: "idle",
       actionTime: 0,
+      collisionLayer: "player",
       weaponId: "oathblade",
       healingCharges: 3,
       souls: 0,
@@ -35,5 +36,14 @@ export function createInitialState(seed: number): GameState {
       gateOpen: false,
     },
     drops: [],
+    combat: {
+      attackSequence: 0,
+      activeAttack: null,
+      projectiles: [],
+      receivedAttackIds: [],
+      attackInputHeld: false,
+      switchInputHeld: false,
+      guardReleaseTicks: 0,
+    },
   };
 }
