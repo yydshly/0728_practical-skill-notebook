@@ -1,4 +1,4 @@
-import { monsters } from "@showcase/game-assets";
+import { createProceduralMonster, monsters } from "@showcase/game-assets";
 import { createInspectorStore } from "./state/inspector-store";
 import {
   createInspectorScene,
@@ -17,6 +17,7 @@ declare global { interface Window { __monsterForgeDiagnostics?: () => InspectorS
 const query = new URLSearchParams(window.location.search);
 const captureMode = query.get("capture") === "1";
 const forcedWebglFailure = query.get("forceWebglFailure") === "1";
+let remainingModelFailures = query.get("forceModelFailure") === "1" ? 1 : 0;
 const monsterById = new Map(monsters.map((monster) => [monster.id, monster]));
 const reviewedId = query.get("review");
 const initialId = reviewedId && monsterById.has(reviewedId) ? reviewedId : "ash-warden";
@@ -61,6 +62,14 @@ const showSceneStatus = (next: SceneStatus) => {
 };
 
 function initializeScene(): void {
+  if (scene && unavailableState?.reason === "model-creation-failed") {
+    inspector.fallback.hidden = true;
+    unavailableState = undefined;
+    sceneStatus = "loading";
+    scene.setMonster(selectedMonster());
+    scene.setState(store.getState());
+    return;
+  }
   scene?.dispose();
   scene = undefined;
   inspector.fallback.hidden = true;
@@ -72,6 +81,13 @@ function initializeScene(): void {
   try {
     scene = createInspectorScene(inspector.canvas, {
       capture: captureMode,
+      createMonster: (monster) => {
+        if (remainingModelFailures > 0) {
+          remainingModelFailures -= 1;
+          throw new Error("模型创建失败：确定性审阅夹具已触发一次。");
+        }
+        return createProceduralMonster(monster);
+      },
       onReady: () => showSceneStatus("ready"),
       onUnavailable: (error, kind) => unavailable(kind, error),
       onActionState: (actionState) => {

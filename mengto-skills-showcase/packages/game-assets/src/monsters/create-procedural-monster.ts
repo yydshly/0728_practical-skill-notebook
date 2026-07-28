@@ -117,7 +117,7 @@ export function createProceduralMonster(definition: MonsterDefinition): MonsterI
     height: definition.collider.height,
   };
 
-  const source = "runtime factory shipped; catalog PNG recapture required after grounding and animation revision";
+  const source = "runtime factory shipped; matching transparent catalog PNG delivered from this procedural runtime capture";
   root.userData = {
     procedural: true,
     factoryId: definition.factoryId,
@@ -130,7 +130,7 @@ export function createProceduralMonster(definition: MonsterDefinition): MonsterI
       socketNames: definition.sockets.map(({ name }) => name),
       dimensions: definition.bounds,
       groundOffset: definition.bounds.groundOffset,
-      catalogPreviewStatus: "recapture-required",
+      catalogPreviewStatus: "delivered-captured",
       importedFiles: "none",
     },
   };

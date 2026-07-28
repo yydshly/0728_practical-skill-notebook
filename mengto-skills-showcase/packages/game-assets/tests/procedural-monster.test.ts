@@ -67,7 +67,7 @@ describe("createProceduralMonster", () => {
     expect(instance.root.userData.provenance).toMatchObject({
       type: "procedural",
       factoryId: definition.factoryId,
-      source: "runtime factory shipped; catalog PNG recapture required after grounding and animation revision",
+      source: "runtime factory shipped; matching transparent catalog PNG delivered from this procedural runtime capture",
     });
     expect(instance.root.userData.source).not.toContain("catalog PNG not shipped");
     expect(instance.root.userData.review).toMatchObject({
@@ -76,7 +76,7 @@ describe("createProceduralMonster", () => {
       socketNames: definition.sockets.map(({ name }) => name),
       dimensions: definition.bounds,
       groundOffset: definition.bounds.groundOffset,
-      catalogPreviewStatus: "recapture-required",
+      catalogPreviewStatus: "delivered-captured",
       importedFiles: "none",
     });
     expect(instance.root.children.map((child) => child.name)).toContain("motion");

@@ -33,12 +33,13 @@ describe("monster catalog", () => {
     ]);
   });
 
-  it("records the shipped runtime factory and the delivered PNG that now needs recapture", () => {
+  it("records the shipped runtime factory and its recaptured delivered PNG", () => {
     for (const monster of monsters) {
       expect(monster.deliveryStatus).toBe("shipped");
       expect(monster.source.description.startsWith("Project-authored Three.js geometry")).toBe(true);
-      expect(monster.source.description).toContain("runtime factory shipped; catalog PNG recapture required");
-      expect(monster.source.description).toContain("previewPath remains delivered from the previous procedural revision");
+      expect(monster.source.description).toContain("matching transparent catalog PNG delivered from this procedural runtime capture");
+      expect(monster.source.description).toContain("previewPath was recaptured from the updated runtime");
+      expect(monster.source.description).not.toContain("recapture required");
     }
   });
 

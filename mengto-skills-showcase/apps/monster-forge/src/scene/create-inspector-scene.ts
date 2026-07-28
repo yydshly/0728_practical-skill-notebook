@@ -60,6 +60,7 @@ interface InspectorSceneOptions {
   onUnavailable(error: unknown, kind: InspectorUnavailableKind): void;
   onActionState?(state: InspectorActionStatus): void;
   capture?: boolean;
+  createMonster?(monster: MonsterDefinition): MonsterInstance;
 }
 
 export function getFrameDelta(
@@ -303,7 +304,7 @@ export function createInspectorScene(
       if (disposed || failed) return;
       try {
         removeCurrent();
-        current = createProceduralMonster(monster);
+        current = (options.createMonster ?? createProceduralMonster)(monster);
         overlays = createReviewOverlays(current);
         selectedMonsterId = monster.id;
         current.root.position.y = -monster.bounds.groundOffset;
@@ -321,9 +322,12 @@ export function createInspectorScene(
         readyForCurrent = false;
         actionRevision = -1;
         currentPaused = false;
+        lastError = null;
         placeCamera();
       } catch (error) {
-        fail(error);
+        removeCurrent();
+        lastError = errorMessage(error);
+        options.onUnavailable(error, "model-creation-failed");
       }
     },
     setState(state) {

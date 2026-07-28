@@ -5,9 +5,9 @@ import {
 
 const actions = ["Idle", "Walk", "Attack", "Hit", "Death"] as const;
 const shippedSource = (factory: string, silhouette: string) =>
-  "Project-authored Three.js geometry; runtime factory shipped; catalog PNG recapture required after grounding and animation revision. " +
+  "Project-authored Three.js geometry; runtime factory shipped; matching transparent catalog PNG delivered from this procedural runtime capture. " +
   `The ${factory} runtime recipe creates the ${silhouette}. ` +
-  "The previewPath remains delivered from the previous procedural revision and must be recaptured from the updated runtime.";
+  "The previewPath was recaptured from the updated runtime with the same fixed pose, camera, and lighting.";
 
 const freezeMonster = (monster: MonsterDefinition): MonsterDefinition => {
   Object.freeze(monster.source);
