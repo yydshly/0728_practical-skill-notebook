@@ -35,6 +35,7 @@ export function createStoryDirector({ ui }) {
     } else if (kind === 'flashlight' && story.flags.neighbour && !story.flags.flashlight) {
       story.flags.flashlight = true;
       ui.showSubtitle('手电亮起的一刻，主路尽头传来了一声不像人类的喘息。');
+      return;
     }
     render();
   }

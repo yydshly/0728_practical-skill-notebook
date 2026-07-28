@@ -76,10 +76,19 @@ try {
   });
   if (pursuerState !== 'chase') throw new Error(`Expected pursuer chase state, got ${pursuerState}`);
 
-  const escapeState = await page.evaluate(() => {
+  const flashlightSubtitle = await page.evaluate(() => {
     const game = window.__RURAL_ESCAPE__;
     game.interactForTest('neighbour');
     game.interactForTest('flashlight');
+    return document.querySelector('#subtitle').textContent;
+  });
+  const expectedFlashlightSubtitle = '手电亮起的一刻，主路尽头传来了一声不像人类的喘息。';
+  if (flashlightSubtitle !== expectedFlashlightSubtitle) {
+    throw new Error(`Expected flashlight reveal subtitle, got ${flashlightSubtitle}`);
+  }
+
+  const escapeState = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
     game.setPlayerForTest(0, -34);
     game.updateStoryForTest();
     return game.story.objective;
