@@ -140,14 +140,16 @@ export function createHumanoid(
   }
 
   function setPose(poseName) {
-    torso.rotation.z = poseName === 'hide' ? -0.18 : 0;
-    torso.rotation.x = poseName === 'mutant' ? profile.lean : torso.rotation.x;
-    root.rotation.y = poseName === 'hide' ? Math.PI * 0.65 : root.rotation.y;
-    head.rotation.y = poseName === 'hide' ? -0.72 : 0;
-    leftArm.elbow.rotation.x = poseName === 'hide' ? -1.22 : 0;
-    rightArm.elbow.rotation.x = poseName === 'hide' ? -1.22 : 0;
-    leftArm.shoulder.rotation.z = poseName === 'mutant' ? 0.28 : 0.14;
-    rightArm.shoulder.rotation.z = poseName === 'mutant' ? -0.08 : -0.14;
+    const isHide = poseName === 'hide';
+    const isMutant = poseName === 'mutant';
+    torso.rotation.x = isMutant ? profile.lean : 0;
+    torso.rotation.z = isHide ? -0.18 : 0;
+    root.rotation.y = isHide ? Math.PI * 0.65 : 0;
+    head.rotation.y = isHide ? -0.72 : 0;
+    leftArm.elbow.rotation.x = isHide ? -1.22 : 0;
+    rightArm.elbow.rotation.x = isHide ? -1.22 : 0;
+    leftArm.shoulder.rotation.z = isMutant ? 0.28 : 0.14;
+    rightArm.shoulder.rotation.z = isMutant ? -0.08 : -0.14;
   }
 
   scene.add(root);

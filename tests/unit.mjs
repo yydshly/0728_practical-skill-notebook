@@ -105,3 +105,36 @@ test('pursuer movement drives the mutant rig and settles while idle', () => {
   pursuer.update(0.25, { position: new THREE.Vector3(0, 0, 30) });
   assert.equal(Math.abs(pursuer.object.getObjectByName('leftShoulder').rotation.x), 0);
 });
+
+test('stand pose clears every transform controlled by hide', () => {
+  const rig = createHumanoid(new THREE.Scene(), new THREE.Vector3(), { kind: 'player' });
+  rig.setMotion(3.6, 0.25);
+  rig.setPose('hide');
+  rig.setPose('stand');
+
+  assert.equal(rig.root.rotation.y, 0);
+  assert.equal(rig.root.getObjectByName('torso').rotation.x, 0);
+  assert.equal(rig.root.getObjectByName('torso').rotation.z, 0);
+  assert.equal(rig.root.getObjectByName('head').rotation.y, 0);
+  assert.equal(rig.root.getObjectByName('leftElbow').rotation.x, 0);
+  assert.equal(rig.root.getObjectByName('rightElbow').rotation.x, 0);
+  assert.equal(rig.root.getObjectByName('leftShoulder').rotation.z, 0.14);
+  assert.equal(rig.root.getObjectByName('rightShoulder').rotation.z, -0.14);
+});
+
+test('mutant pose clears hide transforms before applying asymmetry', () => {
+  const rig = createHumanoid(new THREE.Scene(), new THREE.Vector3(), {
+    kind: 'mutant',
+    pose: 'hide',
+  });
+  rig.setPose('mutant');
+
+  assert.equal(rig.root.rotation.y, 0);
+  assert.equal(rig.root.getObjectByName('torso').rotation.x, 0.34);
+  assert.equal(rig.root.getObjectByName('torso').rotation.z, 0);
+  assert.equal(rig.root.getObjectByName('head').rotation.y, 0);
+  assert.equal(rig.root.getObjectByName('leftElbow').rotation.x, 0);
+  assert.equal(rig.root.getObjectByName('rightElbow').rotation.x, 0);
+  assert.equal(rig.root.getObjectByName('leftShoulder').rotation.z, 0.28);
+  assert.equal(rig.root.getObjectByName('rightShoulder').rotation.z, -0.08);
+});
