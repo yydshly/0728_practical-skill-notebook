@@ -9,10 +9,45 @@ function box(group, size, position, material, castShadow = true) {
   return mesh;
 }
 
-function addFence(group, materials, collider) {
-  const length = collider.halfX * 2;
-  for (const x of [-length / 2, 0, length / 2]) box(group, [0.14, 1.15, 0.14], [x, 0.58, 0], materials.wood);
-  for (const y of [0.42, 0.9]) box(group, [length, 0.1, 0.12], [0, y, 0], materials.wood);
+function addFence(group, materials, { fenceLength = 6, gateWidth = 1.8 }) {
+  const segmentLength = (fenceLength - gateWidth) / 2;
+  const segmentOffset = gateWidth / 2 + segmentLength / 2;
+
+  for (const [side, direction] of [['left', -1], ['right', 1]]) {
+    const center = direction * segmentOffset;
+    for (const x of [center - segmentLength / 2, center + segmentLength / 2]) {
+      box(group, [0.14, 1.15, 0.14], [x, 0.58, 0], materials.wood);
+    }
+    for (const y of [0.42, 0.9]) {
+      const rail = box(
+        group,
+        [segmentLength, 0.1, 0.12],
+        [center, y, 0],
+        materials.wood,
+      );
+      if (y === 0.9) rail.name = `home_fence_${side}`;
+    }
+  }
+
+  for (const [side, direction] of [['left', -1], ['right', 1]]) {
+    const post = box(
+      group,
+      [0.2, 1.5, 0.2],
+      [direction * gateWidth / 2, 0.75, 0],
+      materials.wood,
+    );
+    post.name = `home_gate_${side}_post`;
+  }
+
+  const doorWidth = gateWidth * 0.56;
+  const door = box(
+    group,
+    [doorWidth, 1.05, 0.1],
+    [-gateWidth / 2 + doorWidth / 2, 0.56, 0.06],
+    materials.wood,
+  );
+  door.name = 'home_gate_door';
+  door.rotation.y = 0.72;
 }
 
 function addCropRows(group, materials) {
@@ -102,11 +137,12 @@ export function addPropCluster(scene, cluster, materials) {
   const root = new THREE.Group();
   root.name = cluster.id;
   root.position.set(cluster.x, 0, cluster.z);
+  root.rotation.y = cluster.rotation ?? 0;
   if (cluster.kind === 'crops') addCropRows(root, materials);
   if (cluster.kind === 'well') addWell(root, materials);
   if (cluster.kind === 'storage' || cluster.kind === 'home') addStorage(root, materials);
   if (cluster.kind === 'blockade') addBlockade(root, materials, cluster.collider);
-  if (cluster.kind === 'home') addFence(root, materials, cluster.collider);
+  if (cluster.kind === 'home') addFence(root, materials, cluster);
   scene.add(root);
   return root.children;
 }
@@ -129,6 +165,20 @@ export function addUtilityPole(scene, { x, z }, materials) {
 }
 
 export function addLantern(scene, lightDefinition, materials) {
+  const attachedSource = scene.getObjectByName(lightDefinition.sourceId);
+  if (attachedSource) {
+    const light = new THREE.PointLight(
+      lightDefinition.color,
+      lightDefinition.intensity ?? 4.2,
+      lightDefinition.distance ?? 9,
+      2,
+    );
+    light.name = `${lightDefinition.id}_light`;
+    light.position.z = 0.18;
+    attachedSource.add(light);
+    return { root: attachedSource.parent, source: attachedSource, light };
+  }
+
   const root = new THREE.Group();
   root.position.set(lightDefinition.x, 0, lightDefinition.z);
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.08, 2.6, 7), materials.wood);
@@ -136,7 +186,13 @@ export function addLantern(scene, lightDefinition, materials) {
   const source = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.36, 0.28), materials.lanternGlass);
   source.name = lightDefinition.sourceId;
   source.position.y = lightDefinition.y;
-  const light = new THREE.PointLight(lightDefinition.color, 4.2, 9, 2);
+  const light = new THREE.PointLight(
+    lightDefinition.color,
+    lightDefinition.intensity ?? 4.2,
+    lightDefinition.distance ?? 9,
+    2,
+  );
+  light.name = `${lightDefinition.id}_light`;
   light.position.y = lightDefinition.y;
   root.add(post, source, light);
   scene.add(root);

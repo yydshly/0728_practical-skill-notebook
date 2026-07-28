@@ -5,6 +5,8 @@ const FOG_COLOR = 0x536260;
 export function createAtmosphere(scene, renderer) {
   const previousBackground = scene.background;
   const previousFog = scene.fog;
+  const previousShadowEnabled = renderer.shadowMap.enabled;
+  const previousShadowType = renderer.shadowMap.type;
   const baseFogColor = new THREE.Color(FOG_COLOR);
   const driftColor = new THREE.Color();
 
@@ -32,6 +34,8 @@ export function createAtmosphere(scene, renderer) {
       sun.shadow.map?.dispose();
       scene.background = previousBackground;
       scene.fog = previousFog;
+      renderer.shadowMap.enabled = previousShadowEnabled;
+      renderer.shadowMap.type = previousShadowType;
     },
   };
 }

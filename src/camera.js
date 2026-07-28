@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { computeFirstPersonPose, computeThirdPersonPose } from './camera-math.js';
 
 export function createCameraController(camera, player, { occluders = [], groundY = 0 } = {}) {
+  const minimumCameraDistance = 0.05;
   const target = new THREE.Vector3();
   const desired = new THREE.Vector3();
   const rayDirection = new THREE.Vector3();
@@ -36,6 +37,7 @@ export function createCameraController(camera, player, { occluders = [], groundY
 
   function snap() {
     calculateDesired();
+    if (mode === 'third-person') applyOcclusion();
     camera.position.copy(desired);
     camera.lookAt(target);
     initialized = true;
@@ -47,8 +49,17 @@ export function createCameraController(camera, player, { occluders = [], groundY
     rayDirection.normalize();
     raycaster.set(target, rayDirection);
     raycaster.far = desiredDistance;
-    const hit = raycaster.intersectObjects(occluders, false)[0];
-    if (hit) desired.copy(target).addScaledVector(rayDirection, Math.max(0.75, hit.distance - 0.25));
+    const hit = raycaster
+      .intersectObjects(occluders, false)
+      .find(({ distance }) => distance >= minimumCameraDistance);
+    if (hit) {
+      const surfaceClearance = Math.min(0.25, hit.distance * 0.5);
+      const safeDistance = Math.min(
+        hit.distance,
+        Math.max(minimumCameraDistance, hit.distance - surfaceClearance),
+      );
+      desired.copy(target).addScaledVector(rayDirection, safeDistance);
+    }
     desired.y = Math.max(desired.y, groundY + 0.65);
   }
 

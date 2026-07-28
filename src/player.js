@@ -26,8 +26,8 @@ export function createPlayer(scene, spawn, colliders = []) {
     },
     update(dt, input, bounds, yaw) {
       move.set(0, 0, 0);
-      if (input.forward) move.z -= 1;
-      if (input.back) move.z += 1;
+      if (input.forward) move.z += 1;
+      if (input.back) move.z -= 1;
       if (input.left) move.x -= 1;
       if (input.right) move.x += 1;
 

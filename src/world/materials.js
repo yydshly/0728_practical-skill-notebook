@@ -28,5 +28,17 @@ export function createMaterials() {
       emissiveIntensity: 1.35,
       roughness: 0.55,
     }),
+    hallGlow: new THREE.MeshStandardMaterial({
+      color: 0x6f241d,
+      emissive: 0x5e100c,
+      emissiveIntensity: 1.45,
+      roughness: 0.62,
+    }),
+    coldGlow: new THREE.MeshStandardMaterial({
+      color: 0xa5c8c4,
+      emissive: 0x4b8c8a,
+      emissiveIntensity: 1.7,
+      roughness: 0.42,
+    }),
   };
 }

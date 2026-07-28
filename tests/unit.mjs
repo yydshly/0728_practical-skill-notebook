@@ -9,12 +9,15 @@ import { createHumanoid, createMutant, createResident } from '../src/characters.
 import { createPlayer } from '../src/player.js';
 import { createPursuer } from '../src/pursuer.js';
 import { createVillage } from '../src/level.js';
+import { createCameraController } from '../src/camera.js';
+import { createAtmosphere } from '../src/atmosphere.js';
 import { resolveCircleMove } from '../src/collision.js';
 import { nearestInteraction } from '../src/interactions.js';
-import { buildVillageGate } from '../src/world/buildings.js';
+import * as buildings from '../src/world/buildings.js';
 import { addPropCluster } from '../src/world/props.js';
 
 const { computeThirdPersonPose } = cameraMath;
+const { buildVillageGate } = buildings;
 
 test('third-person pose starts above ground and behind its target', () => {
   const pose = computeThirdPersonPose({
@@ -52,6 +55,44 @@ test('first-person pose keeps the eye at head height and looks forward with pitc
   ) > 5);
 });
 
+test('third-person camera snap and update stay on the player side of a nearby home wall', () => {
+  const scene = new THREE.Scene();
+  const village = createVillage(scene);
+  const player = createPlayer(
+    scene,
+    new THREE.Vector3(-6.2, 0, 28),
+    village.colliders,
+  );
+  const camera = new THREE.PerspectiveCamera();
+  const controller = createCameraController(camera, player, {
+    occluders: village.cameraOccluders,
+    groundY: 0,
+  });
+  controller.rotate((Math.PI - Math.PI / 2) / 0.0024, 0);
+
+  const homeWall = scene
+    .getObjectByName('protagonist_home')
+    .getObjectByName('structure_solid_wall');
+  const wallBounds = new THREE.Box3().setFromObject(homeWall);
+
+  controller.snap();
+  assert.equal(wallBounds.containsPoint(camera.position), false);
+  assert.ok(camera.position.x > wallBounds.max.x);
+  assert.ok(
+    camera.position.distanceTo(
+      new THREE.Vector3(player.position.x, player.position.y + 1.45, player.position.z),
+    ) >= 0.05,
+  );
+  assert.ok(camera.position.toArray().every(Number.isFinite));
+  assert.ok(controller.getPoseSnapshot().direction.every(Number.isFinite));
+
+  camera.position.set(-30, 1, 28);
+  controller.update(10);
+  assert.equal(wallBounds.containsPoint(camera.position), false);
+  assert.ok(camera.position.x > wallBounds.max.x);
+  assert.ok(controller.getPoseSnapshot().direction.every(Number.isFinite));
+});
+
 test('village layout defines readable zones and collision separately', () => {
   assert.deepEqual(
     Object.keys(VILLAGE_LAYOUT.zones),
@@ -65,6 +106,61 @@ test('village layout defines readable zones and collision separately', () => {
 
 test('every local light has a visible source id', () => {
   assert.ok(VILLAGE_LAYOUT.lights.every((light) => Boolean(light.sourceId)));
+});
+
+test('village camera occluders are live visible meshes attached to the scene', () => {
+  const scene = new THREE.Scene();
+  const village = createVillage(scene);
+
+  assert.ok(village.cameraOccluders.length >= VILLAGE_LAYOUT.buildings.length);
+  for (const mesh of village.cameraOccluders) {
+    assert.equal(mesh.isMesh, true);
+    assert.equal(mesh.visible, true);
+    assert.ok(mesh.parent);
+    assert.equal(scene.getObjectById(mesh.id), mesh);
+    assert.ok(mesh.geometry.boundingBox || mesh.geometry.computeBoundingBox() === undefined);
+  }
+});
+
+test('every village local light is colocated with a visible emitter outside solid walls', () => {
+  const scene = new THREE.Scene();
+  createVillage(scene);
+  scene.updateMatrixWorld(true);
+  const wallBounds = [];
+  scene.traverse((object) => {
+    if (object.name === 'structure_solid_wall') {
+      wallBounds.push(new THREE.Box3().setFromObject(object));
+    }
+  });
+
+  for (const definition of VILLAGE_LAYOUT.lights) {
+    const source = scene.getObjectByName(definition.sourceId);
+    const light = scene.getObjectByName(`${definition.id}_light`);
+    assert.ok(source?.isMesh, `${definition.id} must resolve a source mesh`);
+    assert.equal(source.visible, true, `${definition.id} source must be visible`);
+    assert.ok(light?.isPointLight, `${definition.id} must resolve a PointLight`);
+
+    const sourcePosition = source.getWorldPosition(new THREE.Vector3());
+    const lightPosition = light.getWorldPosition(new THREE.Vector3());
+    const authoredPosition = new THREE.Vector3(
+      definition.x,
+      definition.y,
+      definition.z,
+    );
+    assert.ok(
+      sourcePosition.distanceTo(authoredPosition) <= 0.2,
+      `${definition.id} source must use its authored transform`,
+    );
+    assert.ok(
+      sourcePosition.distanceTo(lightPosition) <= 0.3,
+      `${definition.id} source and light must remain colocated`,
+    );
+    assert.equal(
+      wallBounds.some((bounds) => bounds.containsPoint(sourcePosition)),
+      false,
+      `${definition.id} source must not be buried in a solid wall`,
+    );
+  }
 });
 
 test('road material remains visible from above with authored orientation', () => {
@@ -117,6 +213,23 @@ test('player movement drives the rig gait and settles while idle', () => {
 
   player.update(0.25, {}, bounds, 0);
   assert.equal(Math.abs(player.object.getObjectByName('leftShoulder').rotation.x), 0);
+});
+
+test('W follows camera forward and D follows camera right at every cardinal yaw', () => {
+  const bounds = { minX: -20, maxX: 20, minZ: -20, maxZ: 20 };
+  for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    const forwardPlayer = createPlayer(new THREE.Scene(), new THREE.Vector3());
+    forwardPlayer.update(0.1, { forward: true }, bounds, yaw);
+    const forwardDot = forwardPlayer.position.x * Math.sin(yaw)
+      + forwardPlayer.position.z * Math.cos(yaw);
+    assert.ok(forwardDot > 0.3, `W must follow camera forward at yaw ${yaw}`);
+
+    const rightPlayer = createPlayer(new THREE.Scene(), new THREE.Vector3());
+    rightPlayer.update(0.1, { right: true }, bounds, yaw);
+    const rightDot = rightPlayer.position.x * Math.cos(yaw)
+      - rightPlayer.position.z * Math.sin(yaw);
+    assert.ok(rightDot > 0.3, `D must follow camera right at yaw ${yaw}`);
+  }
 });
 
 test('pursuer movement drives the mutant rig and settles while idle', () => {
@@ -342,6 +455,96 @@ test('south gate factory builds an open village gate instead of a generic house'
   const worldGate = villageScene.getObjectByName('south_gate');
   assert.ok(worldGate?.getObjectByName('gate_beam'));
   assert.equal(worldGate?.getObjectByName('structure_solid_wall'), undefined);
+});
+
+test('ancestral hall and grain barn use dedicated readable structure contracts', () => {
+  assert.equal(typeof buildings.buildHall, 'function');
+  assert.equal(typeof buildings.buildBarn, 'function');
+  const materials = createMaterials();
+  const hallDefinition = VILLAGE_LAYOUT.buildings.find(({ kind }) => kind === 'hall');
+  const barnDefinition = VILLAGE_LAYOUT.buildings.find(({ kind }) => kind === 'barn');
+  const hall = buildings.buildHall(new THREE.Scene(), hallDefinition, materials);
+  const barn = buildings.buildBarn(new THREE.Scene(), barnDefinition, materials);
+
+  for (const name of [
+    'hall_upper_eave',
+    'hall_lower_eave',
+    'hall_door_left',
+    'hall_door_right',
+    'hall_lantern_mesh',
+  ]) {
+    assert.ok(hall.root.getObjectByName(name), `hall must include ${name}`);
+  }
+  assert.equal(hall.root.getObjectByName('structure_window_left'), undefined);
+  assert.equal(hall.root.getObjectByName('structure_window_right'), undefined);
+
+  for (const name of [
+    'barn_raised_plinth',
+    'barn_door_left',
+    'barn_door_right',
+    'barn_vent_board',
+    'barn_timber_rack',
+    'barn_flashlight_mesh',
+  ]) {
+    assert.ok(barn.root.getObjectByName(name), `barn must include ${name}`);
+  }
+  assert.equal(barn.root.getObjectByName('structure_window_left'), undefined);
+  assert.equal(barn.root.getObjectByName('structure_window_right'), undefined);
+  assert.ok(hall.occluders.length >= 3);
+  assert.ok(barn.occluders.length >= 3);
+
+  const liveScene = new THREE.Scene();
+  createVillage(liveScene);
+  assert.ok(liveScene.getObjectByName('ancestral_hall')?.getObjectByName('hall_upper_eave'));
+  assert.ok(liveScene.getObjectByName('grain_barn')?.getObjectByName('barn_vent_board'));
+  assert.ok(VILLAGE_LAYOUT.lights.some(({ kind }) => kind === 'hall_lantern'));
+  assert.ok(VILLAGE_LAYOUT.lights.some(({ kind }) => kind === 'barn_flashlight'));
+});
+
+test('birth courtyard fence has a player-clear opening with named gate parts', () => {
+  const scene = new THREE.Scene();
+  const village = createVillage(scene);
+  const gate = scene.getObjectByName('home_life');
+  const leftFence = gate.getObjectByName('home_fence_left');
+  const rightFence = gate.getObjectByName('home_fence_right');
+
+  for (const name of [
+    'home_gate_left_post',
+    'home_gate_right_post',
+    'home_gate_door',
+  ]) {
+    assert.ok(gate.getObjectByName(name), `birth gate must include ${name}`);
+  }
+  assert.ok(leftFence && rightFence);
+  const opening = rightFence.position.x - rightFence.geometry.parameters.width / 2
+    - (leftFence.position.x + leftFence.geometry.parameters.width / 2);
+  assert.ok(opening >= 1.6, `birth gate opening must be at least 1.6u, got ${opening}`);
+  assert.equal(village.colliders.some(({ id }) => id === 'home_life'), false);
+
+  const player = createPlayer(
+    new THREE.Scene(),
+    new THREE.Vector3(-7.4, 0, 33),
+    village.colliders,
+  );
+  player.moveDirect(1.6, 0, village.bounds);
+  assert.ok(player.position.x > -6, 'player radius must pass through the birth gate');
+});
+
+test('atmosphere dispose restores the renderer shadow configuration', () => {
+  const scene = new THREE.Scene();
+  const renderer = {
+    shadowMap: {
+      enabled: false,
+      type: THREE.BasicShadowMap,
+    },
+  };
+  const atmosphere = createAtmosphere(scene, renderer);
+  assert.equal(renderer.shadowMap.enabled, true);
+  assert.equal(renderer.shadowMap.type, THREE.PCFSoftShadowMap);
+
+  atmosphere.dispose();
+  assert.equal(renderer.shadowMap.enabled, false);
+  assert.equal(renderer.shadowMap.type, THREE.BasicShadowMap);
 });
 
 test('gate blockade reads as an abandoned three-wheeler without changing its canonical root', () => {

@@ -151,6 +151,31 @@ try {
     'leave_home',
   ));
 
+  const keyboardStart = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    game.setPlayerForTest(0, 17);
+    return {
+      position: [game.player.position.x, game.player.position.z],
+      yaw: game.camera.yaw,
+    };
+  });
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(160);
+  await page.keyboard.up('KeyW');
+  const keyboardEnd = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    return [game.player.position.x, game.player.position.z];
+  });
+  const keyboardForwardDot = (keyboardEnd[0] - keyboardStart.position[0])
+    * Math.sin(keyboardStart.yaw)
+    + (keyboardEnd[1] - keyboardStart.position[1]) * Math.cos(keyboardStart.yaw);
+  if (keyboardForwardDot <= 0.05) {
+    throw new Error(
+      `Expected real KeyW movement along camera forward, got dot ${keyboardForwardDot}`,
+    );
+  }
+  await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-8, 33));
+
   const traversal = await page.evaluate(() => {
     const game = window.__RURAL_ESCAPE__;
     const routeSegments = [
