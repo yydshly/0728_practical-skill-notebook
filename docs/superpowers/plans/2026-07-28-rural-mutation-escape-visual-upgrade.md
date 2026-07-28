@@ -503,7 +503,7 @@ function flatPolygon(points, material, y = 0.012) {
   for (const [x, z] of points.slice(1)) shape.lineTo(x, z);
   shape.closePath();
   const road = new THREE.Mesh(new THREE.ShapeGeometry(shape), material);
-  road.rotation.x = -Math.PI / 2;
+  road.rotation.x = Math.PI / 2;
   road.position.y = y;
   road.receiveShadow = true;
   return road;
