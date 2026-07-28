@@ -33,6 +33,15 @@ describe("monster catalog", () => {
     ]);
   });
 
+  it("declares the procedural contract without claiming unshipped factories or PNGs", () => {
+    for (const monster of monsters) {
+      expect(monster.deliveryStatus).toBe("declared-not-shipped");
+      expect(monster.source.description.startsWith("Project-authored Three.js geometry")).toBe(true);
+      expect(monster.source.description).toContain("contract declared, runtime factory not shipped yet");
+      expect(monster.source.description).toContain("previewPath is declared for a future catalog PNG");
+    }
+  });
+
   it("keeps authored content immutable at runtime", () => {
     expect(Object.isFrozen(monsters)).toBe(true);
     for (const monster of monsters) {

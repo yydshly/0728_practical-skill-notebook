@@ -5,6 +5,7 @@ export type {
   InspectorOverlayName,
   InspectorState,
   MonsterActionName,
+  MonsterDeliveryStatus,
   MonsterDefinition,
 } from "./monsters/types";
 

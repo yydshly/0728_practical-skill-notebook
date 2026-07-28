@@ -65,7 +65,7 @@ export function createInspectorStore(initialSelectedId: string): InspectorStore 
       if (state.paused !== paused) publish({ ...state, paused });
     },
     toggleOverlay: (name) => {
-      if (!(name in state.overlays)) throw new Error(`Unknown overlay: ${String(name)}`);
+      if (!Object.hasOwn(state.overlays, name)) throw new Error(`Unknown overlay: ${String(name)}`);
       publish({ ...state, overlays: { ...state.overlays, [name]: !state.overlays[name] } });
     },
     subscribe: (listener) => {

@@ -1,9 +1,11 @@
 import type { AssetManifest } from "@showcase/content-schema";
 
 export type MonsterActionName = "Idle" | "Walk" | "Attack" | "Hit" | "Death";
+export type MonsterDeliveryStatus = "declared-not-shipped" | "shipped";
 
 export interface MonsterDefinition extends AssetManifest {
   readonly kind: "monster";
+  readonly deliveryStatus: MonsterDeliveryStatus;
   readonly factoryId: "biped" | "crawler" | "armored" | "quadruped";
   readonly actions: readonly MonsterActionName[];
   readonly collider: Readonly<{ radius: number; height: number }>;

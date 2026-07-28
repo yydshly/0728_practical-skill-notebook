@@ -54,4 +54,17 @@ describe("inspector store", () => {
       overlays: { skeleton: false, colliders: false, sockets: false },
     });
   });
+
+  it("rejects inherited and unknown overlay names without publishing state", () => {
+    const store = createInspectorStore("ash-warden");
+    const listener = vi.fn();
+    store.subscribe(listener);
+    const initialState = store.getState();
+
+    expect(() => store.toggleOverlay("constructor" as never)).toThrow("Unknown overlay: constructor");
+    expect(() => store.toggleOverlay("outline" as never)).toThrow("Unknown overlay: outline");
+
+    expect(listener).not.toHaveBeenCalled();
+    expect(store.getState()).toBe(initialState);
+  });
 });
