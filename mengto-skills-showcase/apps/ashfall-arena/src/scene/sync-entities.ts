@@ -7,11 +7,13 @@ import {
   type VesperKnight,
 } from "@showcase/game-assets";
 import {
+  BoxGeometry,
   CylinderGeometry,
   Group,
   Mesh,
   MeshBasicMaterial,
   RingGeometry,
+  SphereGeometry,
   type Object3D,
   type Scene,
 } from "three";
@@ -23,6 +25,8 @@ export interface EntitySynchronizerDiagnostics {
   readonly fallbackRootCount: number;
   readonly enemyIds: readonly string[];
   readonly telegraphIds: readonly string[];
+  readonly enemyProjectileTraceCount: number;
+  readonly enemyProjectileIds: readonly string[];
 }
 
 export interface EntitySynchronizer {
@@ -47,6 +51,15 @@ interface ManagedEnemy {
     material: MeshBasicMaterial;
   }[];
   action: MonsterActionName;
+}
+
+interface ManagedEnemyProjectile {
+  readonly id: string;
+  readonly root: Group;
+  readonly resources: readonly {
+    geometry: SphereGeometry | BoxGeometry;
+    material: MeshBasicMaterial;
+  }[];
 }
 
 const monsterDefinitions = new Map(
@@ -204,12 +217,58 @@ const disposeManaged = (managed: ManagedEnemy): void => {
   }
 };
 
+const createEnemyProjectileTrace = (
+  id: string,
+): ManagedEnemyProjectile => {
+  const root = new Group();
+  root.name = `enemy-projectile-trace:${id}`;
+  root.userData = {
+    entityType: "enemy-projectile-trace",
+    entityId: id,
+    provenance: "authoritative-enemy-projectile",
+  };
+  const orbGeometry = new SphereGeometry(0.18, 12, 8);
+  const orbMaterial = new MeshBasicMaterial({ color: 0xffd36a });
+  const orb = new Mesh(orbGeometry, orbMaterial);
+  orb.name = "bolt-core";
+  const trailGeometry = new BoxGeometry(0.08, 0.08, 0.7);
+  const trailMaterial = new MeshBasicMaterial({
+    color: 0xff6b35,
+    transparent: true,
+    opacity: 0.68,
+    depthWrite: false,
+  });
+  const trail = new Mesh(trailGeometry, trailMaterial);
+  trail.name = "bolt-trail";
+  trail.position.z = -0.42;
+  root.add(orb, trail);
+  return {
+    id,
+    root,
+    resources: [
+      { geometry: orbGeometry, material: orbMaterial },
+      { geometry: trailGeometry, material: trailMaterial },
+    ],
+  };
+};
+
+const disposeProjectile = (
+  managed: ManagedEnemyProjectile,
+): void => {
+  managed.root.removeFromParent();
+  for (const { geometry, material } of managed.resources) {
+    geometry.dispose();
+    material.dispose();
+  }
+};
+
 export function createEntitySynchronizer(
   knight: VesperKnight,
   scene?: Scene,
   options: EntitySynchronizerOptions = {},
 ): EntitySynchronizer {
   const entities = new Map<string, ManagedEnemy>();
+  const enemyProjectiles = new Map<string, ManagedEnemyProjectile>();
   const factory = options.createMonster ?? createProceduralMonster;
   let disposed = false;
 
@@ -249,6 +308,32 @@ export function createEntitySynchronizer(
         managed.root.userData.telegraphVisible =
           managed.telegraph.visible;
       }
+
+      const liveProjectileIds = new Set(
+        state.combat.enemyProjectiles.map(({ id }) => id),
+      );
+      for (const [id, managed] of enemyProjectiles) {
+        if (liveProjectileIds.has(id)) continue;
+        disposeProjectile(managed);
+        enemyProjectiles.delete(id);
+      }
+      for (const projectile of state.combat.enemyProjectiles) {
+        let managed = enemyProjectiles.get(projectile.id);
+        if (!managed) {
+          managed = createEnemyProjectileTrace(projectile.id);
+          enemyProjectiles.set(projectile.id, managed);
+          scene.add(managed.root);
+        }
+        managed.root.position.set(
+          projectile.position.x,
+          0.32,
+          projectile.position.y,
+        );
+        managed.root.rotation.y = Math.atan2(
+          projectile.direction.x,
+          projectile.direction.y,
+        );
+      }
     },
     getDiagnostics() {
       const managed = [...entities.values()];
@@ -261,6 +346,8 @@ export function createEntitySynchronizer(
           .filter(({ telegraph }) => telegraph.visible)
           .map(({ id }) => id)
           .sort(),
+        enemyProjectileTraceCount: enemyProjectiles.size,
+        enemyProjectileIds: [...enemyProjectiles.keys()].sort(),
       };
     },
     dispose() {
@@ -268,6 +355,10 @@ export function createEntitySynchronizer(
       disposed = true;
       for (const managed of entities.values()) disposeManaged(managed);
       entities.clear();
+      for (const managed of enemyProjectiles.values()) {
+        disposeProjectile(managed);
+      }
+      enemyProjectiles.clear();
     },
   };
 }

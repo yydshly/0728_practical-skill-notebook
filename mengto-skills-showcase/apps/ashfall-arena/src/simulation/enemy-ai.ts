@@ -24,6 +24,9 @@ export interface EnemyDecisionContext {
   readonly pathSucceeded: boolean;
   readonly meleeSlotOwner: string | null;
   readonly rangedSlotOwner: string | null;
+  readonly supportSlotOwner?: string | null;
+  readonly rangedWindowUsed?: boolean;
+  readonly selectedMoveId?: EnemyMoveId | null;
 }
 
 const isCommitted = (enemy: EnemyState): boolean =>
@@ -60,7 +63,23 @@ export function chooseEnemyIntent(
     return "approach";
   }
 
-  if (definition.role === "ranged") {
+  const selectedSlot = context.selectedMoveId === undefined
+    ? definition.role === "ranged"
+      ? "ranged"
+      : "melee"
+    : context.selectedMoveId === null
+      ? null
+      : enemyMoves[context.selectedMoveId].slot;
+  if (selectedSlot === null) return "orbit";
+  if (selectedSlot === "support") {
+    return context.supportSlotOwner === null ||
+        context.supportSlotOwner === undefined ||
+        context.supportSlotOwner === enemy.id
+      ? "telegraph"
+      : "orbit";
+  }
+  if (selectedSlot === "ranged") {
+    if (context.rangedWindowUsed) return "orbit";
     return context.rangedSlotOwner === null ||
         context.rangedSlotOwner === enemy.id
       ? "telegraph"
@@ -223,15 +242,19 @@ const applyMovement = (
 const chooseMove = (
   enemy: Readonly<EnemyState>,
   playerDistance: number,
+  hasPendingSummon: boolean,
 ): EnemyMoveId | null => {
   const definition = enemyDefinitions[enemy.definitionId];
+  if (
+    enemy.kind === "bell-sovereign" &&
+    hasPendingSummon &&
+    definition.moveIds.includes("sovereign-summon")
+  ) {
+    return "sovereign-summon";
+  }
   const legal = definition.moveIds.filter((id) => {
     const move = enemyMoves[id];
-    if (move.contactKind === "summon") {
-      return enemy.kind === "bell-sovereign" &&
-        enemy.bossPhase > 1 &&
-        enemy.attackSequence % 3 === 2;
-    }
+    if (move.contactKind === "summon") return false;
     return (
       playerDistance + EPSILON >= move.minimumRange &&
       playerDistance <= move.maximumRange + EPSILON
@@ -250,16 +273,29 @@ const chooseMove = (
 
 const activeSlotOwners = (
   enemies: readonly EnemyState[],
-): { melee: string | null; ranged: string | null } => {
+): {
+  melee: string | null;
+  ranged: string | null;
+  support: string | null;
+} => {
   let melee: string | null = null;
   let ranged: string | null = null;
+  let support: string | null = null;
   for (const enemy of enemies) {
-    if (!isCommitted(enemy) || enemy.currentMoveId === null) continue;
+    if (
+      enemy.health <= 0 ||
+      enemy.action === "dead" ||
+      !isCommitted(enemy) ||
+      enemy.currentMoveId === null
+    ) {
+      continue;
+    }
     const slot = enemyMoves[enemy.currentMoveId].slot;
     if (slot === "melee" && melee === null) melee = enemy.id;
     if (slot === "ranged" && ranged === null) ranged = enemy.id;
+    if (slot === "support" && support === null) support = enemy.id;
   }
-  return { melee, ranged };
+  return { melee, ranged, support };
 };
 
 export function stepEnemyAi(
@@ -274,14 +310,27 @@ export function stepEnemyAi(
   const rangedWindow = Math.floor(state.tick / RANGED_WINDOW_TICKS);
   const windowChanged = rangedWindow !== state.enemyAi.rangedWindow;
   const active = activeSlotOwners(sorted);
+  const pendingSummon =
+    state.encounter.pendingSummons.length > 0;
+  const selectedMoves = new Map(
+    sorted.map((enemy) => [
+      enemy.id,
+      enemy.currentMoveId ??
+        chooseMove(
+          enemy,
+          distance(enemy.position, state.player.position),
+          pendingSummon && enemy.id === "boss-sovereign",
+        ),
+    ]),
+  );
   const rangedCandidates = sorted
     .filter(
       (enemy) =>
         enemy.aiEnabled &&
         enemy.health > 0 &&
-        enemyDefinitions[enemy.definitionId].moveIds.some(
-          (moveId) => enemyMoves[moveId].slot === "ranged",
-        ),
+        enemy.movePhase !== "recover" &&
+        selectedMoves.get(enemy.id) !== null &&
+        enemyMoves[selectedMoves.get(enemy.id)!].slot === "ranged",
     )
     .map(({ id }) => id);
   const fairRangedOwner =
@@ -289,10 +338,33 @@ export function stepEnemyAi(
       ? null
       : rangedCandidates[rangedWindow % rangedCandidates.length]!;
   let meleeOwner = active.melee;
-  let rangedOwner = active.ranged ??
-    (windowChanged ? fairRangedOwner : state.enemyAi.rangedSlotOwner);
+  let rangedWindowUsed = windowChanged
+    ? false
+    : (state.enemyAi.rangedWindowUsed ?? false);
+  let rangedOwner = active.ranged;
+  if (rangedOwner === null) {
+    if (rangedWindowUsed) {
+      rangedOwner = windowChanged
+        ? fairRangedOwner
+        : state.enemyAi.rangedSlotOwner;
+    } else {
+      const previousOwner = windowChanged
+        ? null
+        : state.enemyAi.rangedSlotOwner;
+      rangedOwner =
+        previousOwner !== null &&
+          rangedCandidates.includes(previousOwner)
+          ? previousOwner
+          : fairRangedOwner;
+    }
+  }
+  let supportOwner = active.support;
   const enemies: Record<string, EnemyState> = {};
-  let changed = windowChanged;
+  let changed =
+    windowChanged ||
+    rangedOwner !== state.enemyAi.rangedSlotOwner ||
+    rangedWindowUsed !== (state.enemyAi.rangedWindowUsed ?? false) ||
+    supportOwner !== (state.enemyAi.supportSlotOwner ?? null);
 
   for (const source of sorted) {
     const targetAvailable =
@@ -357,6 +429,7 @@ export function stepEnemyAi(
 
     if (state.tick % DECISION_INTERVAL_TICKS === 0) {
       const playerDistance = distance(enemy.position, state.player.position);
+      const selectedMoveId = selectedMoves.get(enemy.id) ?? null;
       const intent = chooseEnemyIntent(enemy, {
         playerDistance,
         visibleSeconds: enemy.visibleTicks / content.combat.fixedHz,
@@ -365,6 +438,9 @@ export function stepEnemyAi(
         pathSucceeded: enemy.pathFailureTicks < 12,
         meleeSlotOwner: meleeOwner,
         rangedSlotOwner: rangedOwner,
+        supportSlotOwner: supportOwner,
+        rangedWindowUsed,
+        selectedMoveId,
       });
       enemy = {
         ...enemy,
@@ -379,12 +455,13 @@ export function stepEnemyAi(
       if (intent === "telegraph" && enemy.cooldownTicks > 0) {
         enemy = { ...enemy, intent: "recover" };
       } else if (intent === "telegraph") {
-        const moveId = chooseMove(enemy, playerDistance);
+        const moveId = selectedMoveId;
         if (moveId !== null) {
           enemy = requestEnemyMove(enemy, moveId, state.tick);
           const slot = enemyMoves[moveId].slot;
           if (slot === "melee") meleeOwner = enemy.id;
           if (slot === "ranged") rangedOwner = enemy.id;
+          if (slot === "support") supportOwner = enemy.id;
         } else {
           enemy = {
             ...enemy,
@@ -411,6 +488,8 @@ export function stepEnemyAi(
       meleeSlotOwner: meleeOwner,
       rangedWindow,
       rangedSlotOwner: rangedOwner,
+      rangedWindowUsed,
+      supportSlotOwner: supportOwner,
     },
   };
 }

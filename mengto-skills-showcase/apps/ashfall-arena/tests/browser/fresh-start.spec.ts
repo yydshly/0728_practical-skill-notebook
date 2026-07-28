@@ -57,7 +57,7 @@ const installDeterministicGamepad = (
 test("fresh start renders a live arena and moves authoritative state", async ({
   page,
 }) => {
-  await page.goto("/?fixture=fresh&reviewControls=1");
+  await page.goto("/?fixture=fresh&reviewControls=1&safeTraining=1");
   await expect(page.getByRole("heading", { name: /灰烬竞技场/ })).toBeVisible();
   await expect(page.getByText("进入第一个琥珀训练环")).toBeVisible();
   await expect(page.getByText("105 / 105")).toBeVisible();
@@ -159,7 +159,7 @@ test("edge input and interruption paths never leave authoritative movement stuck
   page,
 }) => {
   await installDeterministicGamepad(page);
-  await page.goto("/?fixture=fresh&reviewControls=1");
+  await page.goto("/?fixture=fresh&reviewControls=1&safeTraining=1");
 
   await page.keyboard.down("Escape");
   await page.waitForTimeout(120);
@@ -298,7 +298,7 @@ test("an idle connected gamepad never cancels mouse or touch guard ownership", a
   page,
 }) => {
   await installDeterministicGamepad(page);
-  await page.goto("/?fixture=fresh&reviewControls=1");
+  await page.goto("/?fixture=fresh&reviewControls=1&safeTraining=1");
   await page.evaluate(() => window.__setAshfallTestGamepad(true, 0, false));
   await page.waitForTimeout(100);
 
@@ -379,7 +379,7 @@ test("mouse and touch actions atomically stop stale gamepad movement", async ({
   page,
 }) => {
   await installDeterministicGamepad(page);
-  await page.goto("/?fixture=fresh&reviewControls=1");
+  await page.goto("/?fixture=fresh&reviewControls=1&safeTraining=1");
   const canvas = page.locator("[data-game-canvas]");
   const touchGuard = page.locator("[data-touch-held='guardHeld']");
 
@@ -497,7 +497,7 @@ test("idle or disconnected gamepads preserve active keyboard and touch movement"
   page,
 }) => {
   await installDeterministicGamepad(page);
-  await page.goto("/?fixture=fresh&reviewControls=1");
+  await page.goto("/?fixture=fresh&reviewControls=1&safeTraining=1");
 
   await page.keyboard.down("w");
   const keyboardStart = await snapshot(page);
@@ -576,7 +576,7 @@ test("idle or disconnected gamepads preserve active keyboard and touch movement"
 test("production camera path consumes occlusion, lock, and shake events", async ({
   page,
 }) => {
-  await page.goto("/?fixture=fresh&reviewControls=1");
+  await page.goto("/?fixture=fresh&reviewControls=1&safeTraining=1");
   const initial = await snapshot(page);
   expect(initial.camera.occlusionLimited).toBe(false);
   expect(initial.camera.lockFraming).toBe(false);
@@ -634,7 +634,7 @@ test("production camera path consumes occlusion, lock, and shake events", async 
 test("production camera reports the blocker containing its offset target", async ({
   page,
 }) => {
-  await page.goto("/?fixture=fresh&reviewControls=1");
+  await page.goto("/?fixture=fresh&reviewControls=1&safeTraining=1");
 
   await page.keyboard.down("d");
   await expect.poll(
@@ -666,7 +666,7 @@ test("reduced motion suppresses the real review shake event", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/?fixture=fresh&reviewControls=1");
+  await page.goto("/?fixture=fresh&reviewControls=1&safeTraining=1");
   await page.evaluate(() =>
     window.__ashfallDiagnostics!.triggerCameraShake(),
   );
@@ -687,7 +687,7 @@ test("pagehide stops the frame loop and releases the runtime once", async ({
       nativeCancel(handle);
     };
   });
-  await page.goto("/?fixture=fresh&reviewControls=1");
+  await page.goto("/?fixture=fresh&reviewControls=1&safeTraining=1");
   await page.evaluate(() =>
     window.dispatchEvent(new PageTransitionEvent("pagehide")),
   );

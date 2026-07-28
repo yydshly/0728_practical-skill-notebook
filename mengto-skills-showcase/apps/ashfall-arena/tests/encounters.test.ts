@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { arenaContent } from "../src/content/arena-content";
+import { stepEnemyCombat } from "../src/simulation/combat";
 import { createInitialState } from "../src/simulation/create-initial-state";
 import {
   createEncounterFixture,
   createEncounterEnemy,
   stepEncounter,
 } from "../src/simulation/encounters";
+import { stepGame } from "../src/simulation/step-game";
 import type { GameEvent, GameState } from "../src/simulation/types";
+import { neutralIntent } from "./helpers/simulation-fixtures";
 
 const defeat = (actorId: string): GameEvent => ({
   type: "defeated",
@@ -100,6 +104,26 @@ describe("complete encounter arc", () => {
     });
   });
 
+  it("keeps the real training trigger while the safe browser fixture disables only its AI", () => {
+    const safe = createEncounterFixture(9, "fresh", {
+      trainingAiEnabled: false,
+    });
+    expect(safe.enemies).toEqual({});
+    expect(safe.encounter.trainingAiEnabled).toBe(false);
+
+    const inside = stepEncounter({
+      ...safe,
+      player: {
+        ...safe.player,
+        position: { x: 0, y: -5 },
+      },
+    }, []);
+    expect(inside.state.enemies["training-crawler"]).toMatchObject({
+      aiEnabled: false,
+      nonlethal: true,
+    });
+  });
+
   it("offers the upgrade once after wave one and does not duplicate spawns or events", () => {
     const state = createEncounterFixture(2, "wave-one");
     const events = [
@@ -157,7 +181,45 @@ describe("complete encounter arc", () => {
     expect(repeated.events).toEqual([]);
   });
 
-  it("summons once at 65% and 30%, serializes thresholds, and keeps the summon cap", () => {
+  it.each([
+    [
+      "wave-one",
+      [
+        "wave-one-crawler-a",
+        "wave-one-crawler-b",
+        "wave-one-warden",
+      ],
+    ],
+    ["elite", ["elite-bell", "elite-crawler"]],
+    ["boss", ["boss-sovereign"]],
+  ] as const)(
+    "keeps defeated terminal priority during a %s mutual kill",
+    (fixture, enemyIds) => {
+      const source = createEncounterFixture(41, fixture);
+      const state = {
+        ...source,
+        status: "defeated" as const,
+        player: {
+          ...source.player,
+          health: 0,
+          action: "dead" as const,
+        },
+      };
+      const result = stepEncounter(state, [
+        defeat("player"),
+        ...enemyIds.map(defeat),
+      ]);
+
+      expect(result.state.status).toBe("defeated");
+      expect(result.state.encounter.phase).toBe(fixture);
+      expect(result.state.encounter.completedIds).toEqual(
+        expect.arrayContaining([...enemyIds]),
+      );
+      expect(result.events).toEqual([]);
+    },
+  );
+
+  it("queues Boss thresholds and spawns only from the matching active summon event", () => {
     let state = createEncounterFixture(5, "boss");
     const boss = state.enemies["boss-sovereign"]!;
 
@@ -175,12 +237,15 @@ describe("complete encounter arc", () => {
     const repeatedTwo = stepEncounter(phaseTwo.state, []);
     expect(Object.keys(phaseTwo.state.enemies).sort()).toEqual([
       "boss-sovereign",
-      "boss-summon-65-crawler",
     ]);
     expect(phaseTwo.state.encounter.bossThresholds).toEqual({
       65: true,
       30: false,
     });
+    expect(phaseTwo.state.encounter.pendingSummons).toEqual([65]);
+    expect(phaseTwo.events).toEqual([
+      { type: "boss-phase", phase: 2, threshold: 65 },
+    ]);
     expect(repeatedTwo.events).toEqual([]);
 
     const currentBoss = repeatedTwo.state.enemies["boss-sovereign"]!;
@@ -197,20 +262,129 @@ describe("complete encounter arc", () => {
       },
       [],
     );
-    const enemyIds = Object.keys(phaseThree.state.enemies).sort();
+    expect(phaseThree.state.encounter.bossThresholds).toEqual({
+      65: true,
+      30: true,
+    });
+    expect(phaseThree.state.encounter.pendingSummons).toEqual([65, 30]);
+
+    const firstActive = stepEncounter(phaseThree.state, [{
+      type: "enemy-move-active",
+      enemyId: "boss-sovereign",
+      moveId: "sovereign-summon",
+      attackId: "boss-sovereign:sovereign-summon:1",
+    }]);
+    expect(Object.keys(firstActive.state.enemies).sort()).toEqual([
+      "boss-sovereign",
+      "boss-summon-65-crawler",
+    ]);
+    expect(firstActive.state.encounter.pendingSummons).toEqual([30]);
+    expect(firstActive.state.encounter.completedSummons).toEqual([65]);
+    expect(firstActive.events).toEqual([{
+      type: "enemy-summoned",
+      enemyId: "boss-summon-65-crawler",
+      threshold: 65,
+    }]);
+
+    const duplicate = stepEncounter(firstActive.state, [{
+      type: "enemy-move-active",
+      enemyId: "boss-sovereign",
+      moveId: "sovereign-summon",
+      attackId: "boss-sovereign:sovereign-summon:1",
+    }]);
+    const secondActive = stepEncounter(duplicate.state, [{
+      type: "enemy-move-active",
+      enemyId: "boss-sovereign",
+      moveId: "sovereign-summon",
+      attackId: "boss-sovereign:sovereign-summon:2",
+    }]);
+    const enemyIds = Object.keys(secondActive.state.enemies).sort();
     expect(enemyIds).toEqual([
       "boss-sovereign",
       "boss-summon-30-warden",
       "boss-summon-65-crawler",
     ]);
-    expect(phaseThree.state.encounter.bossThresholds).toEqual({
-      65: true,
-      30: true,
-    });
+    expect(duplicate.events).toEqual([]);
+    expect(secondActive.state.encounter.pendingSummons).toEqual([]);
+    expect(secondActive.state.encounter.completedSummons).toEqual([65, 30]);
     expect(enemyIds).toHaveLength(3);
-    expect(JSON.parse(JSON.stringify(phaseThree.state))).toEqual(
-      phaseThree.state,
+    expect(JSON.parse(JSON.stringify(secondActive.state))).toEqual(
+      secondActive.state,
     );
+  });
+
+  it("keeps an interrupted summon pending, freezes it while paused, and cancels it on Boss death", () => {
+    const base = createEncounterFixture(55, "boss");
+    const boss = base.enemies["boss-sovereign"]!;
+    const queued = stepEncounter({
+      ...base,
+      enemies: {
+        ...base.enemies,
+        [boss.id]: {
+          ...boss,
+          health: Math.floor(boss.maxHealth * 0.65),
+        },
+      },
+    }, []).state;
+    const committed = {
+      ...queued,
+      enemies: {
+        ...queued.enemies,
+        [boss.id]: {
+          ...queued.enemies[boss.id]!,
+          currentMoveId: "sovereign-summon" as const,
+          movePhase: "telegraph" as const,
+          intent: "telegraph" as const,
+          staggerTicks: 4,
+        },
+      },
+    };
+
+    const interrupted = stepEnemyCombat(
+      committed,
+      neutralIntent,
+      [],
+      arenaContent,
+    );
+    expect(interrupted.state.enemies[boss.id]).toMatchObject({
+      currentMoveId: null,
+      movePhase: "none",
+      intent: "stagger",
+    });
+    expect(interrupted.state.encounter.pendingSummons).toEqual([65]);
+
+    const paused = stepGame(
+      { ...interrupted.state, paused: true },
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    );
+    expect(paused.state).toEqual({ ...interrupted.state, paused: true });
+
+    const dead = stepEncounter({
+      ...interrupted.state,
+      enemies: {
+        ...interrupted.state.enemies,
+        [boss.id]: {
+          ...interrupted.state.enemies[boss.id]!,
+          health: 0,
+          action: "dead",
+        },
+      },
+    }, [
+      { type: "defeated", actorId: boss.id },
+      {
+        type: "enemy-move-active",
+        enemyId: boss.id,
+        moveId: "sovereign-summon",
+        attackId: "boss-sovereign:sovereign-summon:1",
+      },
+    ]);
+    expect(dead.state.status).toBe("complete");
+    expect(dead.state.encounter.pendingSummons).toEqual([]);
+    expect(dead.events).not.toContainEqual(expect.objectContaining({
+      type: "enemy-summoned",
+    }));
   });
 
   it("is pure, stable across record order, and reset creates the original fixture", () => {

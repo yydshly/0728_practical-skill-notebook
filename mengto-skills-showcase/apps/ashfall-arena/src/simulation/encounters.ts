@@ -226,8 +226,19 @@ function stepTraining(
 
   if (!working.encounter.trainingSpawned && isInsideTraining(working)) {
     working = spawnPhase(working, "training");
+    const trainingEnemy = working.enemies["training-crawler"];
     working = {
       ...working,
+      enemies:
+        trainingEnemy && !working.encounter.trainingAiEnabled
+          ? {
+              ...working.enemies,
+              [trainingEnemy.id]: {
+                ...trainingEnemy,
+                aiEnabled: false,
+              },
+            }
+          : working.enemies,
       encounter: {
         ...working.encounter,
         trainingSpawned: true,
@@ -286,13 +297,11 @@ function stepBossThresholds(state: GameState): StepGameResult {
       key: 65 as const,
       ratio: 0.65,
       phase: 2 as const,
-      id: "boss-summon-65-crawler" as const,
     },
     {
       key: 30 as const,
       ratio: 0.3,
       phase: 3 as const,
-      id: "boss-summon-30-warden" as const,
     },
   ];
 
@@ -312,7 +321,6 @@ function stepBossThresholds(state: GameState): StepGameResult {
           ...currentBoss,
           bossPhase: threshold.phase,
         },
-        [threshold.id]: spawnById(threshold.id),
       },
       encounter: {
         ...working.encounter,
@@ -320,36 +328,111 @@ function stepBossThresholds(state: GameState): StepGameResult {
           ...working.encounter.bossThresholds,
           [threshold.key]: true,
         },
-        spawnedIds: working.encounter.spawnedIds.includes(threshold.id)
-          ? working.encounter.spawnedIds
-          : [...working.encounter.spawnedIds, threshold.id],
+        pendingSummons: working.encounter.pendingSummons.includes(
+            threshold.key,
+          )
+          ? working.encounter.pendingSummons
+          : [...working.encounter.pendingSummons, threshold.key],
       },
     };
-    produced.push(
-      {
-        type: "boss-phase",
-        phase: threshold.phase,
-        threshold: threshold.key,
-      },
-      {
-        type: "enemy-summoned",
-        enemyId: threshold.id,
-        threshold: threshold.key,
-      },
-    );
+    produced.push({
+      type: "boss-phase",
+      phase: threshold.phase,
+      threshold: threshold.key,
+    });
   }
   return { state: working, events: produced };
 }
+
+const consumeBossSummon = (
+  state: GameState,
+  events: readonly GameEvent[],
+): StepGameResult => {
+  const active = events.find(
+    (event): event is Extract<GameEvent, { type: "enemy-move-active" }> =>
+      event.type === "enemy-move-active" &&
+      event.enemyId === "boss-sovereign" &&
+      event.moveId === "sovereign-summon" &&
+      !state.encounter.consumedSummonAttackIds.includes(event.attackId),
+  );
+  const threshold = state.encounter.pendingSummons[0];
+  const boss = state.enemies["boss-sovereign"];
+  if (!active || threshold === undefined || !boss || boss.health <= 0) {
+    return { state, events: [] };
+  }
+
+  const id = threshold === 65
+    ? "boss-summon-65-crawler"
+    : "boss-summon-30-warden";
+  if (
+    state.encounter.completedSummons.includes(threshold) ||
+    state.encounter.spawnedIds.includes(id)
+  ) {
+    return {
+      state: {
+        ...state,
+        encounter: {
+          ...state.encounter,
+          pendingSummons: state.encounter.pendingSummons.slice(1),
+          consumedSummonAttackIds: [
+            ...state.encounter.consumedSummonAttackIds,
+            active.attackId,
+          ],
+        },
+      },
+      events: [],
+    };
+  }
+
+  return {
+    state: {
+      ...state,
+      enemies: {
+        ...state.enemies,
+        [id]: spawnById(id),
+      },
+      encounter: {
+        ...state.encounter,
+        pendingSummons: state.encounter.pendingSummons.slice(1),
+        completedSummons: [
+          ...state.encounter.completedSummons,
+          threshold,
+        ],
+        consumedSummonAttackIds: [
+          ...state.encounter.consumedSummonAttackIds,
+          active.attackId,
+        ],
+        spawnedIds: [...state.encounter.spawnedIds, id],
+      },
+    },
+    events: [{ type: "enemy-summoned", enemyId: id, threshold }],
+  };
+};
 
 export function stepEncounter(
   state: GameState,
   events: readonly GameEvent[],
 ): StepGameResult {
-  if (state.encounter.phase === "complete") {
-    return { state, events: [] };
-  }
-
   let working = recordDefeats(state, events);
+  if (working.player.health <= 0 || working.status === "defeated") {
+    const bossDefeated =
+      working.encounter.completedIds.includes("boss-sovereign") ||
+      (working.enemies["boss-sovereign"]?.health ?? 1) <= 0;
+    const defeatedState = {
+      ...working,
+      status: "defeated" as const,
+      encounter: bossDefeated
+        ? { ...working.encounter, pendingSummons: [] }
+        : working.encounter,
+    };
+    return {
+      state: defeatedState,
+      events: [],
+    };
+  }
+  if (working.encounter.phase === "complete") {
+    return { state: working, events: [] };
+  }
 
   if (working.encounter.phase === "training") {
     return stepTraining(working, events);
@@ -387,7 +470,14 @@ export function stepEncounter(
     working = removeEnemies(working, Object.keys(working.enemies));
     working = transition(working, "complete", true);
     return {
-      state: { ...working, status: "complete" },
+      state: {
+        ...working,
+        status: "complete",
+        encounter: {
+          ...working.encounter,
+          pendingSummons: [],
+        },
+      },
       events: [
         { type: "encounter-complete" },
         { type: "encounter-phase", phase: "complete" },
@@ -397,7 +487,11 @@ export function stepEncounter(
 
   if (working.encounter.phase === "boss") {
     const threshold = stepBossThresholds(working);
-    return threshold;
+    const summon = consumeBossSummon(threshold.state, events);
+    return {
+      state: summon.state,
+      events: [...threshold.events, ...summon.events],
+    };
   }
 
   if (
@@ -413,11 +507,30 @@ export function stepEncounter(
 export function createEncounterFixture(
   seed: number,
   fixture: EncounterFixture,
-  options: Readonly<{ accelerated?: boolean }> = {},
+  options: Readonly<{
+    accelerated?: boolean;
+    trainingAiEnabled?: boolean;
+    enemyAiEnabled?: boolean;
+  }> = {},
 ): GameState {
-  const initial = createInitialState(seed);
+  const source = createInitialState(seed);
+  const initial =
+    options.trainingAiEnabled === undefined
+      ? source
+      : {
+          ...source,
+          encounter: {
+            ...source.encounter,
+            trainingAiEnabled: options.trainingAiEnabled,
+          },
+        };
   const finish = (state: GameState): GameState => {
-    if (!options.accelerated) return state;
+    if (
+      !options.accelerated &&
+      options.enemyAiEnabled === undefined
+    ) {
+      return state;
+    }
     return {
       ...state,
       enemies: Object.fromEntries(
@@ -425,7 +538,11 @@ export function createEncounterFixture(
           id,
           {
             ...enemy,
-            health: Math.min(enemy.health, 18),
+            health: options.accelerated
+              ? Math.min(enemy.health, 18)
+              : enemy.health,
+            aiEnabled:
+              options.enemyAiEnabled ?? enemy.aiEnabled,
           },
         ]),
       ),

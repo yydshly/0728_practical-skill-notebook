@@ -13,9 +13,13 @@ import {
 import {
   createEncounterEnemy,
   createEncounterFixture,
+  stepEncounter,
 } from "../src/simulation/encounters";
 import { stepGame } from "../src/simulation/step-game";
-import { stepEnemyCombat } from "../src/simulation/combat";
+import {
+  stepCombat,
+  stepEnemyCombat,
+} from "../src/simulation/combat";
 import type {
   EnemyIntent,
   EnemyMoveId,
@@ -346,6 +350,195 @@ describe("bounded enemy decisions", () => {
     ).toEqual(["warden-b"]);
   });
 
+  it("keeps a committed Warden ranged owner when a Boss selects shockwave, independent of insertion order", () => {
+    const base = createEncounterFixture(61, "boss");
+    const warden = requestEnemyMove(
+      createEncounterEnemy(
+        "warden-committed",
+        "ash-warden",
+        { x: -4.5, y: 0 },
+        { visibleTicks: 60 },
+      ),
+      "warden-bolt",
+      6,
+    );
+    const boss = {
+      ...base.enemies["boss-sovereign"]!,
+      position: { x: 0, y: 3.4 },
+      visibleTicks: 60,
+      currentMoveId: null,
+      movePhase: "none" as const,
+      intent: "observe" as const,
+    };
+    const make = (reverse: boolean) => ({
+      ...base,
+      tick: 6,
+      player: { ...base.player, position: { x: 0, y: 0 } },
+      enemies: reverse
+        ? { [boss.id]: boss, [warden.id]: warden }
+        : { [warden.id]: warden, [boss.id]: boss },
+      enemyAi: {
+        ...base.enemyAi,
+        rangedWindow: 0,
+        rangedSlotOwner: warden.id,
+        rangedWindowUsed: false,
+        supportSlotOwner: null,
+      },
+    } as GameState);
+
+    const first = stepEnemyAi(make(false), arenaContent);
+    const second = stepEnemyAi(make(true), arenaContent);
+
+    expect(decisionById(first)).toEqual(decisionById(second));
+    expect(first.enemies[warden.id]).toMatchObject({
+      currentMoveId: "warden-bolt",
+      movePhase: "telegraph",
+    });
+    expect(first.enemies[boss.id]!.currentMoveId).toBeNull();
+    expect(first.enemyAi.rangedSlotOwner).toBe(warden.id);
+  });
+
+  it("releases stale ranged ownership on death or pre-contact recovery but keeps a used window closed", () => {
+    const base = createEncounterFixture(62, "fresh");
+    const ready = createEncounterEnemy(
+      "warden-b",
+      "ash-warden",
+      { x: 4.5, y: 0 },
+      { visibleTicks: 60 },
+    );
+    const owner = requestEnemyMove(
+      createEncounterEnemy(
+        "warden-a",
+        "ash-warden",
+        { x: -4.5, y: 0 },
+        { visibleTicks: 60 },
+      ),
+      "warden-bolt",
+      6,
+    );
+    const make = (
+      ownerState: typeof owner,
+      rangedWindowUsed: boolean,
+      tick = 6,
+    ) => ({
+      ...base,
+      tick,
+      player: { ...base.player, position: { x: 0, y: 0 } },
+      enemies: { [owner.id]: ownerState, [ready.id]: ready },
+      enemyAi: {
+        ...base.enemyAi,
+        rangedWindow: 0,
+        rangedSlotOwner: owner.id,
+        rangedWindowUsed,
+        supportSlotOwner: null,
+      },
+    } as GameState);
+
+    const deadOwner = stepEnemyAi(
+      make({ ...owner, health: 0, action: "dead" }, false),
+      arenaContent,
+    );
+    expect(deadOwner.enemies[ready.id]!.currentMoveId).toBe("warden-bolt");
+
+    const recoveringOwner = stepEnemyAi(
+      make({
+        ...owner,
+        intent: "recover",
+        movePhase: "recover",
+      }, false),
+      arenaContent,
+    );
+    expect(recoveringOwner.enemies[ready.id]!.currentMoveId).toBe(
+      "warden-bolt",
+    );
+
+    const usedWindow = stepEnemyAi(
+      make({
+        ...owner,
+        intent: "recover",
+        movePhase: "recover",
+      }, true, 29),
+      arenaContent,
+    );
+    expect(usedWindow.enemies[ready.id]!.currentMoveId).toBeNull();
+
+    const nextWindow = stepEnemyAi(
+      make({
+        ...owner,
+        intent: "recover",
+        movePhase: "recover",
+      }, true, 30),
+      arenaContent,
+    );
+    expect(nextWindow.enemies[ready.id]!.currentMoveId).toBe("warden-bolt");
+  });
+
+  it("uses an independent support slot for a pending Boss summon without overwriting committed combat lanes", () => {
+    const base = createEncounterFixture(63, "boss");
+    const bossSource = base.enemies["boss-sovereign"]!;
+    const boss = {
+      ...bossSource,
+      health: Math.floor(bossSource.maxHealth * 0.3),
+      bossPhase: 3 as const,
+      visibleTicks: 60,
+      currentMoveId: null,
+      movePhase: "none" as const,
+    };
+    const warden = requestEnemyMove(
+      createEncounterEnemy(
+        "warden-committed",
+        "ash-warden",
+        { x: -4.5, y: 7 },
+        { visibleTicks: 60 },
+      ),
+      "warden-bolt",
+      6,
+    );
+    const crawler = requestEnemyMove(
+      createEncounterEnemy(
+        "crawler-committed",
+        "glass-crawler",
+        { x: 0, y: 8.2 },
+        { visibleTicks: 60 },
+      ),
+      "crawler-lunge",
+      6,
+    );
+    const state = {
+      ...base,
+      tick: 6,
+      enemies: {
+        [warden.id]: warden,
+        [boss.id]: boss,
+        [crawler.id]: crawler,
+      },
+      encounter: {
+        ...base.encounter,
+        pendingSummons: [30],
+      },
+      enemyAi: {
+        ...base.enemyAi,
+        meleeSlotOwner: crawler.id,
+        rangedWindow: 0,
+        rangedSlotOwner: warden.id,
+        rangedWindowUsed: false,
+        supportSlotOwner: null,
+      },
+    } as GameState;
+
+    const result = stepEnemyAi(state, arenaContent);
+
+    expect(result.enemies[boss.id]).toMatchObject({
+      currentMoveId: "sovereign-summon",
+      movePhase: "telegraph",
+    });
+    expect(result.enemyAi).toMatchObject({
+      meleeSlotOwner: crawler.id,
+      rangedSlotOwner: warden.id,
+      supportSlotOwner: boss.id,
+    });
+  });
+
   it("uses authoritative blockers for visibility and never commits through the closed boss gate", () => {
     expect(
       hasEnemyLineOfSight(
@@ -427,6 +620,58 @@ describe("bounded enemy decisions", () => {
 });
 
 describe("authoritative enemy combat", () => {
+  it("announces the Boss summon only when its telegraph commits to active", () => {
+    const base = createEncounterFixture(64, "boss");
+    const requested = requestEnemyMove(
+      {
+        ...base.enemies["boss-sovereign"]!,
+        visibleTicks: 60,
+      },
+      "sovereign-summon",
+      6,
+    );
+    const state = {
+      ...base,
+      encounter: {
+        ...base.encounter,
+        pendingSummons: [65 as const],
+      },
+      enemies: {
+        [requested.id]: {
+          ...requested,
+          moveElapsedTicks: 41,
+        },
+      },
+    };
+
+    const committed = stepEnemyCombat(
+      state,
+      neutralIntent,
+      [],
+      arenaContent,
+    );
+    expect(committed.state.enemies[requested.id]).toMatchObject({
+      movePhase: "active",
+      moveElapsedTicks: 0,
+    });
+    expect(committed.events).toEqual([{
+      type: "enemy-move-active",
+      enemyId: requested.id,
+      moveId: "sovereign-summon",
+      attackId: "boss-sovereign:sovereign-summon:1",
+    }]);
+
+    const next = stepEnemyCombat(
+      committed.state,
+      neutralIntent,
+      committed.events,
+      arenaContent,
+    );
+    expect(next.events.filter(
+      (event) => event.type === "enemy-move-active",
+    )).toHaveLength(1);
+  });
+
   it("telegraphs before applying one stable contact and cannot spam during recovery", () => {
     const crawler = requestEnemyMove(
       createEncounterEnemy(
@@ -597,6 +842,69 @@ describe("authoritative enemy combat", () => {
     ).toEqual([]);
   });
 
+  it.each([
+    [true, true],
+    [false, false],
+  ])(
+    "emits observable zero-damage training contact at one health (guard=%s)",
+    (guardHeld, expectedGuarded) => {
+      const requested = requestEnemyMove(
+        createEncounterEnemy(
+          "training-crawler",
+          "glass-crawler",
+          { x: 0, y: -7.7 },
+          {
+            aiEnabled: false,
+            facingRadians: Math.PI,
+            nonlethal: true,
+          },
+        ),
+        "crawler-lunge",
+        51,
+      );
+      const crawler = {
+        ...requested,
+        intent: "attack" as const,
+        movePhase: "active" as const,
+      };
+      const initial = createInitialForEnemy(crawler, { x: 0, y: -9 });
+      const state = {
+        ...initial,
+        player: {
+          ...initial.player,
+          health: 1,
+          action: guardHeld ? "guard" as const : "idle" as const,
+        },
+      };
+
+      const result = stepEnemyCombat(
+        state,
+        { ...neutralIntent, guardHeld },
+        [],
+        arenaContent,
+      );
+
+      expect(result.state.player.health).toBe(1);
+      expect(result.state.status).toBe("playing");
+      expect(result.events).toEqual([
+        {
+          type: "contact",
+          attackerId: "training-crawler",
+          targetId: "player",
+          attackId: "training-crawler:crawler-lunge:1",
+        },
+        {
+          type: "damage",
+          targetId: "player",
+          amount: 0,
+          guarded: expectedGuarded,
+        },
+      ]);
+      const lesson = stepEncounter(result.state, result.events);
+      expect(lesson.state.encounter.trainingGuardSeen).toBe(expectedGuarded);
+    },
+  );
+
   it("interrupts a committed enemy move when authoritative player damage staggers it", () => {
     const crawler = requestEnemyMove(
       createEncounterEnemy(
@@ -625,13 +933,17 @@ describe("authoritative enemy combat", () => {
     expect(result.state.enemies["crawler-a"]!.staggerTicks).toBeGreaterThan(0);
   });
 
-  it("consumes a projectile contact rejected by dodge instead of retrying later in the active window", () => {
+  it("spawns a serialized Warden bolt at active commitment and requires flight time to hit", () => {
     const requested = requestEnemyMove(
       createEncounterEnemy(
         "warden-a",
         "ash-warden",
         { x: 0, y: -4.5 },
-        { aiEnabled: false, facingRadians: Math.PI },
+        {
+          aiEnabled: false,
+          facingRadians: 0,
+          lockedFacingRadians: 0,
+        },
       ),
       "warden-bolt",
       10,
@@ -642,44 +954,239 @@ describe("authoritative enemy combat", () => {
       movePhase: "active" as const,
       moveElapsedTicks: 0,
     };
-    const initial = createInitialForEnemy(warden, { x: 0, y: -9 });
-    const state = {
-      ...initial,
-      player: {
-        ...initial.player,
-        action: "dodge" as const,
-        actionTime: 0.12,
-      },
-    };
-    const rejected = stepEnemyCombat(
+    const state = createInitialForEnemy(warden, { x: 0, y: 0 });
+    const spawned = stepEnemyCombat(
       state,
       neutralIntent,
       [],
       arenaContent,
     );
-    const retried = stepEnemyCombat(
-      {
-        ...rejected.state,
-        player: {
-          ...rejected.state.player,
-          action: "idle",
-          actionTime: 0,
+
+    expect(spawned.state.player.health).toBe(state.player.health);
+    expect(spawned.events).toEqual([]);
+    expect(spawned.state.combat.enemyProjectiles).toEqual([
+      expect.objectContaining({
+        id: "warden-a:warden-bolt:1:projectile",
+        attackId: "warden-a:warden-bolt:1",
+        ownerId: "warden-a",
+        moveId: "warden-bolt",
+        direction: { x: 0, y: 1 },
+        speed: 8,
+        radius: 0.18,
+        targetLayer: "player",
+        team: "enemy",
+        hitTargetIds: [],
+      }),
+    ]);
+
+    let flight = spawned.state;
+    for (let tick = 0; tick < 18; tick += 1) {
+      flight = stepCombat(
+        flight,
+        neutralIntent,
+        [],
+        arenaContent,
+      ).state;
+    }
+    expect(flight.player.health).toBe(state.player.health);
+    expect(flight.combat.enemyProjectiles).toHaveLength(1);
+
+    for (let tick = 0; tick < 20; tick += 1) {
+      flight = stepCombat(
+        flight,
+        neutralIntent,
+        [],
+        arenaContent,
+      ).state;
+    }
+    expect(flight.player.health).toBe(state.player.health - 16);
+    expect(flight.combat.enemyProjectiles).toEqual([]);
+  });
+
+  it("lets blockers absorb a Warden bolt and never tracks after launch", () => {
+    const gateWarden = requestEnemyMove(
+      createEncounterEnemy(
+        "warden-gate",
+        "ash-warden",
+        { x: 0, y: 9 },
+        {
+          aiEnabled: false,
+          facingRadians: Math.PI,
+          lockedFacingRadians: Math.PI,
         },
-      },
+      ),
+      "warden-bolt",
+      10,
+    );
+    let blocked = createInitialForEnemy({
+      ...gateWarden,
+      intent: "attack",
+      movePhase: "active",
+    }, { x: 0, y: 7 });
+    blocked = stepEnemyCombat(
+      blocked,
       neutralIntent,
-      rejected.events,
+      [],
+      arenaContent,
+    ).state;
+    blocked = stepCombat(
+      blocked,
+      neutralIntent,
+      [],
+      arenaContent,
+    ).state;
+    expect(blocked.combat.enemyProjectiles).toEqual([]);
+    expect(blocked.player.health).toBe(blocked.player.maxHealth);
+
+    const launched = stepEnemyCombat(
+      createInitialForEnemy({
+        ...requestEnemyMove(
+          createEncounterEnemy(
+            "warden-fixed",
+            "ash-warden",
+            { x: 0, y: -4.5 },
+            {
+              aiEnabled: false,
+              facingRadians: 0,
+              lockedFacingRadians: 0,
+            },
+          ),
+          "warden-bolt",
+          10,
+        ),
+        intent: "attack",
+        movePhase: "active",
+      }, { x: 0, y: 0 }),
+      neutralIntent,
+      [],
+      arenaContent,
+    ).state;
+    let evaded = {
+      ...launched,
+      player: {
+        ...launched.player,
+        position: { x: 3, y: 0 },
+      },
+    };
+    for (let tick = 0; tick < 100; tick += 1) {
+      evaded = stepCombat(
+        evaded,
+        neutralIntent,
+        [],
+        arenaContent,
+      ).state;
+    }
+    expect(evaded.player.health).toBe(evaded.player.maxHealth);
+    expect(evaded.combat.enemyProjectiles).toEqual([]);
+  });
+
+  it.each([
+    ["dodge", false, 0],
+    ["guard", true, 6],
+  ] as const)("resolves %s from player state at bolt impact", (
+    action,
+    guardHeld,
+    expectedDamage,
+  ) => {
+    const base = createEncounterFixture(65, "fresh");
+    const state = {
+      ...base,
+      player: {
+        ...base.player,
+        position: { x: 0, y: 0 },
+        facingRadians: Math.PI,
+        action,
+        actionTime: action === "dodge" ? 0.12 : 0,
+      },
+      combat: {
+        ...base.combat,
+        enemyProjectiles: [{
+          id: "impact-projectile",
+          attackId: "warden-impact:warden-bolt:1",
+          ownerId: "warden-impact",
+          moveId: "warden-bolt" as const,
+          position: { x: 0, y: -1 },
+          direction: { x: 0, y: 1 },
+          speed: 60,
+          radius: 0.18,
+          ageTicks: 0,
+          lifetimeTicks: 60,
+          targetLayer: "player" as const,
+          team: "enemy" as const,
+          hitTargetIds: [],
+        }],
+      },
+    };
+    const result = stepCombat(
+      state,
+      { ...neutralIntent, guardHeld },
+      [],
       arenaContent,
     );
 
-    expect(
-      retried.events.filter(
-        (event) =>
-          event.type === "damage" && event.targetId === "player",
-      ),
-    ).toEqual([]);
-    expect(retried.state.enemies["warden-a"]!.hitTargetIds).toEqual([
-      "player",
-    ]);
+    expect(result.state.player.health).toBe(
+      state.player.health - expectedDamage,
+    );
+    expect(result.state.combat.enemyProjectiles).toEqual([]);
+    expect(result.events.filter(
+      (event) => event.type === "damage",
+    )).toEqual(
+      expectedDamage === 0
+        ? []
+        : [{
+            type: "damage",
+            targetId: "player",
+            amount: 6,
+            guarded: true,
+          }],
+    );
+  });
+
+  it("uses swept earliest contact for a large bolt step and stays pure across JSON replay", () => {
+    const base = createEncounterFixture(66, "fresh");
+    const state = {
+      ...base,
+      player: {
+        ...base.player,
+        position: { x: 0, y: 0 },
+      },
+      combat: {
+        ...base.combat,
+        enemyProjectiles: [{
+          id: "fast-projectile",
+          attackId: "warden-fast:warden-bolt:1",
+          ownerId: "warden-fast",
+          moveId: "warden-bolt" as const,
+          position: { x: 0, y: -5 },
+          direction: { x: 0, y: 1 },
+          speed: 600,
+          radius: 0.18,
+          ageTicks: 0,
+          lifetimeTicks: 60,
+          targetLayer: "player" as const,
+          team: "enemy" as const,
+          hitTargetIds: [],
+        }],
+      },
+    };
+    const before = JSON.stringify(state);
+    const first = stepCombat(
+      state,
+      neutralIntent,
+      [],
+      arenaContent,
+    );
+    const replay = stepCombat(
+      JSON.parse(before) as GameState,
+      neutralIntent,
+      [],
+      arenaContent,
+    );
+
+    expect(first).toEqual(replay);
+    expect(JSON.stringify(state)).toBe(before);
+    expect(first.state.player.health).toBe(state.player.health - 16);
+    expect(first.state.combat.enemyProjectiles).toEqual([]);
   });
 
   it("rejects an active sweep through a blocker and defeats the player only at zero health", () => {

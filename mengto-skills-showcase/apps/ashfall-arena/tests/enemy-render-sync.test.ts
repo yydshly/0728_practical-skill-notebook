@@ -1,6 +1,6 @@
 import { createVesperKnight } from "@showcase/game-assets";
 import { Scene } from "three";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createEntitySynchronizer,
 } from "../src/scene/sync-entities";
@@ -9,6 +9,64 @@ import {
 } from "../src/simulation/encounters";
 
 describe("shared monster scene synchronization", () => {
+  it("renders a readable Warden bolt trace and disposes it when authority removes it", () => {
+    const scene = new Scene();
+    const knight = createVesperKnight();
+    const synchronizer = createEntitySynchronizer(knight, scene);
+    const base = createEncounterFixture(7, "fresh");
+    const projectileState = {
+      ...base,
+      combat: {
+        ...base.combat,
+        enemyProjectiles: [{
+          id: "warden-a:warden-bolt:1:projectile",
+          attackId: "warden-a:warden-bolt:1",
+          ownerId: "warden-a",
+          moveId: "warden-bolt" as const,
+          position: { x: 1, y: -2 },
+          direction: { x: 0, y: 1 },
+          speed: 8,
+          radius: 0.18,
+          ageTicks: 4,
+          lifetimeTicks: 90,
+          targetLayer: "player" as const,
+          team: "enemy" as const,
+          hitTargetIds: [],
+        }],
+      },
+    };
+
+    synchronizer.sync(projectileState, 1 / 60);
+    expect(synchronizer.getDiagnostics()).toMatchObject({
+      enemyProjectileTraceCount: 1,
+      enemyProjectileIds: ["warden-a:warden-bolt:1:projectile"],
+    });
+    const trace = scene.children.find(
+      ({ userData }) => userData.entityType === "enemy-projectile-trace",
+    )!;
+    expect(trace).toBeDefined();
+    expect(trace.position.toArray()).toEqual([1, 0.32, -2]);
+    expect(trace.children.length).toBeGreaterThanOrEqual(2);
+    const disposeSpies = trace.children.flatMap((child) => {
+      if (!("geometry" in child) || !("material" in child)) return [];
+      return [
+        vi.spyOn(child.geometry as { dispose(): void }, "dispose"),
+        vi.spyOn(child.material as { dispose(): void }, "dispose"),
+      ];
+    });
+
+    synchronizer.sync(base, 1 / 60);
+    expect(synchronizer.getDiagnostics()).toMatchObject({
+      enemyProjectileTraceCount: 0,
+      enemyProjectileIds: [],
+    });
+    expect(trace.parent).toBeNull();
+    for (const spy of disposeSpies) expect(spy).toHaveBeenCalledOnce();
+
+    synchronizer.dispose();
+    knight.dispose();
+  });
+
   it("creates, updates, and releases one shared model per authoritative enemy", () => {
     const scene = new Scene();
     const knight = createVesperKnight();

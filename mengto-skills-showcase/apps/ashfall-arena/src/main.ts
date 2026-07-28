@@ -81,6 +81,7 @@ interface AshfallReviewApi {
   triggerCameraShake(): void;
   getSerializableState(): GameState;
   queueEnemyMove(enemyId: string, moveId: EnemyMoveId): string;
+  drivePlayerDodge(enemyId: string, moveId: EnemyMoveId): string;
   drivePlayerStrike(enemyId: string): void;
 }
 
@@ -107,6 +108,8 @@ if (!allowedFixtures.has(requestedFixture as EncounterFixture)) {
 }
 const fixture = requestedFixture as EncounterFixture;
 const reviewControls = query.get("reviewControls") === "1";
+const safeTraining = query.get("safeTraining") === "1";
+const manualEnemyAi = query.get("manualEnemyAi") === "1";
 const captureMode = query.get("capture") === "1";
 const forcedMonsterFailure = query.get("forceEnemyModelFailure");
 document.documentElement.dataset.reviewControls = reviewControls ? "on" : "off";
@@ -168,7 +171,11 @@ const telegraphBanner = app.querySelector<HTMLElement>(
 let state: GameState = createEncounterFixture(
   7481,
   fixture,
-  { accelerated: reviewControls && fixture !== "fresh" },
+  {
+    accelerated: reviewControls && fixture !== "fresh",
+    trainingAiEnabled: !safeTraining,
+    ...(manualEnemyAi ? { enemyAiEnabled: false } : {}),
+  },
 );
 const arena = createArenaScene(canvas, {
   preserveDrawingBuffer: reviewControls || captureMode,
@@ -510,6 +517,93 @@ if (reviewControls) {
         },
       };
       return `${enemyId}:${moveId}:${requested.attackSequence}`;
+    },
+    drivePlayerDodge(enemyId, moveId) {
+      const enemy = state.enemies[enemyId];
+      if (!enemy) throw new Error(`Unknown enemy: ${enemyId}`);
+      if (state.status !== "playing") {
+        throw new Error("Player dodge requires a playing simulation");
+      }
+      const forward = {
+        x: Math.sin(state.player.facingRadians),
+        y: Math.cos(state.player.facingRadians),
+      };
+      const position = {
+        x: state.player.position.x + forward.x * 1.25,
+        y: state.player.position.y + forward.y * 1.25,
+      };
+      const facingRadians = Math.atan2(
+        state.player.position.x - position.x,
+        state.player.position.y - position.y,
+      );
+      const requested = requestEnemyMove(
+        {
+          ...enemy,
+          position,
+          facingRadians,
+          lockedFacingRadians: facingRadians,
+          aiEnabled: false,
+          targetId: state.player.id,
+          action: "idle",
+          actionTime: 0,
+          currentMoveId: null,
+          movePhase: "none",
+          moveElapsedTicks: 0,
+          cooldownTicks: 0,
+        },
+        moveId,
+        state.tick,
+      );
+      state = {
+        ...state,
+        player: {
+          ...state.player,
+          action: "idle",
+          actionTime: 0,
+          stamina: state.player.maxStamina,
+        },
+        enemies: {
+          ...state.enemies,
+          [enemyId]: requested,
+        },
+      };
+      const attackId =
+        `${enemyId}:${moveId}:${requested.attackSequence}`;
+      const neutral: GameIntent = {
+        moveX: 0,
+        moveY: 0,
+        attackPressed: false,
+        guardHeld: false,
+        dodgePressed: false,
+        lockPressed: false,
+        healPressed: false,
+        switchWeaponPressed: false,
+        pausePressed: false,
+      };
+      let dodgeIssued = false;
+      for (let tick = 0; tick < 180; tick += 1) {
+        const current = state.enemies[enemyId];
+        const dodgePressed =
+          !dodgeIssued &&
+          current?.movePhase === "telegraph" &&
+          current.moveElapsedTicks >= 14;
+        if (dodgePressed) dodgeIssued = true;
+        const result = stepGame(
+          state,
+          { ...neutral, dodgePressed },
+          1 / 60,
+          arenaContent,
+        );
+        state = result.state;
+        routeGameplayEvents(result.events);
+        if (dodgeIssued && state.enemies[enemyId]?.currentMoveId === null) {
+          break;
+        }
+      }
+      if (!dodgeIssued) {
+        throw new Error(`${enemyId} never reached its dodge window`);
+      }
+      return attackId;
     },
     drivePlayerStrike(enemyId) {
       const enemy = state.enemies[enemyId];

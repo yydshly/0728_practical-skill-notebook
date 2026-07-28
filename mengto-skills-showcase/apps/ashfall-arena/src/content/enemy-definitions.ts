@@ -59,6 +59,12 @@ const moveRecord = {
     damage: 16,
     guardBreak: false,
     facingHalfAngleDegrees: 18,
+    projectile: {
+      speed: 8,
+      radius: 0.18,
+      lifetimeSeconds: 1.5,
+      originForward: 0.62,
+    },
   },
   "elite-sweep": {
     id: "elite-sweep",
@@ -111,7 +117,7 @@ const moveRecord = {
   "sovereign-summon": {
     id: "sovereign-summon",
     ownerKinds: ["bell-sovereign"],
-    slot: "summon",
+    slot: "support",
     contactKind: "summon",
     minimumRange: 0,
     maximumRange: 99,

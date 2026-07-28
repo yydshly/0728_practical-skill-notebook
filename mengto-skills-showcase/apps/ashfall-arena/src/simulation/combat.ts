@@ -6,6 +6,7 @@ import type {
   AttackInstance,
   AttackPhase,
   CombatActionContent,
+  EnemyProjectileState,
   GameContent,
   GameEvent,
   GameIntent,
@@ -889,6 +890,169 @@ const enemyAttackId = (
 ): string =>
   `${enemy.id}:${enemy.currentMoveId}:${enemy.attackSequence}`;
 
+const spawnEnemyProjectile = (
+  enemy: GameState["enemies"][string],
+  attackId: string,
+  content: GameContent,
+): EnemyProjectileState => {
+  const move = enemyMoves["warden-bolt"];
+  const projectile = move.projectile;
+  if (!projectile) {
+    throw new Error("warden-bolt requires projectile content");
+  }
+  const direction = directionFromFacing(enemy.lockedFacingRadians);
+  return {
+    id: `${attackId}:projectile`,
+    attackId,
+    ownerId: enemy.id,
+    moveId: "warden-bolt",
+    position: {
+      x: enemy.position.x + direction.x * projectile.originForward,
+      y: enemy.position.y + direction.y * projectile.originForward,
+    },
+    direction,
+    speed: projectile.speed,
+    radius: projectile.radius,
+    ageTicks: 0,
+    lifetimeTicks: ticksFor(projectile.lifetimeSeconds, content),
+    targetLayer: "player",
+    team: "enemy",
+    hitTargetIds: [],
+  };
+};
+
+export const stepEnemyProjectiles = (
+  state: GameState,
+  intent: GameIntent,
+  content: GameContent,
+): StepGameResult => {
+  if (state.combat.enemyProjectiles.length === 0) {
+    return { state, events: [] };
+  }
+
+  let working = state;
+  const survivors: EnemyProjectileState[] = [];
+  const events: GameEvent[] = [];
+  for (const projectile of state.combat.enemyProjectiles) {
+    const from = projectile.position;
+    const to = {
+      x:
+        from.x +
+        projectile.direction.x *
+          projectile.speed /
+          content.combat.fixedHz,
+      y:
+        from.y +
+        projectile.direction.y *
+          projectile.speed /
+          content.combat.fixedHz,
+    };
+    const candidates: ProjectileContactCandidate[] = [];
+    if (
+      working.player.health > 0 &&
+      !projectile.hitTargetIds.includes(working.player.id)
+    ) {
+      const time = segmentCircleTimeOfImpact(
+        from,
+        to,
+        working.player.position,
+        projectile.radius + content.playerMovement.actorRadius,
+      );
+      if (time !== null) {
+        candidates.push({
+          id: working.player.id,
+          kind: "enemy",
+          time,
+          targetId: working.player.id,
+        });
+      }
+    }
+    for (const collision of content.arena.collisions) {
+      if (collision.kind === "gate" && working.encounter.gateOpen) {
+        continue;
+      }
+      const time = segmentAabbTimeOfImpact(from, to, {
+        minX: collision.x - collision.halfWidth - projectile.radius,
+        maxX: collision.x + collision.halfWidth + projectile.radius,
+        minY: collision.z - collision.halfDepth - projectile.radius,
+        maxY: collision.z + collision.halfDepth + projectile.radius,
+      });
+      if (time !== null) {
+        candidates.push({
+          id: collision.id,
+          kind: "world",
+          time,
+        });
+      }
+    }
+    const boundaryTime = arenaBoundaryTimeOfImpact(
+      from,
+      to,
+      projectile.radius,
+      content,
+    );
+    if (boundaryTime !== null) {
+      candidates.push({
+        id: "arena-boundary",
+        kind: "world",
+        time: boundaryTime,
+      });
+    }
+
+    const contact = selectEarliestProjectileContact(candidates);
+    if (contact?.kind === "world") continue;
+    if (contact?.targetId === working.player.id) {
+      const impact = {
+        x: from.x + (to.x - from.x) * contact.time,
+        y: from.y + (to.y - from.y) * contact.time,
+      };
+      const source = {
+        x: impact.x - projectile.direction.x,
+        y: impact.y - projectile.direction.y,
+      };
+      const move = enemyMoves[projectile.moveId];
+      const result = applyIncomingDamage(
+        working,
+        {
+          attackId: projectile.attackId,
+          attackerId: projectile.ownerId,
+          damage: move.damage,
+          angleDegrees: signedAngleDegrees(
+            working.player.facingRadians,
+            working.player.position,
+            source,
+          ),
+          collisionLayer: "enemy",
+          guardBreak: move.guardBreak,
+        },
+        intent.guardHeld,
+        content,
+      );
+      working = result.state;
+      events.push(...result.events);
+      continue;
+    }
+
+    const next = {
+      ...projectile,
+      position: to,
+      ageTicks: projectile.ageTicks + 1,
+    };
+    if (next.ageTicks < next.lifetimeTicks) survivors.push(next);
+  }
+
+  return {
+    state: {
+      ...working,
+      combat: {
+        ...working.combat,
+        enemyProjectiles: survivors,
+      },
+    },
+    events,
+  };
+};
+
 const canEnemyMoveContactPlayer = (
   state: GameState,
   enemy: GameState["enemies"][string],
@@ -903,7 +1067,12 @@ const canEnemyMoveContactPlayer = (
     return false;
   }
   const move = enemyMoves[enemy.currentMoveId];
-  if (move.contactKind === "summon") return false;
+  if (
+    move.contactKind === "summon" ||
+    move.contactKind === "projectile"
+  ) {
+    return false;
+  }
   const playerDistance = Math.hypot(
     state.player.position.x - enemy.position.x,
     state.player.position.y - enemy.position.y,
@@ -980,6 +1149,14 @@ export function stepEnemyCombat(
       const elapsed = enemy.moveElapsedTicks + 1;
       const complete =
         elapsed >= ticksFor(move.telegraphSeconds, content);
+      if (complete && move.contactKind === "summon") {
+        produced.push({
+          type: "enemy-move-active",
+          enemyId,
+          moveId: enemy.currentMoveId,
+          attackId,
+        });
+      }
       enemy = {
         ...enemy,
         intent: complete ? "attack" : "telegraph",
@@ -993,11 +1170,34 @@ export function stepEnemyCombat(
       working = {
         ...working,
         enemies: { ...working.enemies, [enemyId]: enemy },
+        enemyAi:
+          complete && move.slot === "ranged"
+            ? { ...working.enemyAi, rangedWindowUsed: true }
+            : working.enemyAi,
       };
       continue;
     }
 
     if (enemy.movePhase === "active") {
+      if (
+        enemy.currentMoveId === "warden-bolt" &&
+        !working.combat.spawnedEnemyAttackIds.includes(attackId)
+      ) {
+        working = {
+          ...working,
+          combat: {
+            ...working.combat,
+            enemyProjectiles: [
+              ...working.combat.enemyProjectiles,
+              spawnEnemyProjectile(enemy, attackId, content),
+            ],
+            spawnedEnemyAttackIds: [
+              ...working.combat.spawnedEnemyAttackIds,
+              attackId,
+            ],
+          },
+        };
+      }
       if (
         !enemy.hitTargetIds.includes(state.player.id) &&
         canEnemyMoveContactPlayer(working, enemy, content)
@@ -1005,27 +1205,25 @@ export function stepEnemyCombat(
         const damage = enemy.nonlethal
           ? Math.max(0, Math.min(move.damage, working.player.health - 1))
           : move.damage;
-        if (damage > 0) {
-          const result = applyIncomingDamage(
-            working,
-            {
-              attackId,
-              attackerId: enemy.id,
-              damage,
-              angleDegrees: signedAngleDegrees(
-                working.player.facingRadians,
-                working.player.position,
-                enemy.position,
-              ),
-              collisionLayer: "enemy",
-              guardBreak: move.guardBreak,
-            },
-            intent.guardHeld,
-            content,
-          );
-          working = result.state;
-          produced.push(...result.events);
-        }
+        const result = applyIncomingDamage(
+          working,
+          {
+            attackId,
+            attackerId: enemy.id,
+            damage,
+            angleDegrees: signedAngleDegrees(
+              working.player.facingRadians,
+              working.player.position,
+              enemy.position,
+            ),
+            collisionLayer: "enemy",
+            guardBreak: move.guardBreak,
+          },
+          intent.guardHeld,
+          content,
+        );
+        working = result.state;
+        produced.push(...result.events);
         const contacted = working.enemies[enemyId];
         if (contacted) {
           enemy = {
@@ -1135,9 +1333,18 @@ export function stepCombat(
       },
     };
     const projectileResult = stepProjectiles(working, content);
+    const enemyProjectileResult = stepEnemyProjectiles(
+      projectileResult.state,
+      intent,
+      content,
+    );
     return {
-      state: projectileResult.state,
-      events: [...produced, ...projectileResult.events],
+      state: enemyProjectileResult.state,
+      events: [
+        ...produced,
+        ...projectileResult.events,
+        ...enemyProjectileResult.events,
+      ],
     };
   }
 
@@ -1200,6 +1407,13 @@ export function stepCombat(
   const enemyResult = stepEnemyCombat(working, intent, produced, content);
   working = enemyResult.state;
   produced.splice(0, produced.length, ...enemyResult.events);
+  const enemyProjectileResult = stepEnemyProjectiles(
+    working,
+    intent,
+    content,
+  );
+  working = enemyProjectileResult.state;
+  produced.push(...enemyProjectileResult.events);
 
   if (
     !attackEdge &&

@@ -145,10 +145,28 @@ export interface ProjectileState {
   hitTargetIds: string[];
 }
 
+export interface EnemyProjectileState {
+  id: string;
+  attackId: string;
+  ownerId: string;
+  moveId: "warden-bolt";
+  position: Vec2;
+  direction: Vec2;
+  speed: number;
+  radius: number;
+  ageTicks: number;
+  lifetimeTicks: number;
+  targetLayer: "player";
+  team: "enemy";
+  hitTargetIds: string[];
+}
+
 export interface CombatState {
   attackSequence: number;
   activeAttack: AttackInstance | null;
   projectiles: ProjectileState[];
+  enemyProjectiles: EnemyProjectileState[];
+  spawnedEnemyAttackIds: string[];
   receivedAttackIds: string[];
   attackInputHeld: boolean;
   switchInputHeld: boolean;
@@ -189,12 +207,18 @@ export interface GameState {
     spawnedIds: string[];
     completedIds: string[];
     bossThresholds: { 65: boolean; 30: boolean };
+    pendingSummons: Array<65 | 30>;
+    completedSummons: Array<65 | 30>;
+    consumedSummonAttackIds: string[];
+    trainingAiEnabled: boolean;
     phaseEntryTick: number;
   };
   enemyAi: {
     meleeSlotOwner: string | null;
     rangedWindow: number;
     rangedSlotOwner: string | null;
+    rangedWindowUsed: boolean;
+    supportSlotOwner: string | null;
   };
   drops: Array<{
     id: string;
@@ -220,6 +244,12 @@ export type GameEvent =
   | { type: "encounter-phase"; phase: EncounterPhase }
   | {
       type: "enemy-telegraph";
+      enemyId: string;
+      moveId: EnemyMoveId;
+      attackId: string;
+    }
+  | {
+      type: "enemy-move-active";
       enemyId: string;
       moveId: EnemyMoveId;
       attackId: string;
@@ -305,7 +335,7 @@ export interface CombatActionContent {
 export interface EnemyMoveDefinition {
   readonly id: EnemyMoveId;
   readonly ownerKinds: readonly EnemyKind[];
-  readonly slot: "melee" | "ranged" | "summon";
+  readonly slot: "melee" | "ranged" | "support";
   readonly contactKind: "lunge" | "projectile" | "sweep" | "shockwave" | "summon";
   readonly minimumRange: number;
   readonly maximumRange: number;
@@ -317,6 +347,12 @@ export interface EnemyMoveDefinition {
   readonly damage: number;
   readonly guardBreak: boolean;
   readonly facingHalfAngleDegrees: number;
+  readonly projectile?: Readonly<{
+    speed: number;
+    radius: number;
+    lifetimeSeconds: number;
+    originForward: number;
+  }>;
 }
 
 export interface EnemyDefinition {

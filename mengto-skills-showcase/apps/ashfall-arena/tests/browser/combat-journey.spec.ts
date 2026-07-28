@@ -36,7 +36,9 @@ test("wave-one proves readable enemy contact, defenses, player defeat, and objec
   });
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
-  await page.goto("/?fixture=wave-one&reviewControls=1");
+  await page.goto(
+    "/?fixture=wave-one&reviewControls=1&manualEnemyAi=1",
+  );
   await expect(page.locator("[data-game-canvas]")).toHaveCount(1);
   await expect.poll(async () => (await snapshot(page)).enemyModelRootCount)
     .toBe(3);
@@ -131,27 +133,17 @@ test("wave-one proves readable enemy contact, defenses, player defeat, and objec
     ),
   );
 
+  await expect.poll(async () => (await snapshot(page)).action, {
+    timeout: 5_000,
+  }).toBe("idle");
   await waitUntilMoveReady(page, "wave-one-crawler-b");
   const healthBeforeDodge = (await snapshot(page)).playerHealth;
   const dodgeAttackId = await page.evaluate(() =>
-    window.__ashfallDiagnostics!.queueEnemyMove(
+    window.__ashfallDiagnostics!.drivePlayerDodge(
       "wave-one-crawler-b",
       "crawler-lunge",
     ),
   );
-  await expect.poll(async () => {
-    const enemy = (await snapshot(page)).enemies.find(
-      ({ id }) => id === "wave-one-crawler-b",
-    );
-    return enemy?.moveElapsedTicks ?? 0;
-  }, { intervals: [10], timeout: 5_000 }).toBeGreaterThanOrEqual(14);
-  await page.keyboard.press("Space");
-  await expect.poll(async () => {
-    const enemy = (await snapshot(page)).enemies.find(
-      ({ id }) => id === "wave-one-crawler-b",
-    );
-    return enemy?.currentMoveId ?? null;
-  }, { timeout: 8_000 }).toBeNull();
   const afterDodge = await snapshot(page);
   expect(afterDodge.playerHealth).toBe(healthBeforeDodge);
   expect(
