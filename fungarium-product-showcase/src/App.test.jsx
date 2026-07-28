@@ -4,6 +4,6 @@ import App from "./App";
 test("renders the client showroom landmark", () => {
   render(<App />);
   expect(
-    screen.getByRole("main", { name: "浜у搧鑳藉姏灞曞巺" }),
+    screen.getByRole("main", { name: "产品能力展厅" }),
   ).toBeInTheDocument();
 });
