@@ -10,8 +10,9 @@ describe("createProceduralMonster", () => {
     expect(instance.root.userData.provenance).toMatchObject({
       type: "procedural",
       factoryId: definition.factoryId,
-      source: "runtime factory shipped; catalog PNG not shipped",
+      source: "runtime factory shipped; matching transparent catalog PNG delivered from this procedural runtime capture",
     });
+    expect(instance.root.userData.source).not.toContain("catalog PNG not shipped");
     expect(instance.root.userData.review).toMatchObject({
       factoryId: definition.factoryId,
       actionCount: definition.actions.length,

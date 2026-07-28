@@ -98,7 +98,7 @@ export function createProceduralMonster(definition: MonsterDefinition): MonsterI
     height: definition.collider.height,
   };
 
-  const source = "runtime factory shipped; catalog PNG not shipped";
+  const source = "runtime factory shipped; matching transparent catalog PNG delivered from this procedural runtime capture";
   root.userData = {
     procedural: true,
     factoryId: definition.factoryId,
