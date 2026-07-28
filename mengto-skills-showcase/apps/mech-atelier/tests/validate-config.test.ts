@@ -5,6 +5,165 @@ import {
   normalizeConfiguration,
   validateConfiguration,
 } from "../src/configuration/validate-config";
+import type {
+  Catalog,
+  ChassisDefinition,
+  MechConfiguration,
+  PartDefinition,
+  PartSlot,
+} from "../src/configuration/types";
+
+function createExpandedCatalog(optionCount: number, accessBudget: number) {
+  let idAccesses = 0;
+
+  function createParts(
+    prefix: string,
+    slot: PartSlot,
+  ): readonly PartDefinition[] {
+    return Array.from({ length: optionCount }, (_, index) => {
+      const part = {
+        name: `${prefix} ${index}`,
+        priceCredits: 0,
+        weight: index === 0 ? 1 : 4,
+        power: 0,
+        guard: 0,
+        mobility: 0,
+        slots: [slot],
+      };
+      Object.defineProperty(part, "id", {
+        enumerable: true,
+        get() {
+          idAccesses += 1;
+          if (idAccesses > accessBudget) {
+            throw new Error(`candidate access budget exceeded: ${idAccesses}`);
+          }
+          return `${prefix}-${index}`;
+        },
+      });
+      return part as unknown as PartDefinition;
+    });
+  }
+
+  const weapons = Array.from({ length: optionCount }, (_, index) => {
+    const part = {
+      name: `weapon ${index}`,
+      priceCredits: 0,
+      weight: index === 0 ? 1 : 4,
+      power: 0,
+      guard: 0,
+      mobility: 0,
+      slots: ["leftWeapon", "rightWeapon"],
+    };
+    Object.defineProperty(part, "id", {
+      enumerable: true,
+      get() {
+        idAccesses += 1;
+        if (idAccesses > accessBudget) {
+          throw new Error(`candidate access budget exceeded: ${idAccesses}`);
+        }
+        return `weapon-${index}`;
+      },
+    });
+    return part as unknown as PartDefinition;
+  });
+
+  const chassis: ChassisDefinition = {
+    id: "strider-scout",
+    name: "扩容测试底盘",
+    priceCredits: 0,
+    weight: 0,
+    power: 0,
+    guard: 0,
+    mobility: 0,
+    weightLimit: 14,
+  };
+
+  const expandedCatalog = {
+    chassis: [chassis],
+    heads: createParts("head", "head"),
+    armors: createParts("armor", "armor"),
+    weapons,
+    rearModules: createParts("rear", "rearModule"),
+  } as Catalog;
+
+  return {
+    catalog: expandedCatalog,
+    getIdAccesses: () => idAccesses,
+  };
+}
+
+const referenceFields = [
+  "headId",
+  "armorId",
+  "leftWeaponId",
+  "rightWeaponId",
+  "rearModuleId",
+] as const;
+
+function referenceOptions(
+  field: (typeof referenceFields)[number],
+): readonly PartDefinition[] {
+  if (field === "headId") return catalog.heads;
+  if (field === "armorId") return catalog.armors;
+  if (field === "rearModuleId") return catalog.rearModules;
+  return catalog.weapons;
+}
+
+function referenceSlot(field: (typeof referenceFields)[number]): PartSlot {
+  if (field === "headId") return "head";
+  if (field === "armorId") return "armor";
+  if (field === "rearModuleId") return "rearModule";
+  return field === "leftWeaponId" ? "leftWeapon" : "rightWeapon";
+}
+
+function referenceNormalization(
+  input: MechConfiguration,
+): MechConfiguration {
+  const preferredIds = referenceFields.map((field) => {
+    const legal = referenceOptions(field).filter(
+      (part) =>
+        part.slots.includes(referenceSlot(field)) &&
+        !part.incompatibleChassisIds?.includes(input.chassisId),
+    );
+    const selected = legal.find((part) => part.id === input[field]);
+    return (selected ?? legal[0]).id;
+  });
+  let best: MechConfiguration | undefined;
+  let bestChanges = Number.POSITIVE_INFINITY;
+
+  for (const head of catalog.heads) {
+    for (const armor of catalog.armors) {
+      for (const leftWeapon of catalog.weapons) {
+        for (const rightWeapon of catalog.weapons) {
+          for (const rearModule of catalog.rearModules) {
+            const candidate = {
+              ...input,
+              headId: head.id,
+              armorId: armor.id,
+              leftWeaponId: leftWeapon.id,
+              rightWeaponId: rightWeapon.id,
+              rearModuleId: rearModule.id,
+            } as MechConfiguration;
+            if (!validateConfiguration(candidate, catalog).ok) continue;
+
+            const changes = referenceFields.reduce(
+              (count, field, index) =>
+                count + Number(candidate[field] !== preferredIds[index]),
+              0,
+            );
+            if (changes < bestChanges) {
+              best = candidate;
+              bestChanges = changes;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!best) throw new Error("Reference catalog unexpectedly has no solution");
+  return best;
+}
 
 describe("validateConfiguration", () => {
   it("rejects a right-only rail lance in the left slot", () => {
@@ -184,5 +343,109 @@ describe("normalizeConfiguration", () => {
     expect(normalizeConfiguration(input, catalog)).toEqual(
       normalizeConfiguration(input, catalog),
     );
+  });
+
+  it("bounds expanded-catalog work and resolves ties by catalog index order", () => {
+    const expanded = createExpandedCatalog(12, 5_000);
+    const input = {
+      ...defaultConfiguration,
+      headId: "head-11",
+      armorId: "armor-11",
+      leftWeaponId: "weapon-11",
+      rightWeaponId: "weapon-11",
+      rearModuleId: "rear-11",
+    };
+
+    const first = normalizeConfiguration(input, expanded.catalog);
+    const second = normalizeConfiguration(input, expanded.catalog);
+
+    expect(first).toEqual(second);
+    expect(first.config).toMatchObject({
+      headId: "head-0",
+      armorId: "armor-0",
+      leftWeaponId: "weapon-11",
+      rightWeaponId: "weapon-11",
+      rearModuleId: "rear-11",
+    });
+    expect(first.issues).toEqual([
+      { field: "weight", code: "weight-limit", value: 20 },
+    ]);
+    expect(validateConfiguration(first.config, expanded.catalog)).toEqual({
+      ok: true,
+      issues: [],
+    });
+    expect(expanded.getIdAccesses()).toBeLessThanOrEqual(5_000);
+  });
+
+  it("returns a deterministic issue-bearing fallback when no legal configuration exists", () => {
+    const impossibleCatalog: Catalog = {
+      ...catalog,
+      chassis: [
+        {
+          ...catalog.chassis[0],
+          weightLimit: 10,
+        },
+      ],
+      heads: [],
+    };
+
+    const first = normalizeConfiguration(defaultConfiguration, impossibleCatalog);
+    const second = normalizeConfiguration(
+      defaultConfiguration,
+      impossibleCatalog,
+    );
+
+    expect(first).toEqual(second);
+    expect(first.config).toEqual(defaultConfiguration);
+    expect(first.issues).toEqual([
+      {
+        field: "headId",
+        code: "unknown-option",
+        value: "surveyor-head",
+      },
+      { field: "weight", code: "weight-limit", value: 26 },
+    ]);
+    expect(validateConfiguration(first.config, impossibleCatalog).ok).toBe(
+      false,
+    );
+  });
+
+  it("preserves normalization results for all 1296 existing catalog selections", () => {
+    let cases = 0;
+
+    for (const chassis of catalog.chassis) {
+      for (const head of catalog.heads) {
+        for (const armor of catalog.armors) {
+          for (const leftWeapon of catalog.weapons) {
+            for (const rightWeapon of catalog.weapons) {
+              for (const rearModule of catalog.rearModules) {
+                const input = {
+                  ...defaultConfiguration,
+                  chassisId: chassis.id,
+                  headId: head.id,
+                  armorId: armor.id,
+                  leftWeaponId: leftWeapon.id,
+                  rightWeaponId: rightWeapon.id,
+                  rearModuleId: rearModule.id,
+                } as MechConfiguration;
+                const result = normalizeConfiguration(input, catalog);
+
+                expect(result.config).toEqual(referenceNormalization(input));
+                expect(result.issues).toEqual(
+                  validateConfiguration(input, catalog).issues,
+                );
+                cases += 1;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    expect(cases).toBe(1_296);
+    expect(normalizeConfiguration(defaultConfiguration, catalog)).toEqual({
+      config: defaultConfiguration,
+      issues: [],
+    });
   });
 });

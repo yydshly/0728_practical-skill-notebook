@@ -45,20 +45,19 @@ function findChassis(
   return catalog.chassis.find((candidate) => candidate.id === value);
 }
 
-function allParts(catalog: Catalog): readonly PartDefinition[] {
-  return [
+function createPartIndex(catalog: Catalog): ReadonlyMap<unknown, PartDefinition> {
+  const index = new Map<unknown, PartDefinition>();
+  for (const part of [
     ...catalog.heads,
     ...catalog.armors,
     ...catalog.weapons,
     ...catalog.rearModules,
-  ];
-}
-
-function findPart(
-  value: unknown,
-  catalog: Catalog,
-): PartDefinition | undefined {
-  return allParts(catalog).find((candidate) => candidate.id === value);
+  ]) {
+    if (!index.has(part.id)) {
+      index.set(part.id, part);
+    }
+  }
+  return index;
 }
 
 function optionsForField(
@@ -110,12 +109,12 @@ function isEnvironment(value: unknown): value is FinishEnvironment {
 function selectionWeight(
   config: Record<string, unknown>,
   chassis: ChassisDefinition,
-  catalog: Catalog,
+  partIndex: ReadonlyMap<unknown, PartDefinition>,
 ): number {
   let weight = chassis.weight;
 
   for (const field of selectionFields) {
-    const part = findPart(config[field], catalog);
+    const part = partIndex.get(config[field]);
     if (part?.slots.includes(slotByField[field])) {
       weight += part.weight;
     }
@@ -130,6 +129,7 @@ export function validateConfiguration(
 ): ValidationResult {
   const config = isRecord(input) ? input : {};
   const issues: ValidationIssue[] = [];
+  const partIndex = createPartIndex(catalog);
 
   if (config.version !== 1) {
     pushIssue(issues, "version", "unsupported-version", config.version);
@@ -141,7 +141,7 @@ export function validateConfiguration(
   }
 
   for (const field of selectionFields) {
-    const part = findPart(config[field], catalog);
+    const part = partIndex.get(config[field]);
     if (!part) {
       pushIssue(issues, field, "unknown-option", config[field]);
       continue;
@@ -183,7 +183,7 @@ export function validateConfiguration(
   }
 
   if (chassis) {
-    const weight = selectionWeight(config, chassis, catalog);
+    const weight = selectionWeight(config, chassis, partIndex);
     if (weight > chassis.weightLimit) {
       pushIssue(issues, "weight", "weight-limit", weight);
     }
@@ -215,30 +215,41 @@ function normalizeFinish(value: unknown): MechFinish {
   };
 }
 
-function firstLegalPart(
-  field: SelectionField,
-  catalog: Catalog,
-  chassisId: ChassisId,
-): PartDefinition {
-  const part = optionsForField(field, catalog).find((candidate) =>
-    isPartLegalForField(candidate, field, chassisId),
-  );
-  if (!part) {
-    throw new Error(`Catalog has no legal option for ${field}`);
-  }
-  return part;
-}
-
 function normalizedPart(
   field: SelectionField,
   value: unknown,
   catalog: Catalog,
   chassisId: ChassisId,
-): PartDefinition {
-  const selected = findPart(value, catalog);
-  return selected && isPartLegalForField(selected, field, chassisId)
-    ? selected
-    : firstLegalPart(field, catalog, chassisId);
+  partIndex: ReadonlyMap<unknown, PartDefinition>,
+): PartDefinition | undefined {
+  const selected = partIndex.get(value);
+  if (selected && isPartLegalForField(selected, field, chassisId)) {
+    return selected;
+  }
+
+  const options = optionsForField(field, catalog);
+  const firstLegal = options.find((candidate) =>
+    isPartLegalForField(candidate, field, chassisId),
+  );
+  if (firstLegal) return firstLegal;
+
+  if (selected?.slots.includes(slotByField[field])) return selected;
+  return options.find((candidate) =>
+    candidate.slots.includes(slotByField[field]),
+  );
+}
+
+function normalizedPartId<Field extends SelectionField>(
+  field: Field,
+  value: unknown,
+  catalog: Catalog,
+  chassisId: ChassisId,
+  partIndex: ReadonlyMap<unknown, PartDefinition>,
+  fallback: MechConfiguration[Field],
+): MechConfiguration[Field] {
+  return (
+    normalizedPart(field, value, catalog, chassisId, partIndex)?.id ?? fallback
+  ) as MechConfiguration[Field];
 }
 
 function legalOptions(
@@ -251,64 +262,136 @@ function legalOptions(
   );
 }
 
+interface WeightSearchState {
+  weight: number;
+  changes: number;
+  optionIndices: readonly number[];
+  partIds: readonly string[];
+}
+
+function compareIndexVectors(
+  left: readonly number[],
+  right: readonly number[],
+): number {
+  const length = Math.min(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    if (left[index] !== right[index]) {
+      return left[index] - right[index];
+    }
+  }
+  return left.length - right.length;
+}
+
+function isPreferredState(
+  candidate: WeightSearchState,
+  current: WeightSearchState | undefined,
+): boolean {
+  if (!current) return true;
+  if (candidate.changes !== current.changes) {
+    return candidate.changes < current.changes;
+  }
+  return (
+    compareIndexVectors(candidate.optionIndices, current.optionIndices) < 0
+  );
+}
+
 function repairWeight(
   config: MechConfiguration,
   catalog: Catalog,
 ): MechConfiguration {
-  if (validateConfiguration(config, catalog).ok) {
+  const validation = validateConfiguration(config, catalog);
+  if (
+    validation.ok ||
+    !validation.issues.some((issue) => issue.code === "weight-limit")
+  ) {
     return config;
   }
+
+  const chassis = findChassis(config.chassisId, catalog);
+  if (!chassis) return config;
 
   const currentIds = selectionFields.map((field) => config[field]);
   const optionGroups = selectionFields.map((field) =>
     legalOptions(field, catalog, config.chassisId),
   );
-  let best: MechConfiguration | undefined;
-  let bestChanges = Number.POSITIVE_INFINITY;
+  if (optionGroups.some((options) => options.length === 0)) {
+    return config;
+  }
 
-  for (const head of optionGroups[0]) {
-    for (const armor of optionGroups[1]) {
-      for (const leftWeapon of optionGroups[2]) {
-        for (const rightWeapon of optionGroups[3]) {
-          for (const rearModule of optionGroups[4]) {
-            const candidate: MechConfiguration = {
-              ...config,
-              headId: head.id as MechConfiguration["headId"],
-              armorId: armor.id as MechConfiguration["armorId"],
-              leftWeaponId:
-                leftWeapon.id as MechConfiguration["leftWeaponId"],
-              rightWeaponId:
-                rightWeapon.id as MechConfiguration["rightWeaponId"],
-              rearModuleId:
-                rearModule.id as MechConfiguration["rearModuleId"],
-            };
+  let frontier = new Map<number, WeightSearchState>([
+    [
+      chassis.weight,
+      {
+        weight: chassis.weight,
+        changes: 0,
+        optionIndices: [],
+        partIds: [],
+      },
+    ],
+  ]);
 
-            if (!validateConfiguration(candidate, catalog).ok) continue;
+  for (let fieldIndex = 0; fieldIndex < optionGroups.length; fieldIndex += 1) {
+    const nextFrontier = new Map<number, WeightSearchState>();
+    const options = optionGroups[fieldIndex];
 
-            const candidateIds = selectionFields.map(
-              (field) => candidate[field],
-            );
-            const changes = candidateIds.reduce(
-              (count, id, index) => count + Number(id !== currentIds[index]),
-              0,
-            );
+    for (const state of frontier.values()) {
+      for (let optionIndex = 0; optionIndex < options.length; optionIndex += 1) {
+        const part = options[optionIndex];
+        const weight = state.weight + part.weight;
+        if (weight > chassis.weightLimit) continue;
 
-            if (changes < bestChanges) {
-              best = candidate;
-              bestChanges = changes;
-            }
-          }
+        const partId = part.id;
+        const candidate: WeightSearchState = {
+          weight,
+          changes:
+            state.changes + Number(partId !== currentIds[fieldIndex]),
+          optionIndices: [...state.optionIndices, optionIndex],
+          partIds: [...state.partIds, partId],
+        };
+        const current = nextFrontier.get(weight);
+        if (isPreferredState(candidate, current)) {
+          nextFrontier.set(weight, candidate);
         }
       }
     }
+
+    frontier = nextFrontier;
+    if (frontier.size === 0) return config;
   }
 
-  if (!best) {
-    throw new Error(
-      `Catalog has no legal configuration for ${config.chassisId}`,
-    );
+  let best: WeightSearchState | undefined;
+  for (const candidate of frontier.values()) {
+    if (isPreferredState(candidate, best)) {
+      best = candidate;
+    }
   }
-  return best;
+  if (!best) return config;
+
+  return {
+    ...config,
+    headId: best.partIds[0] as MechConfiguration["headId"],
+    armorId: best.partIds[1] as MechConfiguration["armorId"],
+    leftWeaponId: best.partIds[2] as MechConfiguration["leftWeaponId"],
+    rightWeaponId: best.partIds[3] as MechConfiguration["rightWeaponId"],
+    rearModuleId: best.partIds[4] as MechConfiguration["rearModuleId"],
+  };
+}
+
+function mergeIssues(
+  original: readonly ValidationIssue[],
+  final: readonly ValidationIssue[],
+): ValidationIssue[] {
+  const merged = [...original];
+  for (const issue of final) {
+    const alreadyReported = merged.some(
+      (candidate) =>
+        candidate.field === issue.field &&
+        candidate.code === issue.code &&
+        Object.is(candidate.value, issue.value),
+    );
+    if (!alreadyReported) merged.push(issue);
+  }
+  return merged;
 }
 
 export function normalizeConfiguration(
@@ -316,52 +399,62 @@ export function normalizeConfiguration(
   catalog: Catalog,
 ): NormalizationResult {
   const source = isRecord(input) ? input : {};
-  const issues = validateConfiguration(input, catalog).issues;
+  const originalIssues = validateConfiguration(input, catalog).issues;
   const chassis =
     findChassis(source.chassisId, catalog) ?? catalog.chassis[0];
-
-  if (!chassis) {
-    throw new Error("Catalog has no chassis");
-  }
+  const chassisId = chassis?.id ?? defaultConfiguration.chassisId;
+  const partIndex = createPartIndex(catalog);
 
   const normalized: MechConfiguration = {
     version: 1,
-    chassisId: chassis.id,
-    headId: normalizedPart(
+    chassisId,
+    headId: normalizedPartId(
       "headId",
       source.headId,
       catalog,
-      chassis.id,
-    ).id as MechConfiguration["headId"],
-    armorId: normalizedPart(
+      chassisId,
+      partIndex,
+      defaultConfiguration.headId,
+    ),
+    armorId: normalizedPartId(
       "armorId",
       source.armorId,
       catalog,
-      chassis.id,
-    ).id as MechConfiguration["armorId"],
-    leftWeaponId: normalizedPart(
+      chassisId,
+      partIndex,
+      defaultConfiguration.armorId,
+    ),
+    leftWeaponId: normalizedPartId(
       "leftWeaponId",
       source.leftWeaponId,
       catalog,
-      chassis.id,
-    ).id as MechConfiguration["leftWeaponId"],
-    rightWeaponId: normalizedPart(
+      chassisId,
+      partIndex,
+      defaultConfiguration.leftWeaponId,
+    ),
+    rightWeaponId: normalizedPartId(
       "rightWeaponId",
       source.rightWeaponId,
       catalog,
-      chassis.id,
-    ).id as MechConfiguration["rightWeaponId"],
-    rearModuleId: normalizedPart(
+      chassisId,
+      partIndex,
+      defaultConfiguration.rightWeaponId,
+    ),
+    rearModuleId: normalizedPartId(
       "rearModuleId",
       source.rearModuleId,
       catalog,
-      chassis.id,
-    ).id as MechConfiguration["rearModuleId"],
+      chassisId,
+      partIndex,
+      defaultConfiguration.rearModuleId,
+    ),
     finish: normalizeFinish(source.finish),
   };
+  const repaired = repairWeight(normalized, catalog);
+  const finalIssues = validateConfiguration(repaired, catalog).issues;
 
   return {
-    config: repairWeight(normalized, catalog),
-    issues: [...issues],
+    config: repaired,
+    issues: mergeIssues(originalIssues, finalIssues),
   };
 }
