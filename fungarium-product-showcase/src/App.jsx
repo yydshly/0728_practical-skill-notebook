@@ -93,7 +93,7 @@ export default function App() {
           </p>
         </section>
 
-        <ShowcaseHud />
+        <ShowcaseHud canvasAvailable={canvasUsable} />
       </div>
 
       <InfoDialog />

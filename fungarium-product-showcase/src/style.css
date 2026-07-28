@@ -323,6 +323,13 @@ a {
   background: rgba(235, 238, 231, 0.06);
 }
 
+.showcase-actions button:disabled {
+  border-color: var(--line) !important;
+  background: rgba(235, 238, 231, 0.025) !important;
+  color: #69716b;
+  cursor: not-allowed;
+}
+
 .initial-loading {
   position: absolute;
   z-index: 3;
