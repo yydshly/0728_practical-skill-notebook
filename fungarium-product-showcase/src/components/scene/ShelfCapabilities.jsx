@@ -51,7 +51,7 @@ export function ShelfCapabilities() {
         <Html center position={[0, -0.52, 0]} distanceFactor={4}>
           <button
             type="button"
-            aria-label={`Select ${capability.railLabel}`}
+            aria-label={`选择${capability.railLabel}`}
             onClick={() => selectIndex(index)}
             onKeyDown={(event) => activateFromKeyboard(event, index)}
             onPointerDown={(event) => event.stopPropagation()}

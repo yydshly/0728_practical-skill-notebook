@@ -31,7 +31,9 @@ function usePrefersReducedMotion() {
 function browserCanRender3d() {
   if (typeof window === "undefined") return false;
   return Boolean(
-    window.WebGLRenderingContext || window.WebGL2RenderingContext,
+    window.WebGLRenderingContext ||
+      window.WebGL2RenderingContext ||
+      (typeof navigator !== "undefined" && navigator.gpu),
   );
 }
 
