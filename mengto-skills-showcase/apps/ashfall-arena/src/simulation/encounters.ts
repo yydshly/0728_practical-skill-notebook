@@ -197,19 +197,104 @@ const allCompleted = (
     state.encounter.completedIds.includes(id)
   );
 
+export function clearTransientEnemyCombat(
+  state: Readonly<GameState>,
+): GameState {
+  const combatChanged =
+    state.combat.enemyProjectiles.length > 0 ||
+    state.combat.spawnedEnemyAttackIds.length > 0 ||
+    state.combat.receivedAttackIds.length > 0;
+  const enemyAiChanged =
+    state.enemyAi.meleeSlotOwner !== null ||
+    state.enemyAi.rangedSlotOwner !== null ||
+    state.enemyAi.rangedWindowUsed ||
+    state.enemyAi.supportSlotOwner !== null;
+  const transientEnemyIds = new Set(
+    Object.values(state.enemies)
+      .filter(
+        (enemy) =>
+          enemy.currentMoveId !== null ||
+          enemy.movePhase !== "none" ||
+          enemy.moveElapsedTicks !== 0 ||
+          enemy.cooldownTicks !== 0 ||
+          enemy.hitTargetIds.length > 0,
+      )
+      .map(({ id }) => id),
+  );
+  if (
+    !combatChanged &&
+    !enemyAiChanged &&
+    transientEnemyIds.size === 0
+  ) {
+    return state as GameState;
+  }
+
+  const enemies =
+    transientEnemyIds.size === 0
+      ? state.enemies
+      : Object.fromEntries(
+          Object.entries(state.enemies).map(([id, enemy]) => {
+            if (!transientEnemyIds.has(id)) return [id, enemy];
+            const wasAttacking = enemy.action === "attack";
+            return [
+              id,
+              {
+                ...enemy,
+                intent:
+                  enemy.intent === "telegraph" ||
+                    enemy.intent === "attack" ||
+                    enemy.intent === "recover"
+                    ? "observe" as const
+                    : enemy.intent,
+                action: wasAttacking ? "idle" as const : enemy.action,
+                actionTime: wasAttacking ? 0 : enemy.actionTime,
+                currentMoveId: null,
+                movePhase: "none" as const,
+                moveElapsedTicks: 0,
+                cooldownTicks: 0,
+                hitTargetIds: [],
+              },
+            ];
+          }),
+        );
+
+  return {
+    ...state,
+    enemies,
+    combat: combatChanged
+      ? {
+          ...state.combat,
+          enemyProjectiles: [],
+          spawnedEnemyAttackIds: [],
+          receivedAttackIds: [],
+        }
+      : state.combat,
+    enemyAi: enemyAiChanged
+      ? {
+          ...state.enemyAi,
+          meleeSlotOwner: null,
+          rangedSlotOwner: null,
+          rangedWindowUsed: false,
+          supportSlotOwner: null,
+        }
+      : state.enemyAi,
+  };
+}
+
 const transition = (
   state: GameState,
   phase: EncounterPhase,
   gateOpen: boolean,
-): GameState => ({
-  ...state,
-  encounter: {
-    ...state.encounter,
-    phase,
-    gateOpen,
-    phaseEntryTick: state.tick,
-  },
-});
+): GameState =>
+  clearTransientEnemyCombat({
+    ...state,
+    encounter: {
+      ...state.encounter,
+      phase,
+      gateOpen,
+      phaseEntryTick: state.tick,
+    },
+  });
 
 const isInsideTraining = (state: GameState): boolean =>
   Math.hypot(
@@ -418,13 +503,13 @@ export function stepEncounter(
     const bossDefeated =
       working.encounter.completedIds.includes("boss-sovereign") ||
       (working.enemies["boss-sovereign"]?.health ?? 1) <= 0;
-    const defeatedState = {
+    const defeatedState = clearTransientEnemyCombat({
       ...working,
       status: "defeated" as const,
       encounter: bossDefeated
         ? { ...working.encounter, pendingSummons: [] }
         : working.encounter,
-    };
+    });
     return {
       state: defeatedState,
       events: [],
@@ -529,9 +614,9 @@ export function createEncounterFixture(
       !options.accelerated &&
       options.enemyAiEnabled === undefined
     ) {
-      return state;
+      return clearTransientEnemyCombat(state);
     }
-    return {
+    return clearTransientEnemyCombat({
       ...state,
       enemies: Object.fromEntries(
         Object.entries(state.enemies).map(([id, enemy]) => [
@@ -546,7 +631,7 @@ export function createEncounterFixture(
           },
         ]),
       ),
-    };
+    });
   };
   switch (fixture) {
     case "fresh":

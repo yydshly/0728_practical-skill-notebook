@@ -6,26 +6,41 @@ import type {
   EnemyRewardId,
 } from "../simulation/types";
 
-const rewards = Object.freeze({
-  "crawler-reward": Object.freeze({ id: "crawler-reward", souls: 10 }),
-  "warden-reward": Object.freeze({ id: "warden-reward", souls: 15 }),
-  "elite-reward": Object.freeze({
+const deepFreeze = <Value>(value: Value): Value => {
+  const seen = new WeakSet<object>();
+  const freeze = (candidate: unknown): void => {
+    if (
+      candidate === null ||
+      (typeof candidate !== "object" && typeof candidate !== "function") ||
+      seen.has(candidate)
+    ) {
+      return;
+    }
+    seen.add(candidate);
+    for (const child of Object.values(candidate)) freeze(child);
+    Object.freeze(candidate);
+  };
+  freeze(value);
+  return value;
+};
+
+const rewards = deepFreeze({
+  "crawler-reward": { id: "crawler-reward", souls: 10 },
+  "warden-reward": { id: "warden-reward", souls: 15 },
+  "elite-reward": {
     id: "elite-reward",
     souls: 35,
     healingCharges: 1,
-  }),
-  "sovereign-reward": Object.freeze({
+  },
+  "sovereign-reward": {
     id: "sovereign-reward",
     completion: true,
-  }),
+  },
 } satisfies Record<EnemyRewardId, Readonly<Record<string, string | number | boolean>>>);
 
 const freezeMove = (
   move: EnemyMoveDefinition,
-): EnemyMoveDefinition => {
-  Object.freeze(move.ownerKinds);
-  return Object.freeze(move);
-};
+): EnemyMoveDefinition => deepFreeze(move);
 
 const moveRecord = {
   "crawler-lunge": {
@@ -143,12 +158,7 @@ export const enemyMoves = Object.freeze(
 
 const freezeDefinition = (
   definition: EnemyDefinition,
-): EnemyDefinition => {
-  Object.freeze(definition.preferredRange);
-  Object.freeze(definition.moveIds);
-  Object.freeze(definition.presentation);
-  return Object.freeze(definition);
-};
+): EnemyDefinition => deepFreeze(definition);
 
 const definitionRecord = {
   "glass-crawler": {
@@ -250,6 +260,10 @@ export function validateEnemyContent(
   for (const [key, move] of Object.entries(moves).sort(([left], [right]) =>
     left.localeCompare(right)
   )) {
+    if (move === undefined) {
+      errors.push(`${key} is undefined`);
+      continue;
+    }
     if (key !== move.id) errors.push(`${key} has mismatched move id ${move.id}`);
     if (moveIds.has(move.id)) errors.push(`duplicate move id ${move.id}`);
     moveIds.add(move.id);
@@ -263,11 +277,47 @@ export function validateEnemyContent(
     ) {
       errors.push(`${move.id} has invalid timing or range`);
     }
+    if (
+      move.contactKind === "projectile" &&
+      move.projectile === undefined
+    ) {
+      errors.push(
+        `${move.id} projectile contact requires projectile content`,
+      );
+    }
+    if (
+      move.projectile !== undefined &&
+      (
+        move.contactKind !== "projectile" ||
+        move.slot !== "ranged"
+      )
+    ) {
+      errors.push(
+        `${move.id} projectile content requires a ranged projectile contact`,
+      );
+    }
+    if (move.projectile !== undefined) {
+      for (const field of [
+        "speed",
+        "radius",
+        "lifetimeSeconds",
+        "originForward",
+      ] as const) {
+        const value = move.projectile[field];
+        if (!Number.isFinite(value) || value <= 0) {
+          errors.push(`${move.id} has invalid projectile ${field}`);
+        }
+      }
+    }
   }
 
   for (const [key, definition] of Object.entries(definitions).sort(
     ([left], [right]) => left.localeCompare(right),
   )) {
+    if (definition === undefined) {
+      errors.push(`${key} is undefined`);
+      continue;
+    }
     if (key !== definition.id) {
       errors.push(`${key} has mismatched definition id ${definition.id}`);
     }
@@ -275,7 +325,15 @@ export function validateEnemyContent(
       errors.push(`duplicate enemy id ${definition.id}`);
     }
     definitionIds.add(definition.id);
+    const referencedMoveIds = new Set<EnemyMoveId>();
     for (const moveId of definition.moveIds) {
+      if (referencedMoveIds.has(moveId)) {
+        errors.push(
+          `${definition.id} references duplicate move ${String(moveId)}`,
+        );
+        continue;
+      }
+      referencedMoveIds.add(moveId);
       const move = moves[moveId];
       if (!move) {
         errors.push(`${definition.id} references missing move ${moveId}`);

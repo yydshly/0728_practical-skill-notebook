@@ -7,6 +7,7 @@ import {
   createEncounterEnemy,
   stepEncounter,
 } from "../src/simulation/encounters";
+import * as encounterApi from "../src/simulation/encounters";
 import { stepGame } from "../src/simulation/step-game";
 import type { GameEvent, GameState } from "../src/simulation/types";
 import { neutralIntent } from "./helpers/simulation-fixtures";
@@ -16,7 +17,122 @@ const defeat = (actorId: string): GameEvent => ({
   actorId,
 });
 
+const withEnemyTransients = (source: GameState): GameState => {
+  const firstEnemy = Object.values(source.enemies)
+    .sort((left, right) => left.id.localeCompare(right.id))[0];
+  return {
+    ...source,
+    enemies:
+      firstEnemy === undefined
+        ? source.enemies
+        : {
+            ...source.enemies,
+            [firstEnemy.id]: {
+              ...firstEnemy,
+              intent: "attack",
+              currentMoveId:
+                firstEnemy.kind === "ash-warden"
+                  ? "warden-bolt"
+                  : firstEnemy.kind === "bell-sovereign"
+                    ? "sovereign-shockwave"
+                    : firstEnemy.kind === "bell-elite"
+                      ? "elite-sweep"
+                      : "crawler-lunge",
+              movePhase: "active",
+              moveElapsedTicks: 1,
+              cooldownTicks: 17,
+              hitTargetIds: ["player"],
+            },
+          },
+    enemyAi: {
+      ...source.enemyAi,
+      meleeSlotOwner: firstEnemy?.id ?? "stale-melee",
+      rangedSlotOwner: "stale-ranged",
+      rangedWindowUsed: true,
+      supportSlotOwner: "stale-support",
+    },
+    combat: {
+      ...source.combat,
+      projectiles: [{
+        id: "player-shot:projectile",
+        attackId: "player-shot",
+        ownerId: "player",
+        position: { x: 0, y: -2 },
+        direction: { x: 0, y: 1 },
+        speed: 12,
+        radius: 0.16,
+        ageTicks: 2,
+        lifetimeTicks: 75,
+        targetLayer: "enemy",
+        hitTargetIds: [],
+      }],
+      enemyProjectiles: [{
+        id: "old-warden:warden-bolt:7:projectile",
+        attackId: "old-warden:warden-bolt:7",
+        ownerId: "old-warden",
+        moveId: "warden-bolt",
+        position: {
+          x: source.player.position.x,
+          y: source.player.position.y - 1,
+        },
+        direction: { x: 0, y: 1 },
+        speed: 8,
+        radius: 0.18,
+        ageTicks: 3,
+        lifetimeTicks: 90,
+        targetLayer: "player",
+        team: "enemy",
+        hitTargetIds: [],
+      }],
+      spawnedEnemyAttackIds: ["old-warden:warden-bolt:7"],
+      receivedAttackIds: ["old-warden:warden-bolt:6"],
+    },
+  };
+};
+
+const expectEnemyTransientsCleared = (state: GameState): void => {
+  expect(state.combat.enemyProjectiles).toEqual([]);
+  expect(state.combat.spawnedEnemyAttackIds).toEqual([]);
+  expect(state.combat.receivedAttackIds).toEqual([]);
+  expect(state.combat.projectiles).toHaveLength(1);
+  expect(state.enemyAi).toMatchObject({
+    meleeSlotOwner: null,
+    rangedSlotOwner: null,
+    rangedWindowUsed: false,
+    supportSlotOwner: null,
+  });
+  for (const enemy of Object.values(state.enemies)) {
+    expect(enemy.currentMoveId).toBeNull();
+    expect(enemy.movePhase).toBe("none");
+    expect(enemy.moveElapsedTicks).toBe(0);
+    expect(enemy.cooldownTicks).toBe(0);
+    expect(enemy.hitTargetIds).toEqual([]);
+  }
+};
+
 describe("encounter fixtures", () => {
+  it("exports a pure reusable enemy-transient reset for fixture and retry boundaries", () => {
+    const clear = (
+      encounterApi as typeof encounterApi & {
+        clearTransientEnemyCombat?: (
+          state: Readonly<GameState>,
+        ) => GameState;
+      }
+    ).clearTransientEnemyCombat;
+    expect(clear).toBeTypeOf("function");
+    if (!clear) return;
+
+    const source = withEnemyTransients(
+      createEncounterFixture(700, "boss"),
+    );
+    const before = JSON.stringify(source);
+    const result = clear(source);
+
+    expectEnemyTransientsCleared(result);
+    expect(JSON.stringify(source)).toBe(before);
+    expect(clear(result)).toBe(result);
+  });
+
   it.each([
     ["fresh", "training", false, []],
     [
@@ -52,6 +168,86 @@ describe("encounter fixtures", () => {
 });
 
 describe("complete encounter arc", () => {
+  it.each([
+    ["wave-one", ["wave-one-crawler-a", "wave-one-crawler-b", "wave-one-warden"]],
+    ["elite", ["elite-bell", "elite-crawler"]],
+    ["boss", ["boss-sovereign"]],
+  ] as const)(
+    "clears in-flight enemy attacks when %s reaches its phase boundary",
+    (fixture, defeatedIds) => {
+      const source = withEnemyTransients(
+        createEncounterFixture(701, fixture),
+      );
+      const before = JSON.stringify(source);
+      const result = stepEncounter(
+        source,
+        defeatedIds.map(defeat),
+      );
+
+      expectEnemyTransientsCleared(result.state);
+      expect(JSON.stringify(source)).toBe(before);
+      if (fixture === "wave-one") {
+        expect(result.events).toEqual([{ type: "upgrade-offered" }]);
+      } else if (fixture === "elite") {
+        expect(result.events).toEqual([
+          { type: "encounter-phase", phase: "boss" },
+        ]);
+      } else {
+        expect(result.events).toEqual([
+          { type: "encounter-complete" },
+          { type: "encounter-phase", phase: "complete" },
+        ]);
+      }
+    },
+  );
+
+  it("clears enemy attacks on defeat so a resumed state cannot receive an old hit", () => {
+    const source = withEnemyTransients(
+      createEncounterFixture(702, "wave-one"),
+    );
+    const defeated = stepEncounter({
+      ...source,
+      status: "defeated",
+      player: {
+        ...source.player,
+        health: 0,
+        action: "dead",
+      },
+    }, [defeat("player")]);
+
+    expectEnemyTransientsCleared(defeated.state);
+    let resumedState = {
+      ...defeated.state,
+      status: "playing",
+      player: {
+        ...defeated.state.player,
+        health: defeated.state.player.maxHealth,
+        action: "idle",
+      },
+    } as GameState;
+    const resumedEvents: GameEvent[] = [];
+    for (let tick = 0; tick < 12; tick += 1) {
+      const result = stepGame(
+        resumedState,
+        neutralIntent,
+        1 / 60,
+        arenaContent,
+      );
+      resumedState = result.state;
+      resumedEvents.push(...result.events);
+    }
+    expect(resumedState.player.health).toBe(
+      resumedState.player.maxHealth,
+    );
+    expect(
+      resumedEvents.filter(
+        (event) =>
+          event.type === "contact" &&
+          event.attackId.startsWith("old-warden:"),
+      ),
+    ).toEqual([]);
+  });
+
   it("spawns training only after entering the zone and completes both nonlethal lessons", () => {
     const initial = createInitialState(1);
     const outside = stepEncounter(initial, []);

@@ -6,6 +6,7 @@ import {
 } from "../src/scene/sync-entities";
 import {
   createEncounterFixture,
+  stepEncounter,
 } from "../src/simulation/encounters";
 
 describe("shared monster scene synchronization", () => {
@@ -13,7 +14,7 @@ describe("shared monster scene synchronization", () => {
     const scene = new Scene();
     const knight = createVesperKnight();
     const synchronizer = createEntitySynchronizer(knight, scene);
-    const base = createEncounterFixture(7, "fresh");
+    const base = createEncounterFixture(7, "boss");
     const projectileState = {
       ...base,
       combat: {
@@ -55,7 +56,15 @@ describe("shared monster scene synchronization", () => {
       ];
     });
 
-    synchronizer.sync(base, 1 / 60);
+    const completed = stepEncounter(projectileState, [{
+      type: "defeated",
+      actorId: "boss-sovereign",
+    }]);
+    expect(completed.events).toEqual([
+      { type: "encounter-complete" },
+      { type: "encounter-phase", phase: "complete" },
+    ]);
+    synchronizer.sync(completed.state, 1 / 60);
     expect(synchronizer.getDiagnostics()).toMatchObject({
       enemyProjectileTraceCount: 0,
       enemyProjectileIds: [],

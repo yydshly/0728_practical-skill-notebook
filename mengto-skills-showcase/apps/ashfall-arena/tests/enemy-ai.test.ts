@@ -21,7 +21,9 @@ import {
   stepEnemyCombat,
 } from "../src/simulation/combat";
 import type {
+  EnemyDefinition,
   EnemyIntent,
+  EnemyMoveDefinition,
   EnemyMoveId,
   GameState,
 } from "../src/simulation/types";
@@ -106,6 +108,179 @@ describe("enemy authored content", () => {
       "glass-crawler references missing reward missing-reward",
     ]);
     expect(JSON.stringify(invalid)).toBe(before);
+  });
+
+  it("deep-freezes every authored move child and rejects attempted projectile mutation", () => {
+    const visit = (value: unknown): void => {
+      if (value === null || typeof value !== "object") return;
+      expect(Object.isFrozen(value)).toBe(true);
+      for (const child of Object.values(value)) visit(child);
+    };
+    visit(enemyMoves);
+
+    const projectile = enemyMoves["warden-bolt"].projectile!;
+    expect(() => {
+      (projectile as { speed: number }).speed = 99;
+    }).toThrow(TypeError);
+    expect(projectile.speed).toBe(8);
+  });
+
+  it.each([
+    ["speed", Number.NaN],
+    ["speed", Number.POSITIVE_INFINITY],
+    ["speed", 0],
+    ["speed", -1],
+    ["radius", Number.NaN],
+    ["radius", Number.NEGATIVE_INFINITY],
+    ["radius", 0],
+    ["radius", -0.01],
+    ["lifetimeSeconds", Number.NaN],
+    ["lifetimeSeconds", Number.POSITIVE_INFINITY],
+    ["lifetimeSeconds", 0],
+    ["lifetimeSeconds", -1],
+    ["originForward", Number.NaN],
+    ["originForward", Number.NEGATIVE_INFINITY],
+    ["originForward", 0],
+    ["originForward", -0.1],
+  ] as const)(
+    "rejects projectile %s=%s on an isolated content clone",
+    (field, value) => {
+      const moves = structuredClone(enemyMoves) as Record<
+        EnemyMoveId,
+        EnemyMoveDefinition
+      >;
+      const projectile = moves["warden-bolt"].projectile!;
+      (projectile as unknown as Record<string, number>)[field] = value;
+
+      const result = validateEnemyContent(enemyDefinitions, moves);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toContain(
+        `warden-bolt has invalid projectile ${field}`,
+      );
+      expect(enemyMoves["warden-bolt"].projectile).toMatchObject({
+        speed: 8,
+        radius: 0.18,
+        lifetimeSeconds: 1.5,
+        originForward: 0.62,
+      });
+    },
+  );
+
+  it("requires projectile data only on ranged projectile-contact moves", () => {
+    const missing = structuredClone(enemyMoves) as Record<
+      EnemyMoveId,
+      EnemyMoveDefinition
+    >;
+    delete (
+      missing["warden-bolt"] as EnemyMoveDefinition & {
+        projectile?: EnemyMoveDefinition["projectile"];
+      }
+    ).projectile;
+    expect(validateEnemyContent(enemyDefinitions, missing).errors).toContain(
+      "warden-bolt projectile contact requires projectile content",
+    );
+
+    const wrongContact = structuredClone(enemyMoves) as Record<
+      EnemyMoveId,
+      EnemyMoveDefinition
+    >;
+    (
+      wrongContact["warden-bolt"] as EnemyMoveDefinition & {
+        contactKind: EnemyMoveDefinition["contactKind"];
+      }
+    ).contactKind = "sweep";
+    expect(
+      validateEnemyContent(enemyDefinitions, wrongContact).errors,
+    ).toContain(
+      "warden-bolt projectile content requires a ranged projectile contact",
+    );
+
+    const wrongSlot = structuredClone(enemyMoves) as Record<
+      EnemyMoveId,
+      EnemyMoveDefinition
+    >;
+    (
+      wrongSlot["warden-bolt"] as EnemyMoveDefinition & {
+        slot: EnemyMoveDefinition["slot"];
+      }
+    ).slot = "melee";
+    expect(
+      validateEnemyContent(enemyDefinitions, wrongSlot).errors,
+    ).toContain(
+      "warden-bolt projectile content requires a ranged projectile contact",
+    );
+
+    const explicitUndefined = structuredClone(enemyMoves) as Record<
+      EnemyMoveId,
+      EnemyMoveDefinition
+    >;
+    (
+      explicitUndefined["crawler-lunge"] as unknown as {
+        projectile: EnemyMoveDefinition["projectile"] | undefined;
+      }
+    ).projectile = undefined;
+    expect(
+      validateEnemyContent(enemyDefinitions, explicitUndefined),
+    ).toEqual({ valid: true, errors: [] });
+  });
+
+  it("rejects duplicate and undefined move references without mutating definitions", () => {
+    const duplicateDefinitions = structuredClone(
+      enemyDefinitions,
+    ) as Record<string, EnemyDefinition>;
+    duplicateDefinitions["glass-crawler"] = {
+      ...duplicateDefinitions["glass-crawler"]!,
+      moveIds: ["crawler-lunge", "crawler-lunge"],
+    };
+    expect(
+      validateEnemyContent(duplicateDefinitions, enemyMoves).errors,
+    ).toContain(
+      "glass-crawler references duplicate move crawler-lunge",
+    );
+
+    const undefinedDefinitions = structuredClone(
+      enemyDefinitions,
+    ) as Record<string, EnemyDefinition>;
+    undefinedDefinitions["glass-crawler"] = {
+      ...undefinedDefinitions["glass-crawler"]!,
+      moveIds: [undefined as unknown as EnemyMoveId],
+    };
+    expect(
+      validateEnemyContent(undefinedDefinitions, enemyMoves).errors,
+    ).toContain(
+      "glass-crawler references missing move undefined",
+    );
+    expect(enemyDefinitions["glass-crawler"].moveIds).toEqual([
+      "crawler-lunge",
+    ]);
+  });
+
+  it("reports undefined content entries instead of throwing during validation", () => {
+    const moves = {
+      ...structuredClone(enemyMoves),
+      "warden-bolt": undefined,
+    } as unknown as Record<string, EnemyMoveDefinition>;
+    expect(() =>
+      validateEnemyContent(enemyDefinitions, moves)
+    ).not.toThrow();
+    expect(validateEnemyContent(enemyDefinitions, moves).errors).toEqual(
+      expect.arrayContaining([
+        "warden-bolt is undefined",
+        "ash-warden references missing move warden-bolt",
+      ]),
+    );
+
+    const definitions = {
+      ...structuredClone(enemyDefinitions),
+      "glass-crawler": undefined,
+    } as unknown as Record<string, EnemyDefinition>;
+    expect(() =>
+      validateEnemyContent(definitions, enemyMoves)
+    ).not.toThrow();
+    expect(
+      validateEnemyContent(definitions, enemyMoves).errors,
+    ).toContain("glass-crawler is undefined");
   });
 });
 
