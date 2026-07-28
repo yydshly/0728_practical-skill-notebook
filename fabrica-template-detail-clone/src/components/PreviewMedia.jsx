@@ -5,16 +5,32 @@ export default function PreviewMedia({ videoSrc, posterSrc, alt }) {
   const [isPaused, setIsPaused] = useState(false);
 
   const togglePlayback = () => {
-    if (videoRef.current.paused) videoRef.current.play();
-    else videoRef.current.pause();
-    setIsPaused(videoRef.current.paused);
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      const playback = video.play();
+      if (playback) playback.catch(() => setIsPaused(true));
+    } else {
+      video.pause();
+    }
   };
 
   return (
     <section className="preview-media" aria-label="Template preview">
       <div className="preview-media__strip">
         <div className="preview-media__pane preview-media__video-pane">
-          <video ref={videoRef} autoPlay loop muted playsInline poster={posterSrc} aria-label={alt}>
+          <video
+            ref={videoRef}
+            autoPlay
+            loop
+            muted
+            playsInline
+            poster={posterSrc}
+            aria-label={alt}
+            onPlay={() => setIsPaused(false)}
+            onPause={() => setIsPaused(true)}
+          >
             <source src={videoSrc} type="video/mp4" />
           </video>
           <button type="button" className="preview-media__control" onClick={togglePlayback}>

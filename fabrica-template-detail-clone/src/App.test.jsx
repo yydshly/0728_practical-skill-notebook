@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { vi } from 'vitest';
 import App from './App';
 
@@ -34,12 +34,37 @@ test('opens and closes the mobile navigation panel', () => {
   expect(screen.queryByRole('navigation', { name: 'Mobile navigation' })).toBeNull();
 });
 
-test('switches the preview control from pause to play', () => {
-  const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+test('switches the preview control from pause to play after the media pauses', () => {
   render(<App />);
+  const video = screen.getByLabelText('Fabrica template preview');
+  let isPaused = false;
+  Object.defineProperty(video, 'paused', { configurable: true, get: () => isPaused });
+  const pause = vi.spyOn(video, 'pause').mockImplementation(() => {
+    isPaused = true;
+    fireEvent(video, new Event('pause', { bubbles: true }));
+  });
 
   fireEvent.click(screen.getByRole('button', { name: 'Pause video' }));
+  expect(pause).toHaveBeenCalledOnce();
   expect(screen.getByRole('button', { name: 'Play video' })).toBeVisible();
+  pause.mockRestore();
+});
+
+test('keeps the preview control ready to play when restart is rejected', async () => {
+  render(<App />);
+  const video = screen.getByLabelText('Fabrica template preview');
+  let isPaused = true;
+  Object.defineProperty(video, 'paused', { configurable: true, get: () => isPaused });
+  fireEvent(video, new Event('pause', { bubbles: true }));
+  expect(screen.getByRole('button', { name: 'Play video' })).toBeVisible();
+  const play = vi.spyOn(video, 'play').mockImplementation(() => {
+    isPaused = false;
+    return Promise.reject(new Error('Playback was blocked'));
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
+
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Play video' })).toBeVisible());
   play.mockRestore();
 });
 
