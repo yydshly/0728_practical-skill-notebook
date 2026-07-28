@@ -2,7 +2,6 @@ export default function SiteHeader({ onOpenSearch, onToggleMenu, isMenuOpen }) {
   return (
     <header className="site-header">
       <a className="site-header__brand" href="/" aria-label="Best Website Template home">
-        <span className="site-header__brand-mark" aria-hidden="true">B</span>
         <span>Best Website Template</span>
       </a>
 

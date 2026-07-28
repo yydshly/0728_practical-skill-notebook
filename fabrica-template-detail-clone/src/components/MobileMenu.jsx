@@ -12,10 +12,6 @@ export default function MobileMenu({ isOpen, onClose, items }) {
       </div>
       <div className="mobile-menu__bottom">
         <a href="/about">About Best Website Template</a>
-        <div className="mobile-menu__socials" aria-label="Social links">
-          <a href="https://x.com" aria-label="X">𝕏</a>
-          <a href="https://instagram.com" aria-label="Instagram">◎</a>
-        </div>
       </div>
     </nav>
   );

@@ -95,17 +95,6 @@ video {
   letter-spacing: -0.03em;
 }
 
-.site-header__brand-mark {
-  width: 21px;
-  height: 21px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: #111;
-  border-radius: 50%;
-  font-size: 12px;
-}
-
 .site-header__desktop-nav { gap: 30px; font-size: 13px; }
 .site-header__desktop-nav a:hover, .mobile-menu a:hover { text-decoration: underline; }
 
@@ -155,7 +144,6 @@ video {
 .mobile-menu__links { display: grid; margin-top: clamp(48px, 12vh, 120px); }
 .mobile-menu__links a { padding: 14px 0; border-bottom: 1px solid var(--border-color); font-size: clamp(28px, 8vw, 42px); line-height: 1.15; letter-spacing: -.04em; }
 .mobile-menu__bottom { margin-top: auto; padding-top: 36px; font-size: 13px; }
-.mobile-menu__socials { display: flex; gap: 13px; margin-top: 17px; font-size: 19px; }
 
 @media (max-width: 767px) {
   .site-header__desktop-nav { display: none; }

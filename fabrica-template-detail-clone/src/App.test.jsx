@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import App from './App';
 
 test('renders the Fabrica template identity', () => {
@@ -23,9 +23,12 @@ test('opens and closes the mobile navigation panel', () => {
   const menuButton = screen.getByRole('button', { name: 'Open menu' });
   fireEvent.click(menuButton);
   expect(menuButton).toHaveAttribute('aria-expanded', 'true');
-  expect(screen.getByRole('navigation', { name: 'Mobile navigation' })).toBeVisible();
+  const mobileNavigation = screen.getByRole('navigation', { name: 'Mobile navigation' });
+  expect(mobileNavigation).toBeVisible();
   expect(screen.getByRole('link', { name: 'Webflow' })).toHaveAttribute('href', '/templates/webflow');
+  expect(within(mobileNavigation).queryByRole('link', { name: 'X' })).toBeNull();
+  expect(within(mobileNavigation).queryByRole('link', { name: 'Instagram' })).toBeNull();
 
-  fireEvent.click(screen.getByRole('button', { name: 'Close menu' }));
+  fireEvent.click(within(mobileNavigation).getByRole('button', { name: 'Close navigation' }));
   expect(screen.queryByRole('navigation', { name: 'Mobile navigation' })).toBeNull();
 });
