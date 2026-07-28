@@ -39,6 +39,18 @@ try {
   const gameHandle = await page.evaluate(() => Boolean(window.__RURAL_ESCAPE__));
   if (!gameHandle) throw new Error('Expected window.__RURAL_ESCAPE__ to be available');
 
+  const normalEvidenceDataset = await page.evaluate(() => {
+    const { evidenceState, renderCalls, renderTriangles } = document.querySelector('.game-shell').dataset;
+    return { evidenceState, renderCalls, renderTriangles };
+  });
+  if (
+    normalEvidenceDataset.evidenceState !== undefined
+    || normalEvidenceDataset.renderCalls !== undefined
+    || normalEvidenceDataset.renderTriangles !== undefined
+  ) {
+    throw new Error('Expected normal URL to omit browser evidence datasets');
+  }
+
   const visualHooks = await page.evaluate(() => {
     const game = window.__RURAL_ESCAPE__;
     const beforeObjective = document.querySelector('#objective').textContent;
@@ -268,12 +280,22 @@ try {
   if (!flashlightPromptVisible) throw new Error('Expected flashlight interaction prompt');
   await page.keyboard.press('KeyE');
 
-  const flashlightSubtitle = await page.evaluate(() => {
-    return document.querySelector('#subtitle').textContent;
-  });
+  const flashlightState = await page.evaluate(() => ({
+    objective: window.__RURAL_ESCAPE__.story.objective,
+    objectiveText: document.querySelector('#objective').textContent,
+    subtitle: document.querySelector('#subtitle').textContent,
+  }));
+  if (flashlightState.objective !== 'escape_south_gate') {
+    throw new Error(
+      `Expected flashlight to advance objective to escape_south_gate, got ${flashlightState.objective}`,
+    );
+  }
+  if (flashlightState.objectiveText !== '沿主路逃往南侧村口。') {
+    throw new Error(`Expected south-gate escape HUD, got ${flashlightState.objectiveText}`);
+  }
   const expectedFlashlightSubtitle = '手电亮起的一刻，主路尽头传来了一声不像人类的喘息。';
-  if (flashlightSubtitle !== expectedFlashlightSubtitle) {
-    throw new Error(`Expected flashlight reveal subtitle, got ${flashlightSubtitle}`);
+  if (flashlightState.subtitle !== expectedFlashlightSubtitle) {
+    throw new Error(`Expected flashlight reveal subtitle, got ${flashlightState.subtitle}`);
   }
 
   const flashlightPromptHidden = await page.evaluate(
@@ -285,7 +307,7 @@ try {
   const subtitleAfterSecondKey = await page.evaluate(
     () => document.querySelector('#subtitle').textContent,
   );
-  if (subtitleAfterSecondKey !== flashlightSubtitle) {
+  if (subtitleAfterSecondKey !== flashlightState.subtitle) {
     throw new Error('Expected repeated KeyE to preserve the flashlight reveal subtitle');
   }
 
@@ -297,8 +319,114 @@ try {
   });
   if (escapeState !== 'complete') throw new Error(`Expected village exit to complete chapter, got ${escapeState}`);
 
+  const evidenceCases = [
+    {
+      id: 'birth',
+      position: [-8, 33],
+      objective: 'leave_home',
+      flags: { radio: false, neighbour: false, flashlight: false },
+      objectiveText: '离开主角家，调查村里的异常。',
+    },
+    {
+      id: 'sighting',
+      position: [0, 8],
+      objective: 'escape_south_gate',
+      flags: { radio: true, neighbour: true, flashlight: true },
+      objectiveText: '沿主路逃往南侧村口。',
+    },
+    {
+      id: 'south-gate',
+      position: [0, -32],
+      objective: 'complete',
+      flags: { radio: true, neighbour: true, flashlight: true },
+      objectiveText: '第一章完成：你穿过了南侧村口。',
+    },
+  ];
+
+  for (const evidenceCase of evidenceCases) {
+    await page.goto(
+      `http://127.0.0.1:${port}/?evidence=${evidenceCase.id}`,
+      { waitUntil: 'domcontentloaded' },
+    );
+    const fixtureState = await page.evaluate(() => {
+      const game = window.__RURAL_ESCAPE__;
+      const shellElement = document.querySelector('.game-shell');
+      return {
+        evidenceState: shellElement.dataset.evidenceState,
+        playerPosition: [game.player.position.x, game.player.position.z],
+        cameraMode: game.camera.mode,
+        storyObjective: game.story.objective,
+        storyFlags: { ...game.story.flags },
+        objectiveText: document.querySelector('#objective').textContent,
+        uiPhase: shellElement.dataset.uiPhase,
+        titleHidden: document.querySelector('.title-lockup').getAttribute('aria-hidden'),
+      };
+    });
+    if (fixtureState.evidenceState !== evidenceCase.id) {
+      throw new Error(
+        `Expected ${evidenceCase.id} evidence dataset, got ${fixtureState.evidenceState}`,
+      );
+    }
+    if (
+      Math.hypot(
+        fixtureState.playerPosition[0] - evidenceCase.position[0],
+        fixtureState.playerPosition[1] - evidenceCase.position[1],
+      ) > 0.001
+    ) {
+      throw new Error(
+        `Expected ${evidenceCase.id} player position ${evidenceCase.position}, `
+        + `got ${fixtureState.playerPosition}`,
+      );
+    }
+    if (fixtureState.cameraMode !== 'third-person') {
+      throw new Error(`Expected ${evidenceCase.id} third-person camera`);
+    }
+    if (fixtureState.storyObjective !== evidenceCase.objective) {
+      throw new Error(
+        `Expected ${evidenceCase.id} objective ${evidenceCase.objective}, `
+        + `got ${fixtureState.storyObjective}`,
+      );
+    }
+    if (
+      fixtureState.storyFlags.radio !== evidenceCase.flags.radio
+      || fixtureState.storyFlags.neighbour !== evidenceCase.flags.neighbour
+      || fixtureState.storyFlags.flashlight !== evidenceCase.flags.flashlight
+    ) {
+      throw new Error(`Expected ${evidenceCase.id} deterministic story flags`);
+    }
+    if (fixtureState.objectiveText !== evidenceCase.objectiveText) {
+      throw new Error(
+        `Expected ${evidenceCase.id} HUD "${evidenceCase.objectiveText}", `
+        + `got "${fixtureState.objectiveText}"`,
+      );
+    }
+    if (fixtureState.uiPhase !== 'playing' || fixtureState.titleHidden !== 'true') {
+      throw new Error(`Expected ${evidenceCase.id} evidence fixture to dismiss the intro`);
+    }
+
+    await page.waitForFunction(() => {
+      const { renderCalls, renderTriangles } = document.querySelector('.game-shell').dataset;
+      const calls = Number(renderCalls);
+      const triangles = Number(renderTriangles);
+      return Number.isFinite(calls) && calls > 0
+        && Number.isFinite(triangles) && triangles > 0;
+    });
+    const renderEvidence = await page.evaluate(() => {
+      const { renderCalls, renderTriangles } = document.querySelector('.game-shell').dataset;
+      return { calls: Number(renderCalls), triangles: Number(renderTriangles) };
+    });
+    if (
+      !Number.isFinite(renderEvidence.calls)
+      || renderEvidence.calls <= 0
+      || !Number.isFinite(renderEvidence.triangles)
+      || renderEvidence.triangles <= 0
+    ) {
+      throw new Error(`Expected positive renderer evidence for ${evidenceCase.id}`);
+    }
+  }
+
   await browser.close();
-  console.log('Smoke test passed: visual hooks, viewport safety, traversal, story, and camera.');
+  console.log('Smoke test passed: visual hooks, evidence URLs, traversal, story, and camera.');
 } finally {
   server.kill();
 }

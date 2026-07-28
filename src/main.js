@@ -48,6 +48,26 @@ const allowedKinds = {
   visit_courtyard: ['neighbour'],
   reach_granary: ['flashlight'],
 };
+const searchParams = new URLSearchParams(window.location.search);
+const hasEvidenceParam = searchParams.has('evidence');
+const evidenceState = searchParams.get('evidence');
+const evidenceFixtures = {
+  birth: {
+    position: village.anchors.player_home,
+    flags: { radio: false, neighbour: false, flashlight: false },
+    objective: 'leave_home',
+  },
+  sighting: {
+    position: new THREE.Vector3(0, 0, 8),
+    flags: { radio: true, neighbour: true, flashlight: true },
+    objective: 'escape_south_gate',
+  },
+  'south-gate': {
+    position: new THREE.Vector3(0, 0, -32),
+    flags: { radio: true, neighbour: true, flashlight: true },
+    objective: 'complete',
+  },
+};
 let nearbyInteraction = null;
 
 function updateInteraction() {
@@ -68,6 +88,21 @@ function setCameraMode(mode) {
   ui.showSubtitle(state.cameraMode === 'first-person'
     ? '你屏住呼吸，透过门缝观察逐渐安静下来的院落。'
     : '雾色压低了屋檐，远处传来一声急促的犬吠。');
+}
+
+function applyEvidenceFixture() {
+  if (!hasEvidenceParam) return;
+  shell.dataset.evidenceState = evidenceState;
+  const fixture = evidenceFixtures[evidenceState];
+  if (!fixture) return;
+
+  player.position.copy(fixture.position);
+  cameraController.setMode('third-person');
+  state.cameraMode = cameraController.mode;
+  Object.assign(storyDirector.story.flags, fixture.flags);
+  storyDirector.story.objective = fixture.objective;
+  storyDirector.render();
+  ui.completeIntro();
 }
 
 function restart() {
@@ -116,9 +151,14 @@ function frame(now) {
   cameraController.update(dt);
   atmosphere.update((now - startTime) / 1000);
   renderer.render(scene, camera);
+  if (hasEvidenceParam) {
+    shell.dataset.renderCalls = String(renderer.info.render.calls);
+    shell.dataset.renderTriangles = String(renderer.info.render.triangles);
+  }
   requestAnimationFrame(frame);
 }
 
+applyEvidenceFixture();
 resize();
 cameraController.snap();
 requestAnimationFrame(frame);

@@ -11,6 +11,10 @@ const copy = {
     objective: '目标：去晒谷场拿到手电，寻找村口出口。',
     subtitle: '邻居压低声音：别回头，去南边的铁门。',
   },
+  escape_south_gate: {
+    objective: '目标：沿主路逃往南侧村口。',
+    subtitle: '主路尽头的铁门，是离开雾村的唯一方向。',
+  },
 };
 
 const completeCopy = {
@@ -39,6 +43,8 @@ export function createStoryDirector({ ui }) {
       story.objective = 'reach_granary';
     } else if (kind === 'flashlight' && story.flags.neighbour && !story.flags.flashlight) {
       story.flags.flashlight = true;
+      story.objective = 'escape_south_gate';
+      render();
       ui.showSubtitle('手电亮起的一刻，主路尽头传来了一声不像人类的喘息。');
       return;
     }
