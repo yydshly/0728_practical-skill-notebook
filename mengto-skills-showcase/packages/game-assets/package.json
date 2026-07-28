@@ -1,0 +1,13 @@
+{
+  "name": "@showcase/game-assets",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@showcase/content-schema": "*",
+    "three": "^0.183.1"
+  }
+}

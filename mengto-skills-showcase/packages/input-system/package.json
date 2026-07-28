@@ -1,0 +1,9 @@
+{
+  "name": "@showcase/input-system",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  }
+}
