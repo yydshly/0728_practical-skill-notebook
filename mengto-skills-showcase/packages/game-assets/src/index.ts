@@ -2,6 +2,7 @@ import type { AssetKind, AssetManifest } from "@showcase/content-schema";
 
 export { monsters } from "./monsters/definitions";
 export { createProceduralMonster } from "./monsters/create-procedural-monster";
+export { MONSTER_ACTION_DURATIONS } from "./monsters/types";
 export type {
   InspectorOverlayName,
   InspectorState,
@@ -9,7 +10,12 @@ export type {
   MonsterDeliveryStatus,
   MonsterDefinition,
 } from "./monsters/types";
-export type { MonsterActionState, MonsterCollider, MonsterInstance } from "./monsters/create-procedural-monster";
+export type {
+  MonsterActionState,
+  MonsterCollider,
+  MonsterGroundContact,
+  MonsterInstance,
+} from "./monsters/create-procedural-monster";
 
 export class AssetRegistry {
   constructor(private readonly assets: readonly AssetManifest[]) {}

@@ -1,10 +1,13 @@
-import type { MonsterDefinition } from "./types";
+import {
+  MONSTER_ACTION_DURATIONS,
+  type MonsterDefinition,
+} from "./types";
 
 const actions = ["Idle", "Walk", "Attack", "Hit", "Death"] as const;
 const shippedSource = (factory: string, silhouette: string) =>
-  "Project-authored Three.js geometry; runtime factory and matching transparent catalog PNG shipped. " +
+  "Project-authored Three.js geometry; runtime factory shipped; catalog PNG recapture required after grounding and animation revision. " +
   `The ${factory} runtime recipe creates the ${silhouette}. ` +
-  "The previewPath is a delivered catalog PNG captured from this same procedural runtime source.";
+  "The previewPath remains delivered from the previous procedural revision and must be recaptured from the updated runtime.";
 
 const freezeMonster = (monster: MonsterDefinition): MonsterDefinition => {
   Object.freeze(monster.source);
@@ -32,15 +35,15 @@ const monsterDefinitions = [
       description: shippedSource("biped", "tall staff-bearing caster"),
       license: "Project-authored content contract",
     },
-    animations: actions.map((name) => ({ name, durationSeconds: 1 })),
+    animations: actions.map((name) => ({ name, durationSeconds: MONSTER_ACTION_DURATIONS[name] })),
     sockets: [
       { name: "target", bone: "head" },
-      { name: "ground", bone: "root" },
+      { name: "ground", bone: "ground-contact" },
       { name: "vfx-hit", bone: "spine" },
       { name: "vfx-death", bone: "pelvis" },
       { name: "attack-staff", bone: "hand-r" },
     ],
-    bounds: { width: 1.2, height: 2.55, depth: 0.96, groundOffset: 0 },
+    bounds: { width: 1.2, height: 2.55, depth: 0.96, groundOffset: -0.6 },
     deliveryStatus: "shipped",
     factoryId: "biped",
     actions,
@@ -61,15 +64,15 @@ const monsterDefinitions = [
       description: shippedSource("crawler", "low six-legged crystal creature"),
       license: "Project-authored content contract",
     },
-    animations: actions.map((name) => ({ name, durationSeconds: 0.9 })),
+    animations: actions.map((name) => ({ name, durationSeconds: MONSTER_ACTION_DURATIONS[name] })),
     sockets: [
       { name: "target", bone: "crystal-crown" },
-      { name: "ground", bone: "root" },
+      { name: "ground", bone: "ground-contact" },
       { name: "vfx-hit", bone: "thorax" },
       { name: "vfx-death", bone: "abdomen" },
       { name: "attack-mandible", bone: "jaw" },
     ],
-    bounds: { width: 1.86, height: 0.84, depth: 1.72, groundOffset: 0 },
+    bounds: { width: 1.86, height: 0.84, depth: 1.72, groundOffset: -0.21 },
     deliveryStatus: "shipped",
     factoryId: "crawler",
     actions,
@@ -90,15 +93,15 @@ const monsterDefinitions = [
       description: shippedSource("armored", "broad armored humanoid with bell helm"),
       license: "Project-authored content contract",
     },
-    animations: actions.map((name) => ({ name, durationSeconds: 1.1 })),
+    animations: actions.map((name) => ({ name, durationSeconds: MONSTER_ACTION_DURATIONS[name] })),
     sockets: [
       { name: "target", bone: "bell-helm" },
-      { name: "ground", bone: "root" },
+      { name: "ground", bone: "ground-contact" },
       { name: "vfx-hit", bone: "chest" },
       { name: "vfx-death", bone: "pelvis" },
       { name: "attack-mace", bone: "hand-r" },
     ],
-    bounds: { width: 1.68, height: 2.18, depth: 1.12, groundOffset: 0 },
+    bounds: { width: 1.68, height: 2.18, depth: 1.12, groundOffset: -0.53 },
     deliveryStatus: "shipped",
     factoryId: "armored",
     actions,
@@ -119,15 +122,15 @@ const monsterDefinitions = [
       description: shippedSource("quadruped", "long-backed four-legged hunter"),
       license: "Project-authored content contract",
     },
-    animations: actions.map((name) => ({ name, durationSeconds: 0.82 })),
+    animations: actions.map((name) => ({ name, durationSeconds: MONSTER_ACTION_DURATIONS[name] })),
     sockets: [
       { name: "target", bone: "head" },
-      { name: "ground", bone: "root" },
+      { name: "ground", bone: "ground-contact" },
       { name: "vfx-hit", bone: "shoulders" },
       { name: "vfx-death", bone: "spine" },
       { name: "attack-jaw", bone: "jaw" },
     ],
-    bounds: { width: 1.04, height: 1.16, depth: 2.42, groundOffset: 0 },
+    bounds: { width: 1.04, height: 1.16, depth: 2.42, groundOffset: -0.24 },
     deliveryStatus: "shipped",
     factoryId: "quadruped",
     actions,

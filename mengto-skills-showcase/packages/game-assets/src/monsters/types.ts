@@ -1,6 +1,14 @@
 import type { AssetManifest } from "@showcase/content-schema";
 
-export type MonsterActionName = "Idle" | "Walk" | "Attack" | "Hit" | "Death";
+export const MONSTER_ACTION_DURATIONS = Object.freeze({
+  Idle: 2,
+  Walk: 1,
+  Attack: 0.8,
+  Hit: 0.45,
+  Death: 1.4,
+});
+
+export type MonsterActionName = keyof typeof MONSTER_ACTION_DURATIONS;
 export type MonsterDeliveryStatus = "declared-not-shipped" | "shipped";
 
 export interface MonsterDefinition extends AssetManifest {

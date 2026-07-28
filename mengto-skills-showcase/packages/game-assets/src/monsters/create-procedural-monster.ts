@@ -10,16 +10,13 @@ import {
   Object3D,
   SphereGeometry,
   type BufferGeometry,
+  Vector3,
 } from "three";
-import type { MonsterActionName, MonsterDefinition } from "./types";
-
-const ACTION_DURATION = {
-  Idle: 2,
-  Walk: 1,
-  Attack: 0.8,
-  Hit: 0.45,
-  Death: 1.4,
-} satisfies Record<MonsterActionName, number>;
+import {
+  MONSTER_ACTION_DURATIONS,
+  type MonsterActionName,
+  type MonsterDefinition,
+} from "./types";
 
 export interface MonsterCollider {
   readonly root: Object3D;
@@ -35,10 +32,16 @@ export interface MonsterActionState {
   readonly completed: boolean;
 }
 
+export interface MonsterGroundContact {
+  readonly name: string;
+  readonly joint: Object3D;
+}
+
 export interface MonsterInstance {
   readonly root: Group;
   readonly joints: ReadonlyMap<string, Object3D>;
   readonly sockets: ReadonlyMap<string, Object3D>;
+  readonly groundContacts: readonly MonsterGroundContact[];
   readonly collider: MonsterCollider;
   playAction(action: MonsterActionName): void;
   setPaused(paused: boolean): void;
@@ -66,6 +69,12 @@ const RECIPES: Record<MonsterDefinition["factoryId"], RecipeBuilder> = {
 };
 
 const loopedActions = new Set<MonsterActionName>(["Idle", "Walk"]);
+const GROUND_CONTACT_NAMES = {
+  biped: ["foot-l", "foot-r"],
+  crawler: ["foot-1-l", "foot-1-r", "foot-2-l", "foot-2-r", "foot-3-l", "foot-3-r"],
+  armored: ["foot-l", "foot-r"],
+  quadruped: ["front-foot-l", "front-foot-r", "rear-foot-l", "rear-foot-r"],
+} as const satisfies Record<MonsterDefinition["factoryId"], readonly string[]>;
 
 /** Builds a review-only, project-authored procedural monster with no external asset inputs. */
 export function createProceduralMonster(definition: MonsterDefinition): MonsterInstance {
@@ -78,9 +87,19 @@ export function createProceduralMonster(definition: MonsterDefinition): MonsterI
 
   const joints = new Map<string, Object3D>();
   const sockets = new Map<string, Object3D>();
+  joints.set(motion.name, motion);
   const context: RecipeContext = { definition, scope, root, body, joints };
   RECIPES[definition.factoryId](context);
+  const groundContactAnchor = namedGroup("ground-contact");
+  groundContactAnchor.position.y = definition.bounds.groundOffset;
+  root.add(groundContactAnchor);
+  joints.set(groundContactAnchor.name, groundContactAnchor);
   createDefinitionSockets(context, sockets);
+  const groundContacts = Object.freeze(
+    GROUND_CONTACT_NAMES[definition.factoryId].map((name) =>
+      Object.freeze({ name, joint: requiredJoint(joints, name) }),
+    ),
+  );
 
   const colliderRoot = namedGroup("collider-solid");
   colliderRoot.userData = {
@@ -98,7 +117,7 @@ export function createProceduralMonster(definition: MonsterDefinition): MonsterI
     height: definition.collider.height,
   };
 
-  const source = "runtime factory shipped; matching transparent catalog PNG delivered from this procedural runtime capture";
+  const source = "runtime factory shipped; catalog PNG recapture required after grounding and animation revision";
   root.userData = {
     procedural: true,
     factoryId: definition.factoryId,
@@ -111,6 +130,7 @@ export function createProceduralMonster(definition: MonsterDefinition): MonsterI
       socketNames: definition.sockets.map(({ name }) => name),
       dimensions: definition.bounds,
       groundOffset: definition.bounds.groundOffset,
+      catalogPreviewStatus: "recapture-required",
       importedFiles: "none",
     },
   };
@@ -141,18 +161,22 @@ export function createProceduralMonster(definition: MonsterDefinition): MonsterI
   };
   const applyPose = () => {
     resetPose();
-    const progress = Math.min(elapsed / ACTION_DURATION[action], 1);
+    const progress = Math.min(elapsed / MONSTER_ACTION_DURATIONS[action], 1);
     poseRecipe(definition.factoryId, joints, action, progress);
+    if (loopedActions.has(action)) {
+      compensateGrounding(root, motion, groundContacts, definition.bounds.groundOffset);
+    }
   };
 
   return {
     root,
     joints,
     sockets,
+    groundContacts,
     collider,
     playAction(nextAction) {
       assertLive();
-      if (!(nextAction in ACTION_DURATION)) throw new Error(`Unknown monster action: ${String(nextAction)}`);
+      if (!(nextAction in MONSTER_ACTION_DURATIONS)) throw new Error(`Unknown monster action: ${String(nextAction)}`);
       action = nextAction;
       elapsed = 0;
       completed = false;
@@ -170,19 +194,23 @@ export function createProceduralMonster(definition: MonsterDefinition): MonsterI
       }
       if (paused) return;
       const delta = Math.min(deltaSeconds, 0.05);
-      const duration = ACTION_DURATION[action];
+      const duration = MONSTER_ACTION_DURATIONS[action];
       if (loopedActions.has(action)) {
-        elapsed = (elapsed + delta) % duration;
+        const nextElapsed = elapsed + delta;
+        elapsed = nextElapsed + 1e-9 >= duration
+          ? (nextElapsed >= duration ? nextElapsed % duration : 0)
+          : nextElapsed;
         completed = false;
       } else {
-        elapsed = Math.min(elapsed + delta, duration);
-        completed = elapsed === duration;
+        const nextElapsed = elapsed + delta;
+        completed = nextElapsed + 1e-9 >= duration;
+        elapsed = completed ? duration : nextElapsed;
       }
       applyPose();
     },
     getActionState() {
       assertLive();
-      return { name: action, elapsed, progress: Math.min(elapsed / ACTION_DURATION[action], 1), completed };
+      return { name: action, elapsed, progress: Math.min(elapsed / MONSTER_ACTION_DURATIONS[action], 1), completed };
     },
     dispose() {
       if (disposed) return;
@@ -225,7 +253,9 @@ function buildCrawler(context: RecipeContext): void {
       const upper = joint(context, thorax, `leg-${pair}-${side}-1`, [sign * 0.3, -0.08, 0.24 - pair * 0.2]);
       const lower = joint(context, upper, `leg-${pair}-${side}-2`, [sign * 0.35, -0.24, 0.02]);
       visual(context, upper, `leg-${pair}-${side}-upper`, new CylinderGeometry(0.045, 0.07, 0.42, 5), 0x6ca8b9, [sign * 0.14, -0.12, 0], [0, 0, sign * 0.85]);
-      visual(context, lower, `leg-${pair}-${side}-lower`, new CylinderGeometry(0.035, 0.05, 0.42, 5), 0x29495c, [sign * 0.14, -0.13, 0], [0, 0, sign * 0.85]);
+      const foot = joint(context, lower, `foot-${pair}-${side}`, [sign * 0.28, -0.31, 0]);
+      visual(context, lower, `leg-${pair}-${side}-lower`, new CylinderGeometry(0.035, 0.05, 0.36, 5), 0x29495c, [sign * 0.14, -0.13, 0], [0, 0, sign * 0.85]);
+      visual(context, foot, `foot-${pair}-${side}-visual`, new BoxGeometry(0.12, 0.05, 0.16), 0x29495c, [0, 0.025, 0.04]);
     }
   }
 }
@@ -265,7 +295,9 @@ function buildQuadruped(context: RecipeContext): void {
       const upper = joint(context, parent, `${prefix}-leg-${side}-1`, [sign * 0.28, -0.12, z]);
       const lower = joint(context, upper, `${prefix}-leg-${side}-2`, [0, -0.38, 0.08]);
       visual(context, upper, `${prefix}-leg-${side}-upper`, new CylinderGeometry(0.06, 0.09, 0.46, 6), 0x556847, [0, -0.18, 0]);
-      visual(context, lower, `${prefix}-leg-${side}-lower`, new CylinderGeometry(0.045, 0.06, 0.4, 6), 0x29331f, [0, -0.16, 0.04]);
+      const foot = joint(context, lower, `${prefix}-foot-${side}`, [0, -0.36, 0.04]);
+      visual(context, lower, `${prefix}-leg-${side}-lower`, new CylinderGeometry(0.045, 0.06, 0.3, 6), 0x29331f, [0, -0.16, 0.04]);
+      visual(context, foot, `${prefix}-foot-${side}-visual`, new BoxGeometry(0.2, 0.08, 0.3), 0x29331f, [0, 0.04, 0.08]);
     }
   }
 }
@@ -288,9 +320,10 @@ function humanoidLimbs(
     const hip = joint(context, pelvis, `hip-${side}`, [sign * 0.22, -0.13, 0]);
     const knee = joint(context, hip, `knee-${side}`, [0, -options.leg, 0.04]);
     const ankle = joint(context, knee, `ankle-${side}`, [0, -options.leg, -0.04]);
-    joint(context, ankle, `foot-${side}`, [0, -0.08, 0.12]);
+    const foot = joint(context, ankle, `foot-${side}`, [0, -0.08, 0.12]);
     visual(context, hip, `thigh-${side}`, new CylinderGeometry(0.08, 0.11, options.leg, 6), options.color, [0, -options.leg / 2, 0]);
     visual(context, knee, `shin-${side}`, new CylinderGeometry(0.065, 0.08, options.leg, 6), options.color, [0, -options.leg / 2, 0]);
+    visual(context, foot, `foot-${side}-visual`, new BoxGeometry(0.2, 0.12, 0.3), options.color, [0, 0.06, 0.09]);
   }
 }
 
@@ -319,24 +352,57 @@ function poseRecipe(factoryId: MonsterDefinition["factoryId"], joints: ReadonlyM
     const jointNode = joints.get(name);
     if (jointNode) jointNode.rotation[axis] += value;
   };
+  const trunk = {
+    biped: "spine",
+    crawler: "thorax",
+    armored: "chest",
+    quadruped: "spine",
+  }[factoryId];
   if (action === "Idle") {
-    rotate("spine", "y", Math.sin(phase) * 0.04);
-    rotate("thorax", "y", Math.sin(phase) * 0.04);
+    rotate(trunk, "y", (1 - Math.cos(phase)) * 0.04);
   } else if (action === "Walk") {
-    for (const [index, name] of ["hip-l", "hip-r", "front-leg-l-1", "front-leg-r-1", "rear-leg-l-1", "rear-leg-r-1"].entries()) {
-      rotate(name, "x", Math.sin(phase + index * Math.PI) * 0.32);
+    const gaitChains: readonly (readonly [leg: string, foot: string])[] = ({
+      biped: [["hip-l", "foot-l"], ["hip-r", "foot-r"]],
+      crawler: [
+        ["leg-1-l-1", "foot-1-l"],
+        ["leg-1-r-1", "foot-1-r"],
+        ["leg-2-l-1", "foot-2-l"],
+        ["leg-2-r-1", "foot-2-r"],
+        ["leg-3-l-1", "foot-3-l"],
+        ["leg-3-r-1", "foot-3-r"],
+      ],
+      armored: [["hip-l", "foot-l"], ["hip-r", "foot-r"]],
+      quadruped: [
+        ["front-leg-l-1", "front-foot-l"],
+        ["front-leg-r-1", "front-foot-r"],
+        ["rear-leg-l-1", "rear-foot-l"],
+        ["rear-leg-r-1", "rear-foot-r"],
+      ],
+    } as const)[factoryId];
+    for (const [index, [leg, foot]] of gaitChains.entries()) {
+      const side = index % 2 === 0 ? 1 : -1;
+      const angle = side * (1 - Math.cos(phase)) * 0.24;
+      rotate(leg, "x", angle);
+      rotate(foot, "x", -angle);
     }
   } else if (action === "Attack") {
-    rotate("spine", "x", -Math.sin(progress * Math.PI) * 0.5);
-    rotate("chest", "x", -Math.sin(progress * Math.PI) * 0.5);
-    rotate("shoulder-r", "x", -Math.sin(progress * Math.PI) * 0.9);
-    rotate("jaw", "x", Math.sin(progress * Math.PI) * 0.55);
+    const weight = Math.sin(progress * Math.PI);
+    if (factoryId === "biped") {
+      rotate("spine", "x", -weight * 0.5);
+      rotate("shoulder-r", "x", -weight * 0.9);
+    } else if (factoryId === "crawler") {
+      rotate("jaw", "x", weight * 0.55);
+    } else if (factoryId === "armored") {
+      rotate("chest", "x", -weight * 0.5);
+      rotate("shoulder-r", "x", -weight * 0.75);
+    } else {
+      rotate("jaw", "x", weight * 0.55);
+      rotate("spine", "x", -weight * 0.18);
+    }
   } else if (action === "Hit") {
-    rotate("spine", "z", Math.sin(progress * Math.PI) * 0.22);
-    rotate("thorax", "z", Math.sin(progress * Math.PI) * 0.22);
+    rotate(trunk, "z", Math.sin(progress * Math.PI) * 0.22);
   } else if (action === "Death") {
-    rotate(factoryId === "crawler" ? "thorax" : "spine", "z", Math.min(progress * 1.25, Math.PI / 2));
-    rotate("chest", "z", Math.min(progress * 1.25, Math.PI / 2));
+    rotate(trunk, "z", Math.min(progress * 1.25, Math.PI / 2));
   }
 }
 
@@ -373,4 +439,27 @@ function namedGroup(name: string): Group {
   const group = new Group();
   group.name = name;
   return group;
+}
+
+function requiredJoint(joints: ReadonlyMap<string, Object3D>, name: string): Object3D {
+  const jointNode = joints.get(name);
+  if (!jointNode) throw new Error(`Recipe is missing required ground contact joint: ${name}`);
+  return jointNode;
+}
+
+function compensateGrounding(
+  root: Object3D,
+  motion: Object3D,
+  contacts: readonly MonsterGroundContact[],
+  groundOffset: number,
+): void {
+  root.updateWorldMatrix(true, true);
+  const world = new Vector3();
+  let lowestContact = Number.POSITIVE_INFINITY;
+  for (const { joint: contact } of contacts) {
+    contact.getWorldPosition(world);
+    lowestContact = Math.min(lowestContact, root.worldToLocal(world.clone()).y);
+  }
+  motion.position.y += groundOffset - lowestContact;
+  root.updateWorldMatrix(true, true);
 }
