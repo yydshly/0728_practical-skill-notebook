@@ -162,13 +162,17 @@ export function stepGame(
     throw new RangeError("fixedDelta must equal 1 / 60");
   }
 
-  const nextTick = state.tick + 1;
+  if (state.status !== "playing") {
+    return {
+      state,
+      events: [],
+    };
+  }
 
   if (intent.pausePressed) {
     return {
       state: {
         ...state,
-        tick: nextTick,
         paused: !state.paused,
       },
       events: [],
@@ -177,10 +181,7 @@ export function stepGame(
 
   if (state.paused) {
     return {
-      state: {
-        ...state,
-        tick: nextTick,
-      },
+      state,
       events: [],
     };
   }
@@ -190,7 +191,7 @@ export function stepGame(
   return {
     state: {
       ...state,
-      tick: nextTick,
+      tick: state.tick + 1,
       player,
     },
     events: [],

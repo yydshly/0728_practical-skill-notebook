@@ -49,6 +49,30 @@ describe("fixed-step simulation", () => {
     expect(state.player.position).toEqual({ x: 0, y: -9 });
   });
 
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    -0,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])("rejects an ambiguous or non-serializable seed: %s", (seed) => {
+    expect(() => createInitialState(seed)).toThrow(
+      new TypeError("seed must be a finite safe integer other than -0"),
+    );
+  });
+
+  it.each([Number.MIN_SAFE_INTEGER, 0, Number.MAX_SAFE_INTEGER])(
+    "preserves valid seed %s through a JSON round trip",
+    (seed) => {
+      const state = createInitialState(seed);
+      const restored = JSON.parse(JSON.stringify(state)) as typeof state;
+
+      expect(restored).toEqual(state);
+      expect(restored.seed).toBe(seed);
+    },
+  );
+
   it("rejects every delta other than exactly one sixtieth of a second", () => {
     const state = createInitialState(1);
 
@@ -173,38 +197,86 @@ describe("fixed-step simulation", () => {
     ).toBe(false);
   });
 
-  it("toggles pause while advancing one tick and freezes gameplay until resumed", () => {
-    const paused = stepGame(
-      createInitialState(1),
-      { ...neutralIntent, moveY: 1, pausePressed: true },
-      1 / 60,
-      arenaContent,
-    ).state;
-    const stillPaused = stepGame(
-      paused,
-      { ...neutralIntent, moveY: 1 },
-      1 / 60,
-      arenaContent,
-    ).state;
-    const resumed = stepGame(
-      stillPaused,
-      { ...neutralIntent, moveY: 1, pausePressed: true },
-      1 / 60,
-      arenaContent,
-    ).state;
-    const moving = stepGame(
-      resumed,
-      { ...neutralIntent, moveY: 1 },
-      1 / 60,
-      arenaContent,
-    ).state;
+  it("keeps pause edges and paused wall-clock frames outside simulation time", () => {
+    const runAfterPause = (pausedFrames: number) => {
+      let state = stepGame(
+        createInitialState(1),
+        { ...neutralIntent, moveY: 1, pausePressed: true },
+        1 / 60,
+        arenaContent,
+      ).state;
 
-    expect(paused).toMatchObject({ tick: 1, paused: true });
-    expect(stillPaused).toMatchObject({ tick: 2, paused: true });
-    expect(resumed).toMatchObject({ tick: 3, paused: false });
-    expect(resumed.player.position).toEqual({ x: 0, y: -9 });
-    expect(moving.player.position.y).toBeCloseTo(-8.93, 10);
+      expect(state).toMatchObject({ tick: 0, paused: true });
+      expect(state.player.position).toEqual({ x: 0, y: -9 });
+
+      for (let frame = 0; frame < pausedFrames; frame += 1) {
+        state = stepGame(
+          state,
+          { ...neutralIntent, moveY: 1 },
+          1 / 60,
+          arenaContent,
+        ).state;
+      }
+
+      expect(state).toMatchObject({ tick: 0, paused: true });
+
+      state = stepGame(
+        state,
+        { ...neutralIntent, moveY: 1, pausePressed: true },
+        1 / 60,
+        arenaContent,
+      ).state;
+      expect(state).toMatchObject({ tick: 0, paused: false });
+      expect(state.player.position).toEqual({ x: 0, y: -9 });
+
+      return stepGame(
+        state,
+        { ...neutralIntent, moveY: 1 },
+        1 / 60,
+        arenaContent,
+      ).state;
+    };
+
+    const afterOnePausedFrame = runAfterPause(1);
+    const afterOneHundredPausedFrames = runAfterPause(100);
+
+    expect(afterOnePausedFrame).toEqual(afterOneHundredPausedFrames);
+    expect(afterOnePausedFrame.tick).toBe(1);
+    expect(afterOnePausedFrame.player.position.y).toBeCloseTo(-8.93, 10);
   });
+
+  it.each(["upgrade", "defeated", "complete"] as const)(
+    "freezes gameplay and ignores pause input while status is %s",
+    (status) => {
+      const state = createInitialState(1);
+      state.status = status;
+      const snapshot = structuredClone(state);
+
+      const result = stepGame(
+        state,
+        {
+          ...neutralIntent,
+          moveX: 1,
+          moveY: 1,
+          dodgePressed: true,
+          pausePressed: true,
+        },
+        1 / 60,
+        arenaContent,
+      );
+
+      expect(result.state).toBe(state);
+      expect(result.state).toEqual(snapshot);
+      expect(result.state.player).toMatchObject({
+        position: { x: 0, y: -9 },
+        stamina: 100,
+        action: "idle",
+        actionTime: 0,
+      });
+      expect(result.state).toMatchObject({ tick: 0, paused: false });
+      expect(result.events).toEqual([]);
+    },
+  );
 
   it("does not mutate the old state, intent, or content and increments one tick", () => {
     const state = createInitialState(1);

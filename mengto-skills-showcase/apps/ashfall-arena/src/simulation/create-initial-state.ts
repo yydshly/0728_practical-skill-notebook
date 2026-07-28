@@ -2,6 +2,10 @@ import { arenaContent } from "../content/arena-content";
 import type { GameState } from "./types";
 
 export function createInitialState(seed: number): GameState {
+  if (!Number.isSafeInteger(seed) || Object.is(seed, -0)) {
+    throw new TypeError("seed must be a finite safe integer other than -0");
+  }
+
   return {
     version: 1,
     seed,
