@@ -26,7 +26,7 @@ test('opens and closes the mobile navigation panel', () => {
   expect(menuButton).toHaveAttribute('aria-expanded', 'true');
   const mobileNavigation = screen.getByRole('navigation', { name: 'Mobile navigation' });
   expect(mobileNavigation).toBeVisible();
-  expect(screen.getByRole('link', { name: 'Webflow' })).toHaveAttribute('href', '/templates/webflow');
+  expect(within(mobileNavigation).getByRole('link', { name: 'Webflow' })).toHaveAttribute('href', '/templates/webflow');
   expect(within(mobileNavigation).queryByRole('link', { name: 'X' })).toBeNull();
   expect(within(mobileNavigation).queryByRole('link', { name: 'Instagram' })).toBeNull();
 
@@ -77,4 +77,15 @@ test('renders the complete metadata table', () => {
       'Fabrica works best for portfolio and agency projects that need smooth motion and video backgrounds.',
     ),
   ).toBeVisible();
+});
+
+test('renders all recommended templates and dismisses the cookie banner', async () => {
+  render(<App />);
+
+  expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(18);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+
+  expect(screen.queryByText('We use cookies')).toBeNull();
+  expect(window.localStorage.getItem('fabrica-cookie-accepted')).toBe('true');
 });
