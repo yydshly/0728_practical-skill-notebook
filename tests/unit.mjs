@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { computeThirdPersonPose } from '../src/camera-math.js';
+import * as cameraMath from '../src/camera-math.js';
 import { VILLAGE_LAYOUT, validateVillageLayout } from '../src/level-data.js';
 import { createMaterials } from '../src/world/materials.js';
 import { getCharacterProfile, getGaitPose } from '../src/character-motion.js';
@@ -11,6 +11,8 @@ import { createPursuer } from '../src/pursuer.js';
 import { createVillage } from '../src/level.js';
 import { resolveCircleMove } from '../src/collision.js';
 import { nearestInteraction } from '../src/interactions.js';
+
+const { computeThirdPersonPose } = cameraMath;
 
 test('third-person pose starts above ground and behind its target', () => {
   const pose = computeThirdPersonPose({
@@ -26,6 +28,26 @@ test('third-person pose starts above ground and behind its target', () => {
     pose.position[2] - pose.target[2],
   ) >= 5);
   assert.deepEqual(pose.target, [-8, 1.45, 25]);
+});
+
+test('first-person pose keeps the eye at head height and looks forward with pitch', () => {
+  assert.equal(typeof cameraMath.computeFirstPersonPose, 'function');
+
+  const pose = cameraMath.computeFirstPersonPose({
+    player: [2, 0, 7],
+    yaw: Math.PI,
+    pitch: -0.25,
+    groundY: 0,
+  });
+
+  assert.deepEqual(pose.position, [2, 1.82, 7]);
+  assert.ok(pose.target[2] < pose.position[2] - 5);
+  assert.ok(pose.target[1] < pose.position[1]);
+  assert.ok(Math.hypot(
+    pose.target[0] - pose.position[0],
+    pose.target[1] - pose.position[1],
+    pose.target[2] - pose.position[2],
+  ) > 5);
 });
 
 test('village layout defines readable zones and collision separately', () => {

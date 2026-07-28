@@ -214,9 +214,61 @@ try {
     throw new Error('Expected protagonist home wall to block player movement');
   }
 
-  await page.evaluate(() => window.__RURAL_ESCAPE__.setCameraMode('first-person'));
-  const cameraMode = await page.evaluate(() => window.__RURAL_ESCAPE__.camera.mode);
-  if (cameraMode !== 'first-person') throw new Error(`Expected first-person camera, got ${cameraMode}`);
+  await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    game.setPlayerForTest(-8, 33);
+    game.setCameraMode('third-person');
+  });
+  await page.keyboard.press('KeyC');
+  const firstPersonCamera = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    return {
+      mode: game.camera.mode,
+      pose: game.camera.getPoseSnapshot?.(),
+      player: game.player.position.toArray(),
+    };
+  });
+  if (firstPersonCamera.mode !== 'first-person') {
+    throw new Error(`Expected first-person camera, got ${firstPersonCamera.mode}`);
+  }
+  if (!firstPersonCamera.pose) throw new Error('Expected a readable live camera pose snapshot');
+  if (
+    Math.hypot(
+      firstPersonCamera.pose.position[0] - firstPersonCamera.player[0],
+      firstPersonCamera.pose.position[2] - firstPersonCamera.player[2],
+    ) > 0.001
+    || Math.abs(firstPersonCamera.pose.position[1] - 1.82) > 0.001
+  ) {
+    throw new Error(
+      `Expected first-person eye at player head, got ${firstPersonCamera.pose.position}`,
+    );
+  }
+  if (
+    firstPersonCamera.pose.direction[2] > -0.9
+    || firstPersonCamera.pose.direction[1] > -0.1
+  ) {
+    throw new Error(
+      `Expected first-person camera to face forward with pitch, got ${firstPersonCamera.pose.direction}`,
+    );
+  }
+
+  await page.keyboard.press('KeyC');
+  const restoredCamera = await page.evaluate(() => ({
+    mode: window.__RURAL_ESCAPE__.camera.mode,
+    pose: window.__RURAL_ESCAPE__.camera.getPoseSnapshot?.(),
+  }));
+  if (restoredCamera.mode !== 'third-person') {
+    throw new Error(`Expected second KeyC to restore third-person, got ${restoredCamera.mode}`);
+  }
+  if (
+    !restoredCamera.pose
+    || Math.hypot(
+      restoredCamera.pose.position[0] + 8,
+      restoredCamera.pose.position[2] - 33,
+    ) < 5
+  ) {
+    throw new Error('Expected restored third-person camera to snap behind the player');
+  }
 
   const canvasHeight = await page.locator('#game').evaluate((canvas) => getComputedStyle(canvas).height);
   if (canvasHeight !== '720px') throw new Error(`Expected full viewport game canvas, got ${canvasHeight}`);

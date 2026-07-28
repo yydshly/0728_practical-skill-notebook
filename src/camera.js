@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { computeThirdPersonPose } from './camera-math.js';
+import { computeFirstPersonPose, computeThirdPersonPose } from './camera-math.js';
 
 export function createCameraController(camera, player, { occluders = [], groundY = 0 } = {}) {
   const target = new THREE.Vector3();
@@ -13,9 +13,14 @@ export function createCameraController(camera, player, { occluders = [], groundY
 
   function calculateDesired() {
     if (mode === 'first-person') {
-      target.copy(player.position).add(new THREE.Vector3(0, 1.82, 0));
-      desired.copy(target);
-      desired.add(new THREE.Vector3(Math.sin(yaw) * 0.06, 0, Math.cos(yaw) * 0.06));
+      const pose = computeFirstPersonPose({
+        player: player.position.toArray(),
+        yaw,
+        pitch,
+        groundY,
+      });
+      target.fromArray(pose.target);
+      desired.fromArray(pose.position);
     } else {
       const pose = computeThirdPersonPose({
         player: player.position.toArray(),
@@ -50,10 +55,17 @@ export function createCameraController(camera, player, { occluders = [], groundY
   function update(dt = 1 / 60) {
     if (!initialized) return snap();
     calculateDesired();
-    applyOcclusion();
+    if (mode === 'third-person') applyOcclusion();
     const alpha = 1 - Math.exp(-8 * dt);
     camera.position.lerp(desired, alpha);
     camera.lookAt(target);
+  }
+
+  function setMode(next) {
+    const nextMode = next === 'first-person' ? 'first-person' : 'third-person';
+    if (mode === nextMode) return;
+    mode = nextMode;
+    snap();
   }
 
   return {
@@ -63,8 +75,16 @@ export function createCameraController(camera, player, { occluders = [], groundY
       yaw -= deltaX * 0.0024;
       pitch = THREE.MathUtils.clamp(pitch - deltaY * 0.002, -0.78, 0.42);
     },
-    setMode(next) { mode = next === 'first-person' ? 'first-person' : 'third-person'; },
-    toggle() { mode = mode === 'third-person' ? 'first-person' : 'third-person'; },
+    setMode,
+    toggle() { setMode(mode === 'third-person' ? 'first-person' : 'third-person'); },
+    getPoseSnapshot() {
+      const direction = new THREE.Vector3();
+      camera.getWorldDirection(direction);
+      return {
+        position: camera.position.toArray(),
+        direction: direction.toArray(),
+      };
+    },
     snap,
     update,
   };
