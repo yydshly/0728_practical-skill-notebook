@@ -1,10 +1,10 @@
 import type { MonsterDefinition } from "./types";
 
 const actions = ["Idle", "Walk", "Attack", "Hit", "Death"] as const;
-const declaredSource = (factory: string, silhouette: string) =>
-  "Project-authored Three.js geometry; runtime factory shipped; catalog PNG not shipped. " +
+const shippedSource = (factory: string, silhouette: string) =>
+  "Project-authored Three.js geometry; runtime factory and matching transparent catalog PNG shipped. " +
   `The ${factory} runtime recipe creates the ${silhouette}. ` +
-  "The previewPath remains declared for a future catalog PNG and is not shipped media.";
+  "The previewPath is a delivered catalog PNG captured from this same procedural runtime source.";
 
 const freezeMonster = (monster: MonsterDefinition): MonsterDefinition => {
   Object.freeze(monster.source);
@@ -29,7 +29,7 @@ const monsterDefinitions = [
     previewPath: "/asset-catalog/monsters/ash-warden.png",
     source: {
       type: "procedural",
-      description: declaredSource("biped", "tall staff-bearing caster"),
+      description: shippedSource("biped", "tall staff-bearing caster"),
       license: "Project-authored content contract",
     },
     animations: actions.map((name) => ({ name, durationSeconds: 1 })),
@@ -41,7 +41,7 @@ const monsterDefinitions = [
       { name: "attack-staff", bone: "hand-r" },
     ],
     bounds: { width: 1.2, height: 2.55, depth: 0.96, groundOffset: 0 },
-    deliveryStatus: "declared-not-shipped",
+    deliveryStatus: "shipped",
     factoryId: "biped",
     actions,
     collider: { radius: 0.46, height: 2.42 },
@@ -58,7 +58,7 @@ const monsterDefinitions = [
     previewPath: "/asset-catalog/monsters/glass-crawler.png",
     source: {
       type: "procedural",
-      description: declaredSource("crawler", "low six-legged crystal creature"),
+      description: shippedSource("crawler", "low six-legged crystal creature"),
       license: "Project-authored content contract",
     },
     animations: actions.map((name) => ({ name, durationSeconds: 0.9 })),
@@ -70,7 +70,7 @@ const monsterDefinitions = [
       { name: "attack-mandible", bone: "jaw" },
     ],
     bounds: { width: 1.86, height: 0.84, depth: 1.72, groundOffset: 0 },
-    deliveryStatus: "declared-not-shipped",
+    deliveryStatus: "shipped",
     factoryId: "crawler",
     actions,
     collider: { radius: 0.71, height: 0.72 },
@@ -87,7 +87,7 @@ const monsterDefinitions = [
     previewPath: "/asset-catalog/monsters/bell-knight.png",
     source: {
       type: "procedural",
-      description: declaredSource("armored", "broad armored humanoid with bell helm"),
+      description: shippedSource("armored", "broad armored humanoid with bell helm"),
       license: "Project-authored content contract",
     },
     animations: actions.map((name) => ({ name, durationSeconds: 1.1 })),
@@ -99,7 +99,7 @@ const monsterDefinitions = [
       { name: "attack-mace", bone: "hand-r" },
     ],
     bounds: { width: 1.68, height: 2.18, depth: 1.12, groundOffset: 0 },
-    deliveryStatus: "declared-not-shipped",
+    deliveryStatus: "shipped",
     factoryId: "armored",
     actions,
     collider: { radius: 0.61, height: 2.06 },
@@ -116,7 +116,7 @@ const monsterDefinitions = [
     previewPath: "/asset-catalog/monsters/mire-hound.png",
     source: {
       type: "procedural",
-      description: declaredSource("quadruped", "long-backed four-legged hunter"),
+      description: shippedSource("quadruped", "long-backed four-legged hunter"),
       license: "Project-authored content contract",
     },
     animations: actions.map((name) => ({ name, durationSeconds: 0.82 })),
@@ -128,7 +128,7 @@ const monsterDefinitions = [
       { name: "attack-jaw", bone: "jaw" },
     ],
     bounds: { width: 1.04, height: 1.16, depth: 2.42, groundOffset: 0 },
-    deliveryStatus: "declared-not-shipped",
+    deliveryStatus: "shipped",
     factoryId: "quadruped",
     actions,
     collider: { radius: 0.49, height: 1.04 },

@@ -8,11 +8,11 @@
 | --- | --- | --- | --- |
 | 雾屿灯塔（Isle of Quiet Signals） | 电影感滚动叙事、2.5D 图层与无障碍 | **已有演示，可运行** | [现有验证记录](../isle-of-quiet-signals/docs/VALIDATION.md) |
 | Final Four — Typographic Flags | Canvas 字体排版、指针驱动物理交互 | **已有演示，可运行** | 暂无独立验证记录；以其 README 的构建命令为准 |
-| Monster Forge｜怪物铸造所 | 3D 游戏资产目录、模型审阅、动画与来源追踪 | **规划中，尚未实现** | [未来验证记录](apps/monster-forge/docs/VALIDATION.md) |
+| Monster Forge｜怪物铸造所 | 3D 游戏资产目录、模型审阅、动画与来源追踪 | **已实现，可本地运行** | [验证记录](apps/monster-forge/docs/VALIDATION.md) |
 | Ashfall Arena｜灰烬竞技场 | 完整网页动作游戏切片：战斗、敌人、AI、成长与存档 | **规划中，尚未实现** | [未来验证记录](apps/ashfall-arena/docs/VALIDATION.md) |
 | Mech Atelier｜机甲定制工坊 | 商业化 3D 产品配置、参数联动、分享与海报导出 | **规划中，尚未实现** | [未来验证记录](apps/mech-atelier/docs/VALIDATION.md) |
 
-前两个是仓库中已有演示；后三个目录已经作为独立应用工作区建立，但还没有产品功能或验证记录。不要把“目录存在”理解为“产品已完成”。
+前两个是仓库中已有演示；Monster Forge 已实现可审阅的程序化怪物目录、实时检查器和可读回退。Ashfall Arena 与 Mech Atelier 仍只是独立应用工作区，尚未实现产品功能或验证记录；不要把“目录存在”理解为“产品已完成”。
 
 ## 本地运行
 

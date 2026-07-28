@@ -2,27 +2,33 @@ import { monsters } from "@showcase/game-assets";
 import { createInspectorStore } from "./state/inspector-store";
 import {
   createInspectorScene,
-  type InspectorScene,
   type InspectorActionStatus,
+  type InspectorScene,
   type InspectorSceneDiagnostics,
+  type InspectorUnavailableKind,
 } from "./scene/create-inspector-scene";
 import { renderCatalog } from "./ui/render-catalog";
+import { renderFallback, type FallbackReason } from "./ui/render-fallback";
 import { renderInspector } from "./ui/render-inspector";
 import "./styles.css";
 
-declare global {
-  interface Window {
-    __monsterForgeDiagnostics?: () => InspectorSceneDiagnostics | undefined;
-  }
-}
+declare global { interface Window { __monsterForgeDiagnostics?: () => InspectorSceneDiagnostics | undefined; } }
 
-const app = document.querySelector<HTMLElement>("#app")!;
+const query = new URLSearchParams(window.location.search);
+const captureMode = query.get("capture") === "1";
+const forcedWebglFailure = query.get("forceWebglFailure") === "1";
 const monsterById = new Map(monsters.map((monster) => [monster.id, monster]));
-const store = createInspectorStore("ash-warden");
+const reviewedId = query.get("review");
+const initialId = reviewedId && monsterById.has(reviewedId) ? reviewedId : "ash-warden";
+const app = document.querySelector<HTMLElement>("#app")!;
+app.classList.toggle("capture-mode", captureMode);
 app.innerHTML = `<main class="forge-shell"><header class="forge-intro"><p class="eyebrow">MONSTER FORGE · REVIEW BAY 03</p><h1>怪物锻造所</h1><p>在同一座实时审阅台上切换程序化怪物，并保留每项资产的来源、接地依据与交付边界。</p><p class="live-status" role="status" aria-live="polite"></p></header><div class="forge-workspace"><aside data-catalog></aside><section data-inspector-host></section></div></main>`;
+
 const catalogHost = app.querySelector<HTMLElement>("[data-catalog]")!;
 const inspectorHost = app.querySelector<HTMLElement>("[data-inspector-host]")!;
 const status = app.querySelector<HTMLElement>(".live-status")!;
+const store = createInspectorStore(initialId);
+if (captureMode) store.setPaused(true);
 const catalog = renderCatalog(catalogHost, monsters, (id) => store.select(id));
 let runtimeActionState: InspectorActionStatus | undefined;
 const inspector = renderInspector(
@@ -32,73 +38,77 @@ const inspector = renderInspector(
   () => store.restartAction(),
   (name) => store.toggleOverlay(name),
 );
+
 type SceneStatus = "loading" | "ready" | "unavailable";
 let sceneStatus: SceneStatus = "loading";
-let sceneError = "";
+let scene: InspectorScene | undefined;
 let refreshStatus = () => {};
-const showSceneStatus = (next: SceneStatus, error?: unknown) => {
-  sceneStatus = next;
-  sceneError = error instanceof Error ? error.message : error ? String(error) : "";
-  const title = inspector.fallback.querySelector<HTMLElement>("strong")!;
-  const copy = inspector.fallback.querySelector<HTMLElement>("span")!;
-  if (next === "ready") {
-    inspector.fallback.hidden = true;
-  } else {
-    inspector.fallback.hidden = false;
-    title.textContent = next === "loading" ? "3D 预览正在准备" : "3D 预览不可用";
-    copy.textContent = next === "loading"
-      ? "正在建立实时审阅场景；目录、资产来源和元数据仍可阅读。"
-      : `已保留目录、资产来源和审阅元数据；请恢复 WebGL 后重试。${sceneError ? `（${sceneError}）` : ""}`;
-  }
+let unavailableState: Readonly<{ reason: FallbackReason; detail: string }> | undefined;
+
+const selectedMonster = () => monsterById.get(store.getState().selectedId)!;
+const unavailable = (kind: InspectorUnavailableKind | "webgl-unavailable", error: unknown) => {
+  sceneStatus = "unavailable";
+  const detail = error instanceof Error ? error.message : String(error || "unknown error");
+  const reason: FallbackReason = kind;
+  unavailableState = { reason, detail };
+  renderFallback(inspector.fallback, selectedMonster(), reason, detail, () => initializeScene());
   refreshStatus();
 };
-showSceneStatus("loading");
-let scene: InspectorScene | undefined;
-try {
-  scene = createInspectorScene(inspector.canvas, {
-    onReady: () => showSceneStatus("ready"),
-    onUnavailable: (error) => showSceneStatus("unavailable", error),
-    onActionState: (actionState) => {
-      runtimeActionState = actionState;
-      const currentState = store.getState();
-      inspector.update(currentState, monsterById.get(currentState.selectedId)!, runtimeActionState);
-    },
-  });
-} catch (error) {
-  showSceneStatus("unavailable", error);
-}
-window.__monsterForgeDiagnostics = () => scene?.getDiagnostics();
+const showSceneStatus = (next: SceneStatus) => {
+  sceneStatus = next;
+  if (next === "ready") inspector.fallback.hidden = true;
+  refreshStatus();
+};
 
+function initializeScene(): void {
+  scene?.dispose();
+  scene = undefined;
+  inspector.fallback.hidden = true;
+  if (forcedWebglFailure) {
+    unavailable("webgl-unavailable", new Error("WebGL was intentionally disabled for this review fixture."));
+    return;
+  }
+  sceneStatus = "loading";
+  try {
+    scene = createInspectorScene(inspector.canvas, {
+      capture: captureMode,
+      onReady: () => showSceneStatus("ready"),
+      onUnavailable: (error, kind) => unavailable(kind, error),
+      onActionState: (actionState) => {
+        runtimeActionState = actionState;
+        inspector.update(store.getState(), selectedMonster(), runtimeActionState);
+      },
+    });
+    scene.setMonster(selectedMonster());
+    scene.setState(store.getState());
+  } catch (error) {
+    unavailable("renderer-init-failed", error);
+  }
+}
+
+window.__monsterForgeDiagnostics = () => scene?.getDiagnostics();
 let previousSelectedId = "";
 const render = () => {
   const state = store.getState();
-  const monster = monsterById.get(state.selectedId)!;
+  const monster = selectedMonster();
   catalog.update(state.selectedId);
   inspector.update(state, monster, runtimeActionState);
   if (previousSelectedId !== state.selectedId) {
-    if (sceneStatus !== "unavailable") showSceneStatus("loading");
-    scene?.setMonster(monster);
-  }
-  scene?.setState(state);
-  status.textContent = `当前审阅：${monster.displayName} · ${
-    sceneStatus === "ready"
-      ? "实时模型已就绪"
-      : sceneStatus === "loading"
-        ? "实时模型正在准备"
-        : "3D 预览不可用，已显示可读回退"
-  }`;
+    if (sceneStatus === "unavailable") {
+      const fallback = unavailableState ?? { reason: "webgl-unavailable" as const, detail: "3D preview remains unavailable." };
+      renderFallback(inspector.fallback, monster, fallback.reason, fallback.detail, () => initializeScene());
+    }
+    else {
+      sceneStatus = "loading";
+      scene?.setMonster(monster);
+      scene?.setState(state);
+    }
+  } else scene?.setState(state);
+  status.textContent = `当前审阅：${monster.displayName} · ${sceneStatus === "ready" ? "实时模型已就绪" : sceneStatus === "loading" ? "实时模型正在准备" : "3D 预览不可用，已显示可读回退"}`;
   previousSelectedId = state.selectedId;
 };
-refreshStatus = () => {
-  const monster = monsterById.get(store.getState().selectedId)!;
-  status.textContent = `当前审阅：${monster.displayName} · ${
-    sceneStatus === "ready"
-      ? "实时模型已就绪"
-      : sceneStatus === "loading"
-        ? "实时模型正在准备"
-        : "3D 预览不可用，已显示可读回退"
-  }`;
-};
+refreshStatus = render;
+initializeScene();
 render();
 const unsubscribe = store.subscribe(render);
 window.addEventListener("pagehide", () => { unsubscribe(); scene?.dispose(); }, { once: true });

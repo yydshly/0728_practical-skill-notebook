@@ -42,10 +42,13 @@ export interface InspectorScene {
   dispose(): void;
 }
 
+export type InspectorUnavailableKind = "renderer-init-failed" | "model-creation-failed";
+
 interface InspectorSceneOptions {
   onReady(): void;
-  onUnavailable(error: unknown): void;
+  onUnavailable(error: unknown, kind: InspectorUnavailableKind): void;
   onActionState?(state: InspectorActionStatus): void;
+  capture?: boolean;
 }
 
 export function getFrameDelta(
@@ -89,16 +92,17 @@ export function createInspectorScene(
     renderer = new WebGLRenderer({
       canvas,
       antialias: true,
-      alpha: false,
+      alpha: Boolean(options.capture),
       preserveDrawingBuffer: true,
     });
   } catch (error) {
-    options.onUnavailable(error);
+    options.onUnavailable(error, "renderer-init-failed");
     return createUnavailableScene(error);
   }
+  if (options.capture) renderer.setClearColor(0x000000, 0);
 
   const scene = new Scene();
-  scene.background = new Color("#17171a");
+  scene.background = options.capture ? null : new Color("#17171a");
   const camera = new PerspectiveCamera(38, 1, 0.1, 100);
   const orbit = new Group();
   scene.add(orbit);
@@ -110,8 +114,8 @@ export function createInspectorScene(
   const rim = new DirectionalLight(0xc4d9ff, 1.25);
   rim.position.set(-4, 3, -5);
   scene.add(rim);
-  const grid = new GridHelper(8, 16, 0x756858, 0x38333a);
-  scene.add(grid);
+  const grid = options.capture ? undefined : new GridHelper(8, 16, 0x756858, 0x38333a);
+  if (grid) scene.add(grid);
   let current: MonsterInstance | undefined;
   let overlays: ReviewOverlays | undefined;
   let selectedMonsterId: string | null = null;
@@ -175,7 +179,7 @@ export function createInspectorScene(
     failed = true;
     lastError = errorMessage(error);
     cancelAnimationFrame(animationFrame);
-    options.onUnavailable(error);
+    options.onUnavailable(error, "model-creation-failed");
   };
 
   const frame = (timestamp: number) => {
@@ -197,6 +201,7 @@ export function createInspectorScene(
     if (current && !readyForCurrent) {
       readyForCurrent = true;
       options.onReady();
+      if (options.capture) document.documentElement.dataset.captureReady = "true";
     }
     animationFrame = requestAnimationFrame(frame);
   };
@@ -322,11 +327,13 @@ export function createInspectorScene(
       canvas.removeEventListener("pointercancel", pointerUp);
       canvas.removeEventListener("wheel", wheel);
       removeCurrent();
-      grid.geometry.dispose();
-      const gridMaterials = Array.isArray(grid.material)
-        ? grid.material
-        : [grid.material];
-      for (const material of gridMaterials as Material[]) material.dispose();
+      if (grid) {
+        grid.geometry.dispose();
+        const gridMaterials = Array.isArray(grid.material)
+          ? grid.material
+          : [grid.material];
+        for (const material of gridMaterials as Material[]) material.dispose();
+      }
       renderer.dispose();
       renderer.forceContextLoss();
     },

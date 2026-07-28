@@ -115,6 +115,6 @@ test("WebGL failure keeps catalog and metadata readable", async ({ page }) => {
 
   await expect(page.locator("[data-monster-card]")).toHaveCount(4);
   await expect(page.getByText("3D 预览不可用", { exact: true })).toBeVisible();
-  await expect(page.getByText("目录 PNG 尚未交付")).toBeVisible();
+  await expect(page.getByText("已交付 PNG").first()).toBeVisible();
   await expect(page.locator("[data-inspector] canvas")).toHaveCount(1);
 });

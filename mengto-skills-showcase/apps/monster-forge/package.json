@@ -6,7 +6,8 @@
     "dev": "vite --host 127.0.0.1 --port 4173",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "capture:catalog": "node scripts/capture-catalog-previews.mjs"
   },
   "dependencies": {
     "@showcase/game-assets": "*",
@@ -14,6 +15,8 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
-    "@types/three": "^0.185.1"
+    "@types/pngjs": "^6.0.5",
+    "@types/three": "^0.185.1",
+    "pngjs": "^7.0.0"
   }
 }

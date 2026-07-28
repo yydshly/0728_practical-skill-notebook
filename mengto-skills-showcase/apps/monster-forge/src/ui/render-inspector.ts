@@ -24,7 +24,7 @@ export function renderInspector(
 ): InspectorView {
   host.innerHTML = `<section class="inspector-panel" data-inspector aria-labelledby="inspector-title">
     <header class="inspector-header"><p class="eyebrow">实时检视器 / WebGL</p><h2 id="inspector-title"></h2><p class="inspector-subtitle"></p></header>
-    <div class="scene-shell"><canvas aria-label="选中怪物的实时 3D 审阅模型"></canvas><div class="scene-fallback" hidden><strong>3D 预览不可用</strong><span>已保留目录、资产来源和审阅元数据；请恢复 WebGL 后重试。</span></div><p class="scene-hint">拖拽旋转 · 滚轮或双指缩放</p></div>
+    <div class="scene-shell"><canvas aria-label="选中怪物的实时 3D 审阅模型"></canvas><div class="scene-fallback" hidden></div><p class="scene-hint">拖拽旋转 · 滚轮或双指缩放</p></div>
     <div class="inspector-controls">
       <section class="action-controls" aria-labelledby="action-controls-title"><h3 id="action-controls-title">动作审阅</h3><div class="action-buttons"></div><button type="button" data-pause-action></button><button type="button" data-restart-action>重新播放</button><p class="review-status" data-action-status aria-live="polite"></p></section>
       <fieldset class="overlay-controls"><legend>技术叠加</legend><label><input type="checkbox" data-overlay="skeleton"> 显示骨架</label><label><input type="checkbox" data-overlay="colliders"> 显示碰撞体</label><label><input type="checkbox" data-overlay="sockets"> 显示挂点</label><p class="review-status" data-overlay-status aria-live="polite"></p></fieldset>
@@ -68,7 +68,7 @@ export function renderInspector(
     fallback,
     update(state, monster, runtime = { name: state.action, elapsed: 0, progress: 0, completed: false, paused: state.paused }) {
       title.textContent = monster.displayName;
-      subtitle.textContent = "程序化 Three.js · 运行时工厂已交付 · 目录 PNG 未交付";
+      subtitle.textContent = "程序化 Three.js · 运行时工厂已交付 · 目录 PNG 已交付";
       for (const [action, button] of actionButtons) {
         button.classList.toggle("is-active", action === runtime.name);
         button.setAttribute("aria-pressed", String(action === runtime.name));

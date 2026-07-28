@@ -17,15 +17,15 @@ test.afterEach(() => {
   expect(pageErrors, "uncaught page errors").toEqual([]);
 });
 
-test("catalog cards use readable fallbacks and no canvases", async ({ page }) => {
+test("catalog cards use delivered transparent previews and no canvases", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: /怪物锻造所/ })).toBeVisible();
-  await expect(page.getByText("目录 PNG 尚未交付")).toBeVisible();
+  await expect(page.getByText("已交付 PNG").first()).toBeVisible();
   await expect(page.locator("[data-monster-card]")).toHaveCount(4);
   await expect(page.locator("[data-monster-card] canvas")).toHaveCount(0);
   await expect(page.locator("[data-monster-card] img")).toHaveCount(4);
-  await expect(page.locator("[data-monster-card]").first()).toContainText("未交付");
+  await expect(page.locator("[data-monster-card]").first()).toContainText("已交付 PNG");
 });
 
 test("narrow keyboard selection remains focused and does not overflow", async ({ page }) => {
