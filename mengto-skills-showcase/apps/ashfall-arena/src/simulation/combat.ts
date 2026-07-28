@@ -16,6 +16,7 @@ import type {
 } from "./types";
 
 const TIME_EPSILON = 1e-9;
+const PROJECTILE_TOI_TIE_EPSILON = 1e-9;
 
 const ticksFor = (seconds: number, content: GameContent): number =>
   Math.ceil(seconds * content.combat.fixedHz - TIME_EPSILON);
@@ -721,8 +722,13 @@ const stepProjectiles = (
     }
 
     candidates.sort((left, right) => {
-      if (left.time < right.time) return -1;
-      if (left.time > right.time) return 1;
+      const timeDelta = left.time - right.time;
+      if (Math.abs(timeDelta) > PROJECTILE_TOI_TIE_EPSILON) {
+        return timeDelta;
+      }
+      if (left.kind !== right.kind) {
+        return left.kind === "world" ? -1 : 1;
+      }
       return left.id.localeCompare(right.id);
     });
     const firstContact = candidates[0];

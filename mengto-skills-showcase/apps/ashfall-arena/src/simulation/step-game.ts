@@ -191,6 +191,13 @@ const nextLockTarget = (
     : null;
 };
 
+const canHandleLockIntent = (state: GameState): boolean =>
+  state.status === "playing" &&
+  !state.paused &&
+  state.player.health > 0 &&
+  state.player.action !== "hit" &&
+  state.player.action !== "dead";
+
 export function stepGame(
   state: GameState,
   intent: GameIntent,
@@ -234,7 +241,9 @@ export function stepGame(
           player: steppedPlayer,
         };
   const combat = stepCombat(movedState, intent, [], content);
-  const lockTargetId = nextLockTarget(combat.state, intent.lockPressed);
+  const lockTargetId = canHandleLockIntent(state)
+    ? nextLockTarget(combat.state, intent.lockPressed)
+    : combat.state.player.lockTargetId;
   const player =
     combat.state.player.lockTargetId === lockTargetId
       ? combat.state.player

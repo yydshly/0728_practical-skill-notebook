@@ -11,6 +11,7 @@ import { createInitialState } from "../src/simulation/create-initial-state";
 import { stepGame } from "../src/simulation/step-game";
 import type {
   GameEvent,
+  GameContent,
   GameState,
   IncomingHit,
   ProjectileState,
@@ -546,6 +547,87 @@ describe("authoritative ember bow projectile", () => {
 });
 
 describe("projectile world time of impact", () => {
+  const tieFixture = (worldTimeOffset: number) => {
+    const content: GameContent = {
+      ...arenaContent,
+      arena: {
+        ...arenaContent.arena,
+        collisions: [
+          {
+            id: "z-wall",
+            x: 0,
+            y: 0,
+            z: 0.75 + worldTimeOffset * 2,
+            halfWidth: 1,
+            halfDepth: 0.1,
+            height: 1,
+            kind: "interior",
+          },
+        ],
+      },
+    };
+    const initial = createInitialState(1);
+    initial.enemies = {
+      "a-target": enemyAhead("a-target", { x: 0, y: 1 }),
+    };
+    return {
+      content,
+      state: withManualProjectile(initial, {
+        position: { x: 0, y: 0 },
+        direction: { x: 0, y: 1 },
+        speed: 120,
+        radius: 0.1,
+      }),
+    };
+  };
+
+  it("prioritizes world contact over an enemy at the same TOI regardless of IDs", () => {
+    const { state, content } = tieFixture(0);
+
+    const result = stepGame(
+      state,
+      neutralIntent,
+      1 / 60,
+      content,
+    );
+
+    expect(result.events).toEqual([]);
+    expect(result.state.enemies["a-target"]!.health).toBe(36);
+    expect(result.state.combat.projectiles).toEqual([]);
+  });
+
+  it.each([
+    {
+      name: "world later within epsilon is treated as a tie",
+      worldTimeOffset: 0.5e-9,
+      expectedHealth: 36,
+    },
+    {
+      name: "world later beyond epsilon loses to the enemy",
+      worldTimeOffset: 2e-9,
+      expectedHealth: 21,
+    },
+    {
+      name: "world earlier beyond epsilon remains first",
+      worldTimeOffset: -2e-9,
+      expectedHealth: 36,
+    },
+  ])("$name", ({ worldTimeOffset, expectedHealth }) => {
+    const { state, content } = tieFixture(worldTimeOffset);
+
+    const result = stepGame(
+      state,
+      neutralIntent,
+      1 / 60,
+      content,
+    );
+
+    expect(result.state.enemies["a-target"]!.health).toBe(
+      expectedHealth,
+    );
+    expect(result.state.combat.projectiles).toEqual([]);
+  });
+
   it("destroys a shot on the closed boss gate before it can damage an enemy behind it", () => {
     const initial = createInitialState(1);
     initial.enemies = {
@@ -986,7 +1068,7 @@ describe("incoming damage, guard, dodge, and death", () => {
     const beforeBoundary = runTicks(hit, new Map(), 17).state;
     const atBoundary = stepGame(
       beforeBoundary,
-      neutralIntent,
+      { ...neutralIntent, lockPressed: true },
       1 / 60,
       arenaContent,
     ).state;
@@ -996,6 +1078,7 @@ describe("incoming damage, guard, dodge, and death", () => {
         ...neutralIntent,
         moveY: 1,
         attackPressed: true,
+        lockPressed: true,
       },
       1 / 60,
       arenaContent,
@@ -1009,12 +1092,16 @@ describe("incoming damage, guard, dodge, and death", () => {
     expect(atBoundary.player).toMatchObject({
       action: "idle",
       actionTime: 0,
+      lockTargetId: null,
     });
     expect(atBoundary.combat.playerHitRecoveryTicks).toBe(0);
     expect(afterBoundary.player.action).toBe("attack");
     expect(afterBoundary.player.position.y).toBeCloseTo(-8.93, 10);
     expect(afterBoundary.combat.activeAttack?.actionId).toBe(
       "oathblade-light-1",
+    );
+    expect(afterBoundary.player.lockTargetId).toBe(
+      "training-lock-target",
     );
   });
 
@@ -1034,6 +1121,7 @@ describe("incoming damage, guard, dodge, and death", () => {
         attackPressed: true,
         guardHeld: true,
         dodgePressed: true,
+        lockPressed: true,
         switchWeaponPressed: true,
         healPressed: true,
       },
@@ -1048,11 +1136,37 @@ describe("incoming damage, guard, dodge, and death", () => {
       stamina: 100,
       weaponId: "oathblade",
       healingCharges: 3,
+      lockTargetId: null,
     });
     expect(result.combat).toMatchObject({
       activeAttack: null,
       playerHitRecoveryTicks: 1,
     });
+  });
+
+  it("produces the same hit-recovery state with or without lock input", () => {
+    const hit = applyIncomingDamage(
+      createInitialState(1),
+      incomingHit(),
+      false,
+      arenaContent,
+    ).state;
+    const withoutLock = stepGame(
+      hit,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    ).state;
+    const withLock = stepGame(
+      hit,
+      { ...neutralIntent, lockPressed: true },
+      1 / 60,
+      arenaContent,
+    ).state;
+
+    expect(withLock).toEqual(withoutLock);
+    expect(withLock.player.lockTargetId).toBeNull();
+    expect(withLock.combat).toEqual(withoutLock.combat);
   });
 
   it("resets hit recovery on another accepted nonfatal hit", () => {
@@ -1103,7 +1217,7 @@ describe("incoming damage, guard, dodge, and death", () => {
     ).state;
     const pausedFrame = stepGame(
       paused,
-      neutralIntent,
+      { ...neutralIntent, lockPressed: true },
       1 / 60,
       arenaContent,
     );
@@ -1113,7 +1227,7 @@ describe("incoming damage, guard, dodge, and death", () => {
     };
     const upgradeFrame = stepGame(
       upgrade,
-      neutralIntent,
+      { ...neutralIntent, lockPressed: true },
       1 / 60,
       arenaContent,
     );
@@ -1127,7 +1241,7 @@ describe("incoming damage, guard, dodge, and death", () => {
     ).state;
     const deadFrame = stepGame(
       dead,
-      neutralIntent,
+      { ...neutralIntent, lockPressed: true },
       1 / 60,
       arenaContent,
     );
