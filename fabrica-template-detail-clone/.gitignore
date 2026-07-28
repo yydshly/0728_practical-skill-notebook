@@ -1,5 +1,5 @@
 node_modules/
 dist/
-qa-vite-*.out.log
-qa-vite-*.err.log
-test-results/
+/qa-vite-*.out.log
+/qa-vite-*.err.log
+/test-results/
