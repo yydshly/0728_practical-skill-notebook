@@ -888,6 +888,8 @@ git commit -m "feat: add cinematic village atmosphere"
 **Files:**
 - Create: `rural-mutation-escape/src/collision.js`
 - Create: `rural-mutation-escape/src/interactions.js`
+- Modify: `rural-mutation-escape/src/level-data.js`
+- Modify: `rural-mutation-escape/src/world/props.js`
 - Modify: `rural-mutation-escape/src/player.js`
 - Modify: `rural-mutation-escape/src/main.js`
 - Modify: `rural-mutation-escape/src/story.js`
@@ -899,6 +901,7 @@ git commit -m "feat: add cinematic village atmosphere"
 - Produces: `resolveCircleMove(position, delta, radius, bounds, colliders) -> { x, z }`.
 - Produces: `nearestInteraction(position, candidates, radius) -> candidate | null`.
 - `interactionAnchors` entries use `{ id, label, kind, position: THREE.Vector3 }`.
+- User-approved scope revision: corrected reachable anchors live in `VILLAGE_LAYOUT.anchors`; prop-cluster collision metadata shares the prop's canonical ID and transform, and `level.js` must not override either source.
 
 - [ ] **Step 1: Write failing collision and interaction tests**
 
