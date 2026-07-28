@@ -47,6 +47,19 @@ test("upgrade save reload and real defeat retry preserve the checkpoint without 
     "/?fixture=wave-one&reviewControls=1&manualEnemyAi=1",
   );
   await strikeWaveOne(page);
+  const upgradeCheckpoint = await page.evaluate(() =>
+    localStorage.getItem("ashfall-arena:v1"));
+  expect(upgradeCheckpoint).toContain('"status":"upgrade"');
+  expect(upgradeCheckpoint).toContain('"phase":"wave-one"');
+
+  await page.goto("/?reviewControls=1&manualEnemyAi=1");
+  const restoredUpgrade = await page.evaluate(() =>
+    window.__ashfallDiagnostics!.getSerializableState());
+  expect(restoredUpgrade).toMatchObject({
+    status: "upgrade",
+    encounter: { phase: "wave-one", gateOpen: false },
+    enemies: {},
+  });
   const modal = page.getByRole("dialog", { name: "选择一次升级" });
   await expect(modal).toBeVisible();
   await expect(modal.getByRole("button", { name: /活力/ })).toBeFocused();
@@ -56,6 +69,7 @@ test("upgrade save reload and real defeat retry preserve the checkpoint without 
     .toBe("elite");
   const saved = await page.evaluate(() =>
     localStorage.getItem("ashfall-arena:v1"));
+  expect(saved).toContain('"status":"playing"');
   expect(saved).toContain('"phase":"elite"');
   expect(saved).toContain('"upgradeId":"vitality"');
 
@@ -81,10 +95,23 @@ test("upgrade save reload and real defeat retry preserve the checkpoint without 
     window.__ashfallDiagnostics!.drivePlayerDefeat("elite-bell"));
   await expect.poll(async () => (await snapshot(page)).status)
     .toBe("defeated");
-  await expect(
-    page.getByRole("dialog", { name: "本轮挑战失败" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "从检查点重试" }).click();
+  const defeatModal = page.getByRole("dialog", { name: "本轮挑战失败" });
+  const retry = defeatModal.getByRole("button", {
+    name: "从检查点重试",
+  });
+  const defeatNewRun = defeatModal.getByRole("button", {
+    name: "新开一局",
+  });
+  await expect(defeatModal).toBeVisible();
+  await expect(retry).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(defeatNewRun).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(retry).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(defeatModal).toBeVisible();
+  await retry.click();
+  await expect(page.locator("[data-game-canvas]")).toBeFocused();
 
   const retried = await page.evaluate(() =>
     window.__ashfallDiagnostics!.getSerializableState());
@@ -141,6 +168,88 @@ test("corrupt saves and quota failures fall back visibly without breaking the ru
   expect((await snapshot(page)).status).toBe("playing");
 });
 
+test("a blocked localStorage getter keeps the complete session playable without page errors", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("blocked", "SecurityError");
+      },
+    });
+  });
+
+  await page.goto("/?reviewControls=1&safeTraining=1");
+  await expect(page.locator("[data-game-canvas]")).toHaveCount(1);
+  await expect(page.locator("[data-save-notice]")).toContainText(
+    "本次会话无法保存",
+  );
+  const before = await snapshot(page);
+  await page.keyboard.down("w");
+  await page.waitForTimeout(250);
+  await page.keyboard.up("w");
+  const after = await snapshot(page);
+  expect(after.player.z).toBeGreaterThan(before.player.z + 0.3);
+  expect(errors).toEqual([]);
+});
+
+test("upgrade modal traps keyboard focus, blocks Escape, and returns focus to the game", async ({
+  page,
+}) => {
+  await page.goto(
+    "/?fixture=wave-one&reviewControls=1&manualEnemyAi=1",
+  );
+  await strikeWaveOne(page);
+  const modal = page.getByRole("dialog", { name: "选择一次升级" });
+  const vitality = modal.getByRole("button", { name: /活力/ });
+  const power = modal.getByRole("button", { name: /力量/ });
+  const canvas = page.locator("[data-game-canvas]");
+
+  await expect(vitality).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(power).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(vitality).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(power).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(modal).toBeVisible();
+  expect((await snapshot(page)).status).toBe("upgrade");
+
+  await canvas.focus();
+  await expect(canvas).not.toBeFocused();
+  expect(
+    await page.evaluate(() =>
+      Boolean(
+        document.querySelector("[data-upgrade-modal]")
+          ?.contains(document.activeElement),
+      )),
+  ).toBe(true);
+  expect(
+    await page.evaluate(() => {
+      const backgroundButton =
+        document.querySelector<HTMLElement>(".new-run-button")!;
+      const box = backgroundButton.getBoundingClientRect();
+      return document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2,
+      ) !== backgroundButton;
+    }),
+  ).toBe(true);
+
+  await vitality.dblclick();
+  await expect(modal).not.toBeVisible();
+  await expect(canvas).toBeFocused();
+  expect((await snapshot(page)).encounterPhase).toBe("elite");
+});
+
 test("new run cancellation is a no-op and confirmation clears only the exact key", async ({
   page,
 }) => {
@@ -153,7 +262,9 @@ test("new run cancellation is a no-op and confirmation clears only the exact key
     localStorage.setItem("another-product:v1", "keep"));
 
   page.once("dialog", (dialog) => dialog.dismiss());
-  await page.getByRole("button", { name: "新开一局" }).click();
+  const newRun = page.getByRole("button", { name: "新开一局" });
+  await newRun.click();
+  await expect(newRun).toBeFocused();
   expect((await snapshot(page)).encounterPhase).toBe("elite");
   expect(
     await page.evaluate(() =>
@@ -161,7 +272,7 @@ test("new run cancellation is a no-op and confirmation clears only the exact key
   ).not.toBeNull();
 
   page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "新开一局" }).click();
+  await newRun.click();
   await expect.poll(async () => (await snapshot(page)).encounterPhase)
     .toBe("training");
   expect(
@@ -171,6 +282,7 @@ test("new run cancellation is a no-op and confirmation clears only the exact key
     })),
   ).toEqual({ ashfall: null, other: "keep" });
   expect((await snapshot(page)).canvasCount).toBe(1);
+  await expect(page.locator("[data-game-canvas]")).toBeFocused();
 });
 
 test("boss completion is saved and reloads as a completed record", async ({
@@ -195,6 +307,21 @@ test("boss completion is saved and reloads as a completed record", async ({
   await expect(
     page.getByRole("dialog", { name: "挑战完成记录" }),
   ).toBeFocused();
+  const completeModal = page.getByRole("dialog", {
+    name: "挑战完成记录",
+  });
+  const completeNewRun = completeModal.getByRole("button", {
+    name: "新开一局",
+  });
+  await page.keyboard.press("Tab");
+  await expect(completeNewRun).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(completeNewRun).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(completeModal).toBeVisible();
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await completeNewRun.click();
+  await expect(completeNewRun).toBeFocused();
   const restored = await page.evaluate(() =>
     window.__ashfallDiagnostics!.getSerializableState());
   expect(restored.status).toBe("complete");

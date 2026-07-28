@@ -16,9 +16,20 @@ export interface SaveStorage {
   removeItem(key: string): void;
 }
 
+export function getSafeStorage(
+  accessor: () => SaveStorage,
+): SaveStorage | null {
+  try {
+    return accessor();
+  } catch {
+    return null;
+  }
+}
+
 export interface AshfallSaveV1 {
   readonly version: 1;
   readonly seed: number;
+  readonly status: "playing" | "upgrade" | "complete";
   readonly player: Readonly<{
     health: number;
     maxHealth: 105 | 125;
@@ -58,6 +69,11 @@ const ENCOUNTER_PHASES = new Set<EncounterPhase>([
   "complete",
 ]);
 const WEAPONS = new Set<WeaponId>(["oathblade", "ember-bow"]);
+const SAVE_STATUSES = new Set<AshfallSaveV1["status"]>([
+  "playing",
+  "upgrade",
+  "complete",
+]);
 const KNOWN_REWARD_IDS = new Set([
   "wave-one-crawler-a:souls",
   "wave-one-crawler-b:souls",
@@ -167,12 +183,15 @@ const normalizeSave = (value: unknown): AshfallSaveV1 | null => {
     !hasExactKeys(value, [
       "version",
       "seed",
+      "status",
       "player",
       "encounter",
       "completion",
     ]) ||
     value.version !== 1 ||
     !isSafeSeed(value.seed) ||
+    typeof value.status !== "string" ||
+    !SAVE_STATUSES.has(value.status as AshfallSaveV1["status"]) ||
     !isValidPlayer(value.player) ||
     !isRecord(value.encounter) ||
     !hasExactKeys(value.encounter, ["phase"]) ||
@@ -182,12 +201,29 @@ const normalizeSave = (value: unknown): AshfallSaveV1 | null => {
   ) {
     return null;
   }
+  const status = value.status as AshfallSaveV1["status"];
   const phase = value.encounter.phase as EncounterPhase;
-  if (value.completion !== (phase === "complete")) return null;
+  const upgradeId = value.player.upgradeId;
+  const validCheckpoint =
+    status === "upgrade"
+      ? phase === "wave-one" &&
+        upgradeId === null &&
+        value.completion === false
+      : status === "complete"
+        ? phase === "complete" &&
+          upgradeId !== null &&
+          value.completion === true
+        : phase === "training" || phase === "wave-one"
+          ? upgradeId === null && value.completion === false
+          : phase === "elite" || phase === "boss"
+            ? upgradeId !== null && value.completion === false
+            : false;
+  if (!validCheckpoint) return null;
 
   return {
     version: 1,
     seed: value.seed,
+    status,
     player: {
       health: value.player.health,
       maxHealth: value.player.maxHealth,
@@ -203,29 +239,36 @@ const normalizeSave = (value: unknown): AshfallSaveV1 | null => {
   };
 };
 
-const saveFromState = (state: GameState): AshfallSaveV1 => ({
-  version: 1,
-  seed: state.seed,
-  player: {
-    health: state.player.health,
-    maxHealth: state.player.maxHealth as 105 | 125,
-    weaponId: state.player.weaponId,
-    healingCharges: state.player.healingCharges,
-    souls: state.player.souls,
-    powerMultiplier: state.player.powerMultiplier,
-    upgradeId: state.player.upgradeId,
-    claimedRewardIds: [...state.claimedDropIds].sort(),
-  },
-  encounter: { phase: state.encounter.phase },
-  completion:
-    state.status === "complete" &&
-    state.encounter.phase === "complete",
-});
+const saveFromState = (state: GameState): AshfallSaveV1 => {
+  if (state.status === "defeated") {
+    throw new TypeError("defeated state is not a checkpoint");
+  }
+  return {
+    version: 1,
+    seed: state.seed,
+    status: state.status,
+    player: {
+      health: state.player.health,
+      maxHealth: state.player.maxHealth as 105 | 125,
+      weaponId: state.player.weaponId,
+      healingCharges: state.player.healingCharges,
+      souls: state.player.souls,
+      powerMultiplier: state.player.powerMultiplier,
+      upgradeId: state.player.upgradeId,
+      claimedRewardIds: [...state.claimedDropIds].sort(),
+    },
+    encounter: { phase: state.encounter.phase },
+    completion:
+      state.status === "complete" &&
+      state.encounter.phase === "complete",
+  };
+};
 
 const canonicalStringify = (save: AshfallSaveV1): string =>
   JSON.stringify({
     version: 1,
     seed: save.seed,
+    status: save.status,
     player: {
       health: save.player.health,
       maxHealth: save.player.maxHealth,
@@ -271,8 +314,11 @@ export function parseSave(raw: unknown): ParseSaveResult {
 
 export function writeSave(
   state: GameState,
-  storage: SaveStorage,
+  storage: SaveStorage | null,
 ): SaveOperationResult {
+  if (storage === null) {
+    return { ok: false, reason: "storage-unavailable" };
+  }
   let serialized: string;
   try {
     serialized = serializeSave(state);
@@ -287,7 +333,12 @@ export function writeSave(
   }
 }
 
-export function readSave(storage: SaveStorage): ParseSaveResult {
+export function readSave(
+  storage: SaveStorage | null,
+): ParseSaveResult {
+  if (storage === null) {
+    return { ok: false, reason: "storage-unavailable" };
+  }
   let raw: string | null;
   try {
     raw = storage.getItem(ASHFALL_SAVE_KEY);
@@ -300,8 +351,11 @@ export function readSave(storage: SaveStorage): ParseSaveResult {
 }
 
 export function clearSave(
-  storage: SaveStorage,
+  storage: SaveStorage | null,
 ): SaveOperationResult {
+  if (storage === null) {
+    return { ok: false, reason: "storage-unavailable" };
+  }
   try {
     storage.removeItem(ASHFALL_SAVE_KEY);
     return { ok: true };
@@ -325,21 +379,38 @@ export function createStateFromSave(
     normalized.seed,
     fixtureForPhase(normalized.encounter.phase),
   );
+  const isUpgradeCheckpoint = normalized.status === "upgrade";
+  const checkpointFixture = isUpgradeCheckpoint
+    ? {
+        ...fixture,
+        status: "upgrade" as const,
+        enemies: {},
+        encounter: {
+          ...fixture.encounter,
+          phase: "wave-one" as const,
+          completedIds: [
+            "wave-one-crawler-a",
+            "wave-one-crawler-b",
+            "wave-one-warden",
+          ],
+        },
+      }
+    : fixture;
   return {
-    ...fixture,
-    status: normalized.completion ? "complete" : "playing",
+    ...checkpointFixture,
+    status: normalized.status,
     paused: false,
     drops: [],
     rewardedEnemyIds: [],
     claimedDropIds: [...normalized.player.claimedRewardIds],
     player: {
-      ...fixture.player,
+      ...checkpointFixture.player,
       health:
-        mode === "retry"
+        mode === "retry" && normalized.status === "playing"
           ? normalized.player.maxHealth
           : normalized.player.health,
       maxHealth: normalized.player.maxHealth,
-      stamina: fixture.player.maxStamina,
+      stamina: checkpointFixture.player.maxStamina,
       weaponId: normalized.player.weaponId,
       healingCharges: normalized.player.healingCharges,
       souls: normalized.player.souls,

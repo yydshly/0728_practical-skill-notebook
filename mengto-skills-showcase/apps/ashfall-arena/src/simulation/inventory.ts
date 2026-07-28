@@ -1,4 +1,4 @@
-import { stepEncounter } from "./encounters";
+import { enterEliteAfterUpgrade } from "./encounters";
 import type {
   DropDefinitionId,
   EnemyKind,
@@ -210,7 +210,7 @@ export function applyUpgrade(
   }
   if (
     state.status !== "upgrade" ||
-    state.encounter.phase !== "elite"
+    state.encounter.phase !== "wave-one"
   ) {
     throw new Error("upgrade is not currently offered");
   }
@@ -233,7 +233,7 @@ export function applyUpgrade(
     status: "playing",
     player,
   };
-  return stepEncounter(committed, []).state;
+  return enterEliteAfterUpgrade(committed);
 }
 
 export function useHealingCharge(state: GameState): GameState {

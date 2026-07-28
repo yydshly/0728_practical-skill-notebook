@@ -5,6 +5,7 @@ import {
   ASHFALL_SAVE_KEY,
   clearSave,
   createStateFromSave,
+  getSafeStorage,
   parseSave,
   readSave,
   serializeSave,
@@ -81,7 +82,7 @@ describe("versioned save schema", () => {
     const serialized = serializeSave(dirty);
 
     expect(serialized).toBe(
-      '{"version":1,"seed":7481,"player":{"health":91,"maxHealth":125,"weaponId":"ember-bow","healingCharges":2,"souls":55,"powerMultiplier":1,"upgradeId":"vitality","claimedRewardIds":["wave-one-crawler-a:souls","wave-one-crawler-b:souls","wave-one-warden:souls"]},"encounter":{"phase":"elite"},"completion":false}',
+      '{"version":1,"seed":7481,"status":"playing","player":{"health":91,"maxHealth":125,"weaponId":"ember-bow","healingCharges":2,"souls":55,"powerMultiplier":1,"upgradeId":"vitality","claimedRewardIds":["wave-one-crawler-a:souls","wave-one-crawler-b:souls","wave-one-warden:souls"]},"encounter":{"phase":"elite"},"completion":false}',
     );
     expect(serialized).not.toMatch(
       /tick|paused|drops|enemy|projectile|attackSequence|renderer|input/,
@@ -141,14 +142,112 @@ describe("versioned save schema", () => {
       save: {
         version: 1,
         seed: 7481,
+        status: "playing",
         encounter: { phase: "elite" },
         completion: false,
       },
     });
   });
+
+  it.each([
+    ["playing", "training", null, false],
+    ["playing", "wave-one", null, false],
+    ["upgrade", "wave-one", null, false],
+    ["playing", "elite", "vitality", false],
+    ["playing", "boss", "power", false],
+    ["complete", "complete", "power", true],
+  ] as const)(
+    "accepts the %s / %s / %s checkpoint combination",
+    (status, phase, upgradeId, completion) => {
+      const maxHealth = upgradeId === "vitality" ? 125 : 105;
+      const powerMultiplier = upgradeId === "power" ? 1.2 : 1;
+      const raw = JSON.stringify({
+        version: 1,
+        seed: 91,
+        status,
+        player: {
+          health: maxHealth,
+          maxHealth,
+          weaponId: "oathblade",
+          healingCharges: 3,
+          souls: 0,
+          powerMultiplier,
+          upgradeId,
+          claimedRewardIds: [],
+        },
+        encounter: { phase },
+        completion,
+      });
+      expect(parseSave(raw)).toMatchObject({ ok: true });
+    },
+  );
+
+  it.each([
+    ["upgrade", "elite", null, false],
+    ["upgrade", "wave-one", "power", false],
+    ["upgrade", "wave-one", null, true],
+    ["playing", "training", "power", false],
+    ["playing", "wave-one", "vitality", false],
+    ["playing", "elite", null, false],
+    ["playing", "boss", null, false],
+    ["playing", "complete", "power", true],
+    ["complete", "boss", "power", true],
+    ["complete", "complete", null, true],
+    ["complete", "complete", "vitality", false],
+  ] as const)(
+    "rejects contradictory %s / %s / %s / completion=%s",
+    (status, phase, upgradeId, completion) => {
+      const maxHealth = upgradeId === "vitality" ? 125 : 105;
+      const powerMultiplier = upgradeId === "power" ? 1.2 : 1;
+      const raw = JSON.stringify({
+        version: 1,
+        seed: 92,
+        status,
+        player: {
+          health: maxHealth,
+          maxHealth,
+          weaponId: "oathblade",
+          healingCharges: 3,
+          souls: 0,
+          powerMultiplier,
+          upgradeId,
+          claimedRewardIds: [],
+        },
+        encounter: { phase },
+        completion,
+      });
+      expect(parseSave(raw)).toEqual({
+        ok: false,
+        reason: "invalid-schema",
+      });
+    },
+  );
 });
 
 describe("safe storage adapter", () => {
+  it("contains a blocked storage getter before any operation is evaluated", () => {
+    let getterCalls = 0;
+    const storage = getSafeStorage(() => {
+      getterCalls += 1;
+      throw new DOMException("blocked", "SecurityError");
+    });
+
+    expect(storage).toBeNull();
+    expect(getterCalls).toBe(1);
+    expect(readSave(storage)).toEqual({
+      ok: false,
+      reason: "storage-unavailable",
+    });
+    expect(writeSave(savedEliteState(), storage)).toEqual({
+      ok: false,
+      reason: "storage-unavailable",
+    });
+    expect(clearSave(storage)).toEqual({
+      ok: false,
+      reason: "storage-unavailable",
+    });
+  });
+
   it("writes and reads only the exact save key after schema validation", () => {
     const storage = new MemoryStorage();
     const write = writeSave(savedEliteState(), storage);
@@ -253,6 +352,39 @@ describe("authoritative continuation and retry", () => {
       "elite-crawler",
     ]);
     expect(retry.drops).toEqual([]);
+  });
+
+  it("restores an upgrade checkpoint as the same modal with no encounter transients", () => {
+    const wave = createEncounterFixture(78, "wave-one");
+    const upgradeCheckpoint: GameState = {
+      ...wave,
+      status: "upgrade",
+      enemies: {},
+      encounter: {
+        ...wave.encounter,
+        phase: "wave-one",
+        completedIds: [
+          "wave-one-crawler-a",
+          "wave-one-crawler-b",
+          "wave-one-warden",
+        ],
+      },
+    };
+    const parsed = parseSave(serializeSave(upgradeCheckpoint));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    const continued = createStateFromSave(parsed.save, "continue");
+    const retried = createStateFromSave(parsed.save, "retry");
+    for (const restored of [continued, retried]) {
+      expect(restored.status).toBe("upgrade");
+      expect(restored.encounter.phase).toBe("wave-one");
+      expect(restored.player.upgradeId).toBeNull();
+      expect(restored.enemies).toEqual({});
+      expect(restored.drops).toEqual([]);
+      expect(restored.combat.projectiles).toEqual([]);
+      expect(restored.combat.enemyProjectiles).toEqual([]);
+    }
   });
 
   it("reloads a completion record with terminal continuation semantics", () => {

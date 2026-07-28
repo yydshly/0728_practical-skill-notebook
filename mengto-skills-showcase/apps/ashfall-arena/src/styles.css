@@ -424,6 +424,8 @@ html[data-paused="true"] .arena-status::after {
   left: 50%;
   z-index: 20;
   width: min(92%, 31rem);
+  max-width: none;
+  margin: 0;
   padding: 1.35rem;
   transform: translate(-50%, -50%);
   border: 1px solid rgb(240 174 102 / 55%);
@@ -434,9 +436,13 @@ html[data-paused="true"] .arena-status::after {
   color: #f4e6da;
 }
 
-.progression-dialog[hidden],
 .save-notice[hidden] {
   display: none;
+}
+
+.progression-dialog::backdrop {
+  background: rgb(7 5 8 / 72%);
+  backdrop-filter: blur(2px);
 }
 
 .progression-dialog h2 {

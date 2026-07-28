@@ -164,7 +164,7 @@ test("wave-one proves readable enemy contact, defenses, player defeat, and objec
   }
   await expect.poll(async () => (await snapshot(page)).status).toBe("upgrade");
   await expect.poll(async () => (await snapshot(page)).encounterPhase)
-    .toBe("elite");
+    .toBe("wave-one");
   await expect(page.locator("[data-objective]")).toContainText("升级");
 
   const final = await snapshot(page);

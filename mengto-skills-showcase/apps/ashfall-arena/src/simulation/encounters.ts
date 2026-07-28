@@ -518,6 +518,9 @@ export function stepEncounter(
   if (working.encounter.phase === "complete") {
     return { state: working, events: [] };
   }
+  if (working.status === "upgrade") {
+    return { state: working, events: [] };
+  }
 
   if (working.encounter.phase === "training") {
     return stepTraining(working, events);
@@ -528,7 +531,7 @@ export function stepEncounter(
     allCompleted(working, "wave-one")
   ) {
     working = removeEnemies(working, PHASE_ENEMY_IDS["wave-one"]);
-    working = transition(working, "elite", false);
+    working = transition(working, "wave-one", false);
     return {
       state: { ...working, status: "upgrade" },
       events: [{ type: "upgrade-offered" }],
@@ -589,6 +592,17 @@ export function stepEncounter(
   return { state: working, events: [] };
 }
 
+export function enterEliteAfterUpgrade(state: GameState): GameState {
+  if (
+    state.status !== "playing" ||
+    state.encounter.phase !== "wave-one" ||
+    state.player.upgradeId === null
+  ) {
+    throw new Error("elite phase requires a committed upgrade");
+  }
+  return spawnPhase(transition(state, "elite", false), "elite");
+}
+
 export function createEncounterFixture(
   seed: number,
   fixture: EncounterFixture,
@@ -633,6 +647,14 @@ export function createEncounterFixture(
       ),
     });
   };
+  const withReachedUpgrade = (state: GameState): GameState => ({
+    ...state,
+    player: {
+      ...state.player,
+      powerMultiplier: 1.2,
+      upgradeId: "power",
+    },
+  });
   switch (fixture) {
     case "fresh":
       return finish(initial);
@@ -656,7 +678,7 @@ export function createEncounterFixture(
         "wave-one",
       ));
     case "elite":
-      return finish(spawnPhase(
+      return finish(withReachedUpgrade(spawnPhase(
         {
           ...initial,
           player: {
@@ -673,9 +695,9 @@ export function createEncounterFixture(
           },
         },
         "elite",
-      ));
+      )));
     case "boss":
-      return finish(spawnPhase(
+      return finish(withReachedUpgrade(spawnPhase(
         {
           ...initial,
           player: {
@@ -693,9 +715,9 @@ export function createEncounterFixture(
           },
         },
         "boss",
-      ));
+      )));
     case "complete":
-      return finish({
+      return finish(withReachedUpgrade({
         ...initial,
         status: "complete",
         encounter: {
@@ -706,7 +728,7 @@ export function createEncounterFixture(
           trainingAttackSeen: true,
           trainingGuardSeen: true,
         },
-      });
+      }));
     default:
       throw new Error(`Unknown encounter fixture: ${String(fixture)}`);
   }

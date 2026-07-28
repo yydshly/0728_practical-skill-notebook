@@ -246,11 +246,17 @@ describe("one upgrade", () => {
     const state: GameState = {
       ...base,
       status: "upgrade",
-      player: { ...base.player, health: 100 },
+      player: {
+        ...base.player,
+        health: 100,
+        maxHealth: 105,
+        powerMultiplier: 1,
+        upgradeId: null,
+      },
       enemies: {},
       encounter: {
         ...base.encounter,
-        phase: "elite",
+        phase: "wave-one",
         spawnedIds: [],
       },
     };

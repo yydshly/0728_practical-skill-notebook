@@ -333,7 +333,7 @@ describe("complete encounter arc", () => {
 
     expect(first.state).toMatchObject({
       status: "upgrade",
-      encounter: { phase: "elite", gateOpen: false },
+      encounter: { phase: "wave-one", gateOpen: false },
     });
     expect(first.events.filter(({ type }) => type === "upgrade-offered")).toEqual(
       [{ type: "upgrade-offered" }],

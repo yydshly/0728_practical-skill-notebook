@@ -9,6 +9,7 @@ import { FixedStepAccumulator } from "./main-loop";
 import {
   clearSave,
   createStateFromSave,
+  getSafeStorage,
   readSave,
   writeSave,
 } from "./persistence/save-game";
@@ -123,6 +124,7 @@ const manualEnemyAi = query.get("manualEnemyAi") === "1";
 const captureMode = query.get("capture") === "1";
 const forcedMonsterFailure = query.get("forceEnemyModelFailure");
 document.documentElement.dataset.reviewControls = reviewControls ? "on" : "off";
+const saveStorage = getSafeStorage(() => window.localStorage);
 
 let saveNoticeMessage = "";
 const createFixtureState = () =>
@@ -136,7 +138,7 @@ const createFixtureState = () =>
     },
   );
 const savedContinuation =
-  fixtureParameter === null ? readSave(window.localStorage) : null;
+  fixtureParameter === null ? readSave(saveStorage) : null;
 let state: GameState =
   savedContinuation?.ok
     ? createStateFromSave(savedContinuation.save, "continue")
@@ -149,7 +151,7 @@ if (savedContinuation && !savedContinuation.ok) {
   ) {
     saveNoticeMessage = "存档损坏，已安全回到全新开局。";
   } else if (savedContinuation.reason === "storage-unavailable") {
-    saveNoticeMessage = "当前浏览器无法读取存档，已继续本次游戏。";
+    saveNoticeMessage = "本次会话无法保存，但游戏仍可继续。";
   }
 }
 
@@ -163,7 +165,7 @@ app.innerHTML = `
       <p class="device-legend">键鼠 · 触控 · 标准手柄</p>
     </header>
     <section class="game-stage" aria-label="灰烬竞技场游戏画面">
-      <canvas data-game-canvas aria-label="灰烬竞技场实时三维画面"></canvas>
+      <canvas data-game-canvas aria-label="灰烬竞技场实时三维画面" tabindex="0"></canvas>
       <aside class="hud" aria-label="玩家状态">
         <div class="hud__vitals">
           <span class="hud__label">生命</span>
@@ -192,7 +194,7 @@ app.innerHTML = `
       <div class="arena-status" role="status" aria-live="polite">训练阶段 · 闸门关闭</div>
       <p class="save-notice" data-save-notice role="status" aria-live="polite" hidden></p>
       <button class="new-run-button" type="button" data-new-run>新开一局</button>
-      <section class="progression-dialog" data-upgrade-modal role="dialog" aria-modal="true" aria-label="选择一次升级" tabindex="-1" hidden>
+      <dialog class="progression-dialog" data-upgrade-modal aria-label="选择一次升级" tabindex="-1">
         <p class="progression-dialog__kicker">第一波奖励</p>
         <h2>选择一次升级</h2>
         <p>本局只能选择一项，确认后进入精英战。</p>
@@ -200,20 +202,24 @@ app.innerHTML = `
           <button type="button" data-upgrade-id="vitality">活力：生命上限提升至 125，并恢复 20</button>
           <button type="button" data-upgrade-id="power">力量：武器伤害提升 20%</button>
         </div>
-      </section>
-      <section class="progression-dialog" data-defeat-modal role="dialog" aria-modal="true" aria-label="本轮挑战失败" tabindex="-1" hidden>
+      </dialog>
+      <dialog class="progression-dialog" data-defeat-modal aria-label="本轮挑战失败" tabindex="-1">
         <p class="progression-dialog__kicker">检查点仍然安全</p>
         <h2>本轮挑战失败</h2>
         <p>重试会恢复最近阶段、完整生命与精力，并保留升级和已保存奖励。</p>
         <div class="progression-dialog__actions">
           <button type="button" data-retry>从检查点重试</button>
+          <button type="button" data-new-run>新开一局</button>
         </div>
-      </section>
-      <section class="progression-dialog" data-complete-modal role="dialog" aria-modal="true" aria-label="挑战完成记录" tabindex="-1" hidden>
+      </dialog>
+      <dialog class="progression-dialog" data-complete-modal aria-label="挑战完成记录" tabindex="-1">
         <p class="progression-dialog__kicker">本地完成记录</p>
         <h2>挑战完成记录</h2>
         <p>钟鸣君主已被击败；重新载入仍会保留这份完成记录。</p>
-      </section>
+        <div class="progression-dialog__actions">
+          <button type="button" data-new-run>新开一局</button>
+        </div>
+      </dialog>
     </section>
   </main>`;
 
@@ -232,9 +238,15 @@ const telegraphBanner = app.querySelector<HTMLElement>(
   "[data-enemy-telegraph]",
 )!;
 const saveNotice = app.querySelector<HTMLElement>("[data-save-notice]")!;
-const upgradeModal = app.querySelector<HTMLElement>("[data-upgrade-modal]")!;
-const defeatModal = app.querySelector<HTMLElement>("[data-defeat-modal]")!;
-const completeModal = app.querySelector<HTMLElement>("[data-complete-modal]")!;
+const upgradeModal = app.querySelector<HTMLDialogElement>(
+  "[data-upgrade-modal]",
+)!;
+const defeatModal = app.querySelector<HTMLDialogElement>(
+  "[data-defeat-modal]",
+)!;
+const completeModal = app.querySelector<HTMLDialogElement>(
+  "[data-complete-modal]",
+)!;
 const upgradeButtons = [
   ...upgradeModal.querySelectorAll<HTMLButtonElement>("[data-upgrade-id]"),
 ];
@@ -242,6 +254,11 @@ const retryButton = app.querySelector<HTMLButtonElement>("[data-retry]")!;
 const newRunButtons = [
   ...app.querySelectorAll<HTMLButtonElement>("[data-new-run]"),
 ];
+const progressionDialogs = [
+  upgradeModal,
+  defeatModal,
+  completeModal,
+] as const;
 
 const arena = createArenaScene(canvas, {
   preserveDrawingBuffer: reviewControls || captureMode,
@@ -301,6 +318,7 @@ let frameRequest = 0;
 let frameCount = 0;
 let disposed = false;
 let focusedStatus: GameState["status"] | null = null;
+let focusGameOnNextFrame = false;
 
 const setSaveNotice = (message: string) => {
   saveNoticeMessage = message;
@@ -310,10 +328,12 @@ const setSaveNotice = (message: string) => {
 setSaveNotice(saveNoticeMessage);
 
 const persistCheckpoint = (): boolean => {
-  const result = writeSave(state, window.localStorage);
+  const result = writeSave(state, saveStorage);
   if (!result.ok) {
     setSaveNotice(
-      result.reason === "invalid-schema"
+      saveStorage === null
+        ? "本次会话无法保存，但游戏仍可继续。"
+        : result.reason === "invalid-schema"
         ? "当前阶段无法安全保存，但本次游戏仍可继续。"
         : "无法写入存档，但本次游戏仍可继续。",
     );
@@ -331,11 +351,12 @@ const replaceRunState = (next: GameState) => {
   presentationEvents.length = 0;
   recentEvents.length = 0;
   focusedStatus = null;
+  focusGameOnNextFrame = true;
 };
 
 const retryLatestCheckpoint = (): boolean => {
   if (state.status !== "defeated") return false;
-  const saved = readSave(window.localStorage);
+  const saved = readSave(saveStorage);
   if (saved.ok) {
     replaceRunState(createStateFromSave(saved.save, "retry"));
     setSaveNotice("已恢复最近检查点。");
@@ -373,7 +394,7 @@ retryButton.addEventListener("click", onRetry);
 
 const onNewRun = () => {
   if (!window.confirm("确认清除灰烬竞技场存档并新开一局？")) return;
-  const cleared = clearSave(window.localStorage);
+  const cleared = clearSave(saveStorage);
   replaceRunState(createEncounterFixture(7481, "fresh"));
   setSaveNotice(
     cleared.ok
@@ -383,6 +404,37 @@ const onNewRun = () => {
 };
 newRunButtons.forEach((button) =>
   button.addEventListener("click", onNewRun));
+const preventDialogCancel = (event: Event) => {
+  event.preventDefault();
+};
+const trapDialogFocus = (event: KeyboardEvent) => {
+  if (event.key !== "Tab") return;
+  const dialog = event.currentTarget as HTMLDialogElement;
+  const controls = [
+    ...dialog.querySelectorAll<HTMLButtonElement>(
+      "button:not(:disabled)",
+    ),
+  ];
+  if (controls.length === 0) {
+    event.preventDefault();
+    dialog.focus();
+    return;
+  }
+  const index = controls.indexOf(
+    document.activeElement as HTMLButtonElement,
+  );
+  if (event.shiftKey && index <= 0) {
+    event.preventDefault();
+    controls.at(-1)!.focus();
+  } else if (!event.shiftKey && index === controls.length - 1) {
+    event.preventDefault();
+    controls[0]!.focus();
+  }
+};
+progressionDialogs.forEach((dialog) => {
+  dialog.addEventListener("cancel", preventDialogCancel);
+  dialog.addEventListener("keydown", trapDialogFocus);
+});
 
 const dispatchPresentationEvent = (event: PresentationEvent) => {
   presentationEvents.push(event);
@@ -413,6 +465,7 @@ const persistFromEvents = (events: readonly GameEvent[]) => {
     events.some(
       (event) =>
         event.type === "encounter-complete" ||
+        event.type === "upgrade-offered" ||
         (event.type === "encounter-phase" &&
           (event.phase === "wave-one" || event.phase === "boss")),
     )
@@ -496,11 +549,11 @@ const updateHud = () => {
     training: state.encounter.trainingSpawned
       ? "完成攻击与格挡训练"
       : "进入第一个琥珀训练环",
-    "wave-one": "击败第一波敌人",
-    elite:
+    "wave-one":
       state.status === "upgrade"
         ? "选择升级后进入精英战"
-        : "击败钟甲精英并开启王庭闸门",
+        : "击败第一波敌人",
+    elite: "击败钟甲精英并开启王庭闸门",
     boss: "击败钟鸣君主",
     complete: "竞技场挑战完成",
   };
@@ -513,9 +566,21 @@ const updateHud = () => {
     entityDiagnostics.telegraphIds.length === 0
       ? ""
       : `敌人正在蓄力：${entityDiagnostics.telegraphIds.join("、")}`;
-  upgradeModal.hidden = state.status !== "upgrade";
-  defeatModal.hidden = state.status !== "defeated";
-  completeModal.hidden = state.status !== "complete";
+  let closedModal = false;
+  const syncDialog = (
+    dialog: HTMLDialogElement,
+    shouldOpen: boolean,
+  ) => {
+    if (shouldOpen && !dialog.open) {
+      dialog.showModal();
+    } else if (!shouldOpen && dialog.open) {
+      dialog.close();
+      closedModal = true;
+    }
+  };
+  syncDialog(upgradeModal, state.status === "upgrade");
+  syncDialog(defeatModal, state.status === "defeated");
+  syncDialog(completeModal, state.status === "complete");
   if (focusedStatus !== state.status) {
     focusedStatus = state.status;
     if (state.status === "upgrade") {
@@ -525,6 +590,13 @@ const updateHud = () => {
     } else if (state.status === "complete") {
       completeModal.focus();
     }
+  }
+  if (
+    state.status === "playing" &&
+    (closedModal || focusGameOnNextFrame)
+  ) {
+    canvas.focus();
+    focusGameOnNextFrame = false;
   }
 };
 
@@ -959,6 +1031,11 @@ const dispose = () => {
   retryButton.removeEventListener("click", onRetry);
   newRunButtons.forEach((button) =>
     button.removeEventListener("click", onNewRun));
+  progressionDialogs.forEach((dialog) => {
+    dialog.removeEventListener("cancel", preventDialogCancel);
+    dialog.removeEventListener("keydown", trapDialogFocus);
+    if (dialog.open) dialog.close();
+  });
   input.dispose();
   synchronizer.dispose();
   cameraController.dispose();
