@@ -201,6 +201,41 @@ export function settlePendingDrops(state: GameState): GameState {
 
 export type UpgradeId = "vitality" | "power";
 
+export function applyPlayerHealing(
+  state: GameState,
+  amount: number,
+): StepGameResult {
+  if (
+    !Number.isFinite(amount) ||
+    amount <= 0 ||
+    state.player.health <= 0 ||
+    state.player.health >= state.player.maxHealth
+  ) {
+    return { state, events: [] };
+  }
+  const health = Math.min(
+    state.player.maxHealth,
+    state.player.health + amount,
+  );
+  const healed = health - state.player.health;
+  return {
+    state: {
+      ...state,
+      player: {
+        ...state.player,
+        health,
+      },
+    },
+    events: [
+      {
+        type: "healed",
+        actorId: state.player.id,
+        amount: healed,
+      },
+    ],
+  };
+}
+
 export function applyUpgrade(
   state: GameState,
   upgradeId: UpgradeId,
@@ -236,7 +271,9 @@ export function applyUpgrade(
   return enterEliteAfterUpgrade(committed);
 }
 
-export function useHealingCharge(state: GameState): GameState {
+export function useHealingChargeWithEvents(
+  state: GameState,
+): StepGameResult {
   if (
     state.status !== "playing" ||
     state.paused ||
@@ -248,14 +285,21 @@ export function useHealingCharge(state: GameState): GameState {
     state.player.action === "hit" ||
     state.player.action === "dead"
   ) {
-    return state;
+    return { state, events: [] };
   }
+  const healed = applyPlayerHealing(state, 35);
   return {
-    ...state,
-    player: {
-      ...state.player,
-      health: Math.min(state.player.maxHealth, state.player.health + 35),
-      healingCharges: state.player.healingCharges - 1,
+    state: {
+      ...healed.state,
+      player: {
+        ...healed.state.player,
+        healingCharges: state.player.healingCharges - 1,
+      },
     },
+    events: healed.events,
   };
+}
+
+export function useHealingCharge(state: GameState): GameState {
+  return useHealingChargeWithEvents(state).state;
 }

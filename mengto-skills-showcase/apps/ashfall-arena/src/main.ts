@@ -4,6 +4,8 @@ import {
 } from "@showcase/game-assets";
 import { PerspectiveCamera, Vector3 } from "three";
 import { arenaContent } from "./content/arena-content";
+import { createAudioFeedback } from "./feedback/create-audio";
+import { createVfx } from "./feedback/create-vfx";
 import { createInputAdapter } from "./input/create-input-adapter";
 import { FixedStepAccumulator } from "./main-loop";
 import {
@@ -13,6 +15,7 @@ import {
   readSave,
   writeSave,
 } from "./persistence/save-game";
+import { installReviewApi } from "./review/create-review-api";
 import { createArenaScene } from "./scene/create-arena-scene";
 import { createGameCamera } from "./scene/create-game-camera";
 import { resolveCameraOcclusion } from "./scene/resolve-camera-occlusion";
@@ -23,13 +26,21 @@ import {
 } from "./simulation/encounters";
 import { requestEnemyMove } from "./simulation/enemy-ai";
 import { applyUpgrade, type UpgradeId } from "./simulation/inventory";
-import { stepGame } from "./simulation/step-game";
+import {
+  settleAuthoritativeResult,
+  stepGame,
+} from "./simulation/step-game";
 import type {
   EnemyMoveId,
   GameEvent,
   GameIntent,
   GameState,
+  StepGameResult,
 } from "./simulation/types";
+import {
+  createHudController,
+  type HudController,
+} from "./ui/render-hud";
 import "./styles.css";
 
 interface AshfallSnapshot {
@@ -170,22 +181,34 @@ app.innerHTML = `
         <div class="hud__vitals">
           <span class="hud__label">生命</span>
           <strong data-health>105 / 105</strong>
-          <span class="hud__meter"><i data-health-meter></i></span>
+          <span class="hud__meter" role="progressbar" aria-label="生命值" aria-valuemin="0" aria-valuemax="105" aria-valuenow="105"><i data-health-meter></i></span>
         </div>
         <div class="hud__vitals">
           <span class="hud__label">精力</span>
           <strong data-stamina>100 / 100</strong>
-          <span class="hud__meter hud__meter--stamina"><i data-stamina-meter></i></span>
+          <span class="hud__meter hud__meter--stamina" role="progressbar" aria-label="精力值" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i data-stamina-meter></i></span>
         </div>
         <div class="hud__loadout">
           <span data-weapon>誓约刃</span>
           <span data-action>待机</span>
           <span data-healing>治疗瓶 × 3</span>
         </div>
+        <div class="hud__progression">
+          <span data-souls>灵魂 0</span>
+          <span data-upgrade>升级：未选择</span>
+        </div>
+      </aside>
+      <aside class="target-panel" data-target-panel aria-label="锁定目标" hidden>
+        <span data-target-name>目标</span>
+        <strong data-target-health>0 / 0</strong>
+        <span class="target-panel__meter" role="progressbar" aria-label="目标生命值" aria-valuemin="0" aria-valuenow="0"><i data-target-meter></i></span>
       </aside>
       <div class="enemy-telegraph-banner" data-enemy-telegraph hidden>
         敌人正在蓄力——准备格挡或闪避
       </div>
+      <p class="device-prompt" data-device-prompt>键鼠：WASD 移动，鼠标攻击/格挡</p>
+      <p class="feedback-caption" data-feedback-caption role="status" aria-live="polite" aria-atomic="true" hidden></p>
+      <div class="damage-flash" data-damage-flash aria-hidden="true" hidden></div>
       <section class="objective-card" data-objective aria-live="polite">
         <p class="objective-card__kicker">当前目标</p>
         <h2>进入第一个琥珀训练环</h2>
@@ -193,6 +216,13 @@ app.innerHTML = `
       </section>
       <div class="arena-status" role="status" aria-live="polite">训练阶段 · 闸门关闭</div>
       <p class="save-notice" data-save-notice role="status" aria-live="polite" hidden></p>
+      <fieldset class="audio-settings" aria-label="声音设置">
+        <legend>声音</legend>
+        <label><input type="checkbox" data-audio-mute aria-label="静音所有声音"> 静音</label>
+        <label>总音量 <input type="range" min="0" max="1" step="0.05" data-audio-master aria-label="总音量"></label>
+        <label>效果音 <input type="range" min="0" max="1" step="0.05" data-audio-effects aria-label="效果音音量"></label>
+        <label>环境音 <input type="range" min="0" max="1" step="0.05" data-audio-ambience aria-label="环境音音量"></label>
+      </fieldset>
       <button class="new-run-button" type="button" data-new-run>新开一局</button>
       <dialog class="progression-dialog" data-upgrade-modal aria-label="选择一次升级" tabindex="-1">
         <p class="progression-dialog__kicker">第一波奖励</p>
@@ -201,6 +231,15 @@ app.innerHTML = `
         <div class="progression-dialog__actions">
           <button type="button" data-upgrade-id="vitality">活力：生命上限提升至 125，并恢复 20</button>
           <button type="button" data-upgrade-id="power">力量：武器伤害提升 20%</button>
+        </div>
+      </dialog>
+      <dialog class="progression-dialog" data-pause-modal aria-label="游戏已暂停" tabindex="-1">
+        <p class="progression-dialog__kicker">模拟与反馈时钟已暂停</p>
+        <h2>游戏已暂停</h2>
+        <p>继续后从同一权威状态恢复，不会补算后台时间。</p>
+        <div class="progression-dialog__actions">
+          <button type="button" data-resume>继续战斗</button>
+          <button type="button" data-new-run>新开一局</button>
         </div>
       </dialog>
       <dialog class="progression-dialog" data-defeat-modal aria-label="本轮挑战失败" tabindex="-1">
@@ -225,43 +264,15 @@ app.innerHTML = `
 
 const canvas = app.querySelector<HTMLCanvasElement>("[data-game-canvas]")!;
 const stage = app.querySelector<HTMLElement>(".game-stage")!;
-const health = app.querySelector<HTMLElement>("[data-health]")!;
-const stamina = app.querySelector<HTMLElement>("[data-stamina]")!;
-const healthMeter = app.querySelector<HTMLElement>("[data-health-meter]")!;
-const staminaMeter = app.querySelector<HTMLElement>("[data-stamina-meter]")!;
-const weapon = app.querySelector<HTMLElement>("[data-weapon]")!;
-const action = app.querySelector<HTMLElement>("[data-action]")!;
-const healing = app.querySelector<HTMLElement>("[data-healing]")!;
-const objectiveTitle = app.querySelector<HTMLElement>(".objective-card h2")!;
-const arenaStatus = app.querySelector<HTMLElement>(".arena-status")!;
-const telegraphBanner = app.querySelector<HTMLElement>(
-  "[data-enemy-telegraph]",
-)!;
-const saveNotice = app.querySelector<HTMLElement>("[data-save-notice]")!;
-const upgradeModal = app.querySelector<HTMLDialogElement>(
-  "[data-upgrade-modal]",
-)!;
-const defeatModal = app.querySelector<HTMLDialogElement>(
-  "[data-defeat-modal]",
-)!;
-const completeModal = app.querySelector<HTMLDialogElement>(
-  "[data-complete-modal]",
-)!;
-const upgradeButtons = [
-  ...upgradeModal.querySelectorAll<HTMLButtonElement>("[data-upgrade-id]"),
-];
-const retryButton = app.querySelector<HTMLButtonElement>("[data-retry]")!;
-const newRunButtons = [
-  ...app.querySelectorAll<HTMLButtonElement>("[data-new-run]"),
-];
-const progressionDialogs = [
-  upgradeModal,
-  defeatModal,
-  completeModal,
-] as const;
+let hud: HudController | null = null;
 
 const arena = createArenaScene(canvas, {
   preserveDrawingBuffer: reviewControls || captureMode,
+});
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+const vfx = createVfx(arena.scene, {
+  reducedMotion: reducedMotion.matches,
+  quality: query.get("quality") === "low" ? "low" : "high",
 });
 const player = createVesperKnight();
 arena.scene.add(player.root);
@@ -296,6 +307,11 @@ const cameraController = createGameCamera(camera, {
   },
 });
 const input = createInputAdapter(canvas, stage);
+const audio = createAudioFeedback({
+  storage: saveStorage,
+  gestureTarget: window,
+  visibilityDocument: document,
+});
 const accumulator = new FixedStepAccumulator(1 / 60, 5, 0.25);
 const playerTarget = new Vector3();
 const trainingLockTarget = new Vector3(
@@ -303,7 +319,6 @@ const trainingLockTarget = new Vector3(
   0.8,
   arenaContent.arena.trainingCenter.y,
 );
-const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 cameraController.setReducedMotion(reducedMotion.matches);
 
 type PresentationEvent = {
@@ -317,15 +332,13 @@ let previousTimestamp: number | null = null;
 let frameRequest = 0;
 let frameCount = 0;
 let disposed = false;
-let focusedStatus: GameState["status"] | null = null;
 let focusGameOnNextFrame = false;
+let menuAxisLatch = 0;
 
 const setSaveNotice = (message: string) => {
   saveNoticeMessage = message;
-  saveNotice.textContent = message;
-  saveNotice.hidden = message.length === 0;
+  hud?.setSaveNotice(message);
 };
-setSaveNotice(saveNoticeMessage);
 
 const persistCheckpoint = (): boolean => {
   const result = writeSave(state, saveStorage);
@@ -350,7 +363,8 @@ const replaceRunState = (next: GameState) => {
   previousTimestamp = null;
   presentationEvents.length = 0;
   recentEvents.length = 0;
-  focusedStatus = null;
+  vfx.reset();
+  audio.setPaused(false);
   focusGameOnNextFrame = true;
 };
 
@@ -371,26 +385,20 @@ const retryLatestCheckpoint = (): boolean => {
   return true;
 };
 
-const onUpgradeClick = (event: Event) => {
+const onUpgrade = (upgradeId: UpgradeId) => {
   if (
     state.status !== "upgrade" ||
     state.player.upgradeId !== null
   ) {
     return;
   }
-  const button = event.currentTarget as HTMLButtonElement;
-  const upgradeId = button.dataset.upgradeId as UpgradeId;
   state = applyUpgrade(state, upgradeId);
-  focusedStatus = null;
   persistCheckpoint();
 };
-upgradeButtons.forEach((button) =>
-  button.addEventListener("click", onUpgradeClick));
 
 const onRetry = () => {
   retryLatestCheckpoint();
 };
-retryButton.addEventListener("click", onRetry);
 
 const onNewRun = () => {
   if (!window.confirm("确认清除灰烬竞技场存档并新开一局？")) return;
@@ -402,45 +410,42 @@ const onNewRun = () => {
       : "无法清除浏览器存档；当前画面已开始全新一局。",
   );
 };
-newRunButtons.forEach((button) =>
-  button.addEventListener("click", onNewRun));
-const preventDialogCancel = (event: Event) => {
-  event.preventDefault();
+
+const PAUSE_INTENT: GameIntent = {
+  moveX: 0,
+  moveY: 0,
+  attackPressed: false,
+  guardHeld: false,
+  dodgePressed: false,
+  lockPressed: false,
+  healPressed: false,
+  switchWeaponPressed: false,
+  pausePressed: true,
 };
-const trapDialogFocus = (event: KeyboardEvent) => {
-  if (event.key !== "Tab") return;
-  const dialog = event.currentTarget as HTMLDialogElement;
-  const controls = [
-    ...dialog.querySelectorAll<HTMLButtonElement>(
-      "button:not(:disabled)",
-    ),
-  ];
-  if (controls.length === 0) {
-    event.preventDefault();
-    dialog.focus();
-    return;
-  }
-  const index = controls.indexOf(
-    document.activeElement as HTMLButtonElement,
-  );
-  if (event.shiftKey && index <= 0) {
-    event.preventDefault();
-    controls.at(-1)!.focus();
-  } else if (!event.shiftKey && index === controls.length - 1) {
-    event.preventDefault();
-    controls[0]!.focus();
-  }
+
+const onResume = () => {
+  if (!state.paused || state.status !== "playing") return;
+  state = stepGame(state, PAUSE_INTENT, 1 / 60, arenaContent).state;
+  focusGameOnNextFrame = true;
 };
-progressionDialogs.forEach((dialog) => {
-  dialog.addEventListener("cancel", preventDialogCancel);
-  dialog.addEventListener("keydown", trapDialogFocus);
-});
+
+hud = createHudController(app, {
+  onUpgrade,
+  onRetry,
+  onNewRun,
+  onResume,
+  onAudioSettings(settings) {
+    audio.setSettings(settings);
+  },
+}, audio.getSettings());
+hud.setSaveNotice(saveNoticeMessage);
 
 const dispatchPresentationEvent = (event: PresentationEvent) => {
   presentationEvents.push(event);
 };
 
 const routeGameplayEvents = (events: readonly GameEvent[]) => {
+  if (events.length === 0) return;
   for (const event of events) {
     recentEvents.push({ tick: state.tick, event });
   }
@@ -455,9 +460,12 @@ const routeGameplayEvents = (events: readonly GameEvent[]) => {
     dispatchPresentationEvent({
       type: "camera-shake",
       amplitude: 0.16,
-      duration: 0.22,
+      duration: 0.5,
     });
   }
+  vfx.consume(events, state);
+  audio.consume(events, state);
+  hud?.consume(events, state);
 };
 
 const persistFromEvents = (events: readonly GameEvent[]) => {
@@ -472,6 +480,13 @@ const persistFromEvents = (events: readonly GameEvent[]) => {
   ) {
     persistCheckpoint();
   }
+};
+
+const commitAuthoritativeResult = (result: StepGameResult) => {
+  const settled = settleAuthoritativeResult(result);
+  state = settled.state;
+  routeGameplayEvents(settled.events);
+  persistFromEvents(settled.events);
 };
 
 const lockCandidates = () => {
@@ -515,89 +530,30 @@ arena.render(camera);
 
 const step = (fixedDelta: number) => {
   const intent = input.sample();
+  if (hud?.hasOpenDialog()) {
+    const axis =
+      Math.abs(intent.moveY) >= Math.abs(intent.moveX)
+        ? intent.moveY
+        : intent.moveX;
+    const nextLatch = axis > 0.55 ? -1 : axis < -0.55 ? 1 : 0;
+    if (nextLatch !== 0 && menuAxisLatch === 0) {
+      hud.moveDialogFocus(nextLatch);
+    }
+    menuAxisLatch = nextLatch;
+    if (intent.attackPressed) {
+      hud.activateFocusedAction();
+      input.clear();
+      return;
+    }
+    if (!(state.paused && intent.pausePressed)) return;
+  } else {
+    menuAxisLatch = 0;
+  }
   const result = stepGame(state, intent, fixedDelta, arenaContent);
   state = result.state;
   routeGameplayEvents(result.events);
   persistFromEvents(result.events);
-};
-
-const updateHud = () => {
-  const actionLabels: Record<GameState["player"]["action"], string> = {
-    idle: "待机",
-    move: "移动",
-    attack: "攻击",
-    guard: "格挡",
-    dodge: "闪避",
-    hit: "受击",
-    dead: "倒下",
-  };
-  health.textContent = `${state.player.health} / ${state.player.maxHealth}`;
-  stamina.textContent = `${Math.round(state.player.stamina)} / ${state.player.maxStamina}`;
-  weapon.textContent =
-    state.player.weaponId === "oathblade" ? "誓约刃" : "余烬弓";
-  action.textContent = actionLabels[state.player.action];
-  healing.textContent = `治疗瓶 × ${state.player.healingCharges}`;
-  weapon.dataset.weaponId = state.player.weaponId;
-  action.dataset.actionId = state.player.action;
-  healthMeter.style.width = `${100 * state.player.health / state.player.maxHealth}%`;
-  staminaMeter.style.width = `${100 * state.player.stamina / state.player.maxStamina}%`;
-  document.documentElement.dataset.paused = state.paused ? "true" : "false";
-  const objectiveLabels: Record<
-    GameState["encounter"]["phase"],
-    string
-  > = {
-    training: state.encounter.trainingSpawned
-      ? "完成攻击与格挡训练"
-      : "进入第一个琥珀训练环",
-    "wave-one":
-      state.status === "upgrade"
-        ? "选择升级后进入精英战"
-        : "击败第一波敌人",
-    elite: "击败钟甲精英并开启王庭闸门",
-    boss: "击败钟鸣君主",
-    complete: "竞技场挑战完成",
-  };
-  objectiveTitle.textContent = objectiveLabels[state.encounter.phase];
-  arenaStatus.textContent =
-    `${state.encounter.phase} · 闸门${state.encounter.gateOpen ? "开启" : "关闭"}`;
-  const entityDiagnostics = synchronizer.getDiagnostics();
-  telegraphBanner.hidden = entityDiagnostics.telegraphIds.length === 0;
-  telegraphBanner.textContent =
-    entityDiagnostics.telegraphIds.length === 0
-      ? ""
-      : `敌人正在蓄力：${entityDiagnostics.telegraphIds.join("、")}`;
-  let closedModal = false;
-  const syncDialog = (
-    dialog: HTMLDialogElement,
-    shouldOpen: boolean,
-  ) => {
-    if (shouldOpen && !dialog.open) {
-      dialog.showModal();
-    } else if (!shouldOpen && dialog.open) {
-      dialog.close();
-      closedModal = true;
-    }
-  };
-  syncDialog(upgradeModal, state.status === "upgrade");
-  syncDialog(defeatModal, state.status === "defeated");
-  syncDialog(completeModal, state.status === "complete");
-  if (focusedStatus !== state.status) {
-    focusedStatus = state.status;
-    if (state.status === "upgrade") {
-      upgradeButtons[0]?.focus();
-    } else if (state.status === "defeated") {
-      retryButton.focus();
-    } else if (state.status === "complete") {
-      completeModal.focus();
-    }
-  }
-  if (
-    state.status === "playing" &&
-    (closedModal || focusGameOnNextFrame)
-  ) {
-    canvas.focus();
-    focusGameOnNextFrame = false;
-  }
+  audio.setPaused(state.paused || state.status === "upgrade");
 };
 
 const consumePresentationEvents = () => {
@@ -617,12 +573,34 @@ const frame = (timestamp: number) => {
   previousTimestamp = timestamp;
   accumulator.advance(frameDelta, step);
   synchronizer.sync(state, frameDelta);
+  audio.sync(state);
+  vfx.sync(state);
+  const presentationPaused =
+    state.paused || state.status === "upgrade";
+  vfx.update(frameDelta, presentationPaused);
+  hud?.updatePresentation(frameDelta, presentationPaused);
   arena.setGateOpen(state.encounter.gateOpen);
   playerTarget.set(state.player.position.x, 0, state.player.position.y);
   cameraController.setLockTarget(currentLockTarget());
   consumePresentationEvents();
   cameraController.update(playerTarget, frameDelta);
-  updateHud();
+  const entityDiagnostics = synchronizer.getDiagnostics();
+  hud?.render(state, {
+    deviceMode: input.getDeviceMode(),
+    telegraphIds: entityDiagnostics.telegraphIds,
+    damageFlashActive: vfx.getDiagnostics().damageFlashActive,
+  });
+  const cameraDiagnostics = cameraController.getDiagnostics();
+  document.documentElement.dataset.cameraShake =
+    cameraDiagnostics.reducedMotion ? "off" : "on";
+  if (
+    state.status === "playing" &&
+    !state.paused &&
+    (focusGameOnNextFrame || hud?.consumeFocusGameRequest())
+  ) {
+    canvas.focus();
+    focusGameOnNextFrame = false;
+  }
   arena.render(camera);
   frameCount += 1;
   frameRequest = requestAnimationFrame(frame);
@@ -636,9 +614,33 @@ const onVisibility = () => {
 };
 const onReducedMotion = (event: MediaQueryListEvent) => {
   cameraController.setReducedMotion(event.matches);
+  vfx.setReducedMotion(event.matches);
 };
 document.addEventListener("visibilitychange", onVisibility);
 reducedMotion.addEventListener("change", onReducedMotion);
+
+const reviewApi = installReviewApi(reviewControls, {
+  readState: () => state,
+  commit: commitAuthoritativeResult,
+  readDiagnostics() {
+    const cameraDiagnostics = cameraController.getDiagnostics();
+    return {
+      effects: vfx.getDiagnostics(),
+      audio: audio.getDiagnostics(),
+      camera: {
+        reducedMotion: cameraDiagnostics.reducedMotion,
+        shakeAmplitude: cameraDiagnostics.shakeAmplitude,
+      },
+      input: input.getDiagnostics(),
+      recentEvents: recentEvents.map(({ tick, event }) => ({
+        tick,
+        event: { ...event },
+      })),
+      frameCount,
+      canvasCount: document.querySelectorAll("[data-game-canvas]").length,
+    };
+  },
+});
 
 if (reviewControls) {
   window.__ashfallDiagnostics = {
@@ -856,81 +858,7 @@ if (reviewControls) {
       return attackId;
     },
     drivePlayerStrike(enemyId) {
-      const enemy = state.enemies[enemyId];
-      if (!enemy) throw new Error(`Unknown enemy: ${enemyId}`);
-      if (state.status !== "playing") {
-        throw new Error("Player strike requires a playing simulation");
-      }
-      const forward = {
-        x: Math.sin(state.player.facingRadians),
-        y: Math.cos(state.player.facingRadians),
-      };
-      const position = {
-        x: state.player.position.x + forward.x * 1.2,
-        y: state.player.position.y + forward.y * 1.2,
-      };
-      state = {
-        ...state,
-        player: {
-          ...state.player,
-          action: "idle",
-          actionTime: 0,
-          stamina: state.player.maxStamina,
-        },
-        enemies: Object.fromEntries(
-          Object.entries(state.enemies).map(([id, current]) => [
-            id,
-            id === enemyId
-              ? {
-                  ...current,
-                  position,
-                  health: Math.min(current.health, 18),
-                  aiEnabled: false,
-                  action: "idle" as const,
-                  actionTime: 0,
-                  intent: "observe" as const,
-                  currentMoveId: null,
-                  movePhase: "none" as const,
-                  moveElapsedTicks: 0,
-                  cooldownTicks: 0,
-                  staggerTicks: 0,
-                  targetId: state.player.id,
-                }
-              : { ...current, aiEnabled: false },
-          ]),
-        ),
-        combat: {
-          ...state.combat,
-          activeAttack: null,
-          attackInputHeld: false,
-        },
-      };
-      const neutral: GameIntent = {
-        moveX: 0,
-        moveY: 0,
-        attackPressed: false,
-        guardHeld: false,
-        dodgePressed: false,
-        lockPressed: false,
-        healPressed: false,
-        switchWeaponPressed: false,
-        pausePressed: false,
-      };
-      for (let tick = 0; tick < 60; tick += 1) {
-        const result = stepGame(
-          state,
-          {
-            ...neutral,
-            attackPressed: tick === 0,
-          },
-          1 / 60,
-          arenaContent,
-        );
-        state = result.state;
-        routeGameplayEvents(result.events);
-        persistFromEvents(result.events);
-        if (state.status !== "playing") break;
-      }
+      window.__review!.defeatEnemy(enemyId);
     },
     drivePlayerDefeat(enemyId) {
       const enemy = state.enemies[enemyId];
@@ -1026,16 +954,10 @@ const dispose = () => {
   resizeObserver.disconnect();
   document.removeEventListener("visibilitychange", onVisibility);
   reducedMotion.removeEventListener("change", onReducedMotion);
-  upgradeButtons.forEach((button) =>
-    button.removeEventListener("click", onUpgradeClick));
-  retryButton.removeEventListener("click", onRetry);
-  newRunButtons.forEach((button) =>
-    button.removeEventListener("click", onNewRun));
-  progressionDialogs.forEach((dialog) => {
-    dialog.removeEventListener("cancel", preventDialogCancel);
-    dialog.removeEventListener("keydown", trapDialogFocus);
-    if (dialog.open) dialog.close();
-  });
+  reviewApi.dispose();
+  hud?.dispose();
+  audio.dispose();
+  vfx.dispose();
   input.dispose();
   synchronizer.dispose();
   cameraController.dispose();

@@ -6,6 +6,7 @@ import {
   createEncounterFixture,
 } from "../src/simulation/encounters";
 import {
+  applyPlayerHealing,
   applyUpgrade,
   collectDrop,
   createDropsForDefeats,
@@ -285,6 +286,22 @@ describe("one upgrade", () => {
 });
 
 describe("healing charge", () => {
+  it("routes review recovery through a clamped authoritative healing event", () => {
+    const source = createInitialState(40);
+    const state = {
+      ...source,
+      player: { ...source.player, health: 60 },
+    };
+
+    const result = applyPlayerHealing(state, 80);
+
+    expect(result.state.player.health).toBe(105);
+    expect(result.events).toEqual([
+      { type: "healed", actorId: "player", amount: 45 },
+    ]);
+    expect(state.player.health).toBe(60);
+  });
+
   it("heals 35 with a maximum-health clamp and consumes exactly one charge", () => {
     const source = createInitialState(41);
     const state = {
@@ -390,12 +407,13 @@ describe("stepGame progression integration", () => {
       ...source,
       player: { ...source.player, health: 40 },
     };
-    const healed = stepGame(
+    const healedResult = stepGame(
       injured,
       { ...neutralIntent, healPressed: true },
       1 / 60,
       arenaContent,
-    ).state;
+    );
+    const healed = healedResult.state;
     const attackConflict = stepGame(
       injured,
       {
@@ -420,6 +438,11 @@ describe("stepGame progression integration", () => {
     expect(healed.player).toMatchObject({
       health: 75,
       healingCharges: 2,
+    });
+    expect(healedResult.events).toContainEqual({
+      type: "healed",
+      actorId: "player",
+      amount: 35,
     });
     expect(attackConflict.player.health).toBe(40);
     expect(dodgeConflict.player.health).toBe(40);

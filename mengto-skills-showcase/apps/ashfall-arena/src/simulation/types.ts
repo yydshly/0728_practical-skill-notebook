@@ -242,7 +242,14 @@ export type GameEvent =
       targetId: string;
       attackId: string;
     }
-  | { type: "damage"; targetId: string; amount: number; guarded: boolean }
+  | {
+      type: "damage";
+      targetId: string;
+      amount: number;
+      guarded: boolean;
+      guardBroken?: true;
+    }
+  | { type: "healed"; actorId: string; amount: number }
   | { type: "defeated"; actorId: string }
   | { type: "drop"; dropId: string }
   | { type: "upgrade-offered" }

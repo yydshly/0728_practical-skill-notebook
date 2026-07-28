@@ -971,6 +971,7 @@ describe("authoritative enemy combat", () => {
       targetId: "player",
       amount: 26,
       guarded: false,
+      guardBroken: true,
     });
   });
 

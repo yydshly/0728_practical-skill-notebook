@@ -1017,6 +1017,27 @@ describe("incoming damage, guard, dodge, and death", () => {
     });
   });
 
+  it("publishes guard break meaning on the authoritative damage event", () => {
+    const state = createInitialState(1);
+    state.player.action = "guard";
+    state.player.stamina = 8;
+
+    const result = applyIncomingDamage(
+      state,
+      incomingHit(),
+      true,
+      arenaContent,
+    );
+
+    expect(result.events[1]).toEqual({
+      type: "damage",
+      targetId: "player",
+      amount: 20,
+      guarded: false,
+      guardBroken: true,
+    });
+  });
+
   it("rejects dodge contact exactly from 0.08 through 0.20 seconds", () => {
     expect(isContactAccepted({ action: "dodge", actionTime: 0.079 })).toBe(
       true,

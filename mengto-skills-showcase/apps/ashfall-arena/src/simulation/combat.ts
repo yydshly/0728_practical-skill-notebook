@@ -224,6 +224,7 @@ export function applyIncomingDamage(
       targetId: state.player.id,
       amount: damage,
       guarded: resolution.guarded,
+      ...(resolution.guardBroken ? { guardBroken: true as const } : {}),
     },
   ];
   if (resolution.defeated) {
@@ -379,14 +380,21 @@ const isInFacingCone = (
   return cosine + TIME_EPSILON >= Math.cos(halfAngleDegrees * Math.PI / 180);
 };
 
-const applyEnemyDamage = (
+export const applyAuthoritativeEnemyDamage = (
   state: GameState,
   targetId: string,
   attack: AttackInstance,
   damage: number,
 ): StepGameResult => {
   const target = state.enemies[targetId];
-  if (!target) return { state, events: [] };
+  if (
+    !target ||
+    target.health <= 0 ||
+    state.status !== "playing" ||
+    state.paused
+  ) {
+    return { state, events: [] };
+  }
   const health = Math.max(0, target.health - damage);
   const targetState = {
     ...target,
@@ -601,7 +609,7 @@ const stepActiveAttack = (
       ];
     }
     for (const targetId of targetIds) {
-      const result = applyEnemyDamage(
+      const result = applyAuthoritativeEnemyDamage(
         working,
         targetId,
         nextAttack,
@@ -794,7 +802,12 @@ const stepProjectiles = (
         content.weapons["ember-bow"].shot.damage *
           working.player.powerMultiplier,
       );
-      const result = applyEnemyDamage(working, targetId, attack, damage);
+      const result = applyAuthoritativeEnemyDamage(
+        working,
+        targetId,
+        attack,
+        damage,
+      );
       working = result.state;
       events.push(...result.events);
       continue;

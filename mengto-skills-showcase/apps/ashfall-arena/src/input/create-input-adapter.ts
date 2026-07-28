@@ -246,10 +246,6 @@ export function createInputAdapter(
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    setMode("keyboard-mouse");
-    keys.add(event.code);
-    updateKeyboardMove();
-    if (event.repeat) return;
     const edges: Partial<Record<string, EdgeIntent>> = {
       Space: "dodgePressed",
       KeyQ: "lockPressed",
@@ -259,17 +255,36 @@ export function createInputAdapter(
       Escape: "pausePressed",
     };
     const edge = edges[event.code];
+    const movement =
+      event.code === "KeyW" ||
+      event.code === "KeyA" ||
+      event.code === "KeyS" ||
+      event.code === "KeyD";
+    const menuNavigation =
+      event.code === "Enter" ||
+      event.code === "Tab" ||
+      event.code === "ArrowUp" ||
+      event.code === "ArrowDown";
+    if (!movement && !edge && !menuNavigation) return;
+    setMode("keyboard-mouse");
+    if (movement) {
+      keys.add(event.code);
+      updateKeyboardMove();
+    }
+    if (event.repeat) return;
     if (edge) {
       accumulator.press(edge);
       event.preventDefault();
     }
   };
   const onKeyUp = (event: KeyboardEvent) => {
+    if (!keys.has(event.code)) return;
     keys.delete(event.code);
     updateKeyboardMove();
   };
   const onCanvasPointerDown = (event: PointerEvent) => {
     if (event.pointerType === "touch") return;
+    if (event.button !== 0 && event.button !== 2) return;
     setMode("keyboard-mouse");
     if (event.button === 0) accumulator.press("attackPressed");
     if (event.button === 2) {

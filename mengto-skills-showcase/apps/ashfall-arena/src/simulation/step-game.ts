@@ -1,8 +1,8 @@
 import type {
   GameContent,
   GameIntent,
-  GameState,
   StepGameResult,
+  GameState,
   Vec2,
 } from "./types";
 import { stepCombat } from "./combat";
@@ -12,7 +12,7 @@ import {
   collectNearbyDrops,
   createDropsForDefeats,
   settlePendingDrops,
-  useHealingCharge,
+  useHealingChargeWithEvents,
 } from "./inventory";
 import { resolveArenaMovement } from "./resolve-movement";
 
@@ -206,6 +206,34 @@ const canHandleLockIntent = (state: GameState): boolean =>
   state.player.action !== "hit" &&
   state.player.action !== "dead";
 
+export function settleAuthoritativeResult(
+  result: StepGameResult,
+): StepGameResult {
+  const rewards = createDropsForDefeats(
+    result.state,
+    result.events,
+  );
+  const collected = collectNearbyDrops(rewards.state);
+  const encounter = stepEncounter(collected, result.events);
+  const crossedRewardBoundary = encounter.events.some(
+    (event) =>
+      event.type === "upgrade-offered" ||
+      event.type === "encounter-complete" ||
+      (event.type === "encounter-phase" && event.phase === "boss"),
+  );
+  const state = crossedRewardBoundary
+    ? settlePendingDrops(encounter.state)
+    : encounter.state;
+  return {
+    state,
+    events: [
+      ...result.events,
+      ...rewards.events,
+      ...encounter.events,
+    ],
+  };
+}
+
 export function stepGame(
   state: GameState,
   intent: GameIntent,
@@ -240,13 +268,14 @@ export function stepGame(
     };
   }
 
-  const progressionState =
+  const progression =
     intent.healPressed &&
       !intent.attackPressed &&
       !intent.dodgePressed &&
       !intent.guardHeld
-      ? useHealingCharge(state)
-      : state;
+      ? useHealingChargeWithEvents(state)
+      : { state, events: [] };
+  const progressionState = progression.state;
   const steppedPlayer = stepPlayer(progressionState, intent, content);
   const movedState =
     steppedPlayer === progressionState.player
@@ -256,22 +285,14 @@ export function stepGame(
           player: steppedPlayer,
         };
   const aiState = stepEnemyAi(movedState, content);
-  const combat = stepCombat(aiState, intent, [], content);
-  const rewards = createDropsForDefeats(
-    combat.state,
-    combat.events,
+  const combat = stepCombat(
+    aiState,
+    intent,
+    progression.events,
+    content,
   );
-  const collected = collectNearbyDrops(rewards.state);
-  const encounter = stepEncounter(collected, combat.events);
-  const crossedRewardBoundary = encounter.events.some(
-    (event) =>
-      event.type === "upgrade-offered" ||
-      event.type === "encounter-complete" ||
-      (event.type === "encounter-phase" && event.phase === "boss"),
-  );
-  const progressedEncounterState = crossedRewardBoundary
-    ? settlePendingDrops(encounter.state)
-    : encounter.state;
+  const settled = settleAuthoritativeResult(combat);
+  const progressedEncounterState = settled.state;
   const lockTargetId = canHandleLockIntent(state)
     ? nextLockTarget(progressedEncounterState, intent.lockPressed)
     : progressedEncounterState.player.lockTargetId;
@@ -287,9 +308,7 @@ export function stepGame(
       player,
     },
     events: [
-      ...combat.events,
-      ...rewards.events,
-      ...encounter.events,
+      ...settled.events,
     ],
   };
 }
