@@ -18,3 +18,21 @@ it("does not accept new resources after disposal", () => {
   scope.dispose();
   expect(() => scope.track({ dispose() {} })).toThrow("DisposableScope is already disposed");
 });
+
+it("continues disposal after an earlier resource throws and does not retry resources", () => {
+  const firstDispose = vi.fn(() => {
+    throw new Error("first resource failed");
+  });
+  const secondDispose = vi.fn();
+  const scope = new DisposableScope();
+  scope.track({ dispose: firstDispose });
+  scope.track({ dispose: secondDispose });
+
+  expect(() => scope.dispose()).toThrow("first resource failed");
+  expect(firstDispose).toHaveBeenCalledTimes(1);
+  expect(secondDispose).toHaveBeenCalledTimes(1);
+
+  scope.dispose();
+  expect(firstDispose).toHaveBeenCalledTimes(1);
+  expect(secondDispose).toHaveBeenCalledTimes(1);
+});

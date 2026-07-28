@@ -23,3 +23,21 @@ it("keeps an in-range intent unchanged", () => {
   };
   expect(normalizeInput(snapshot)).toEqual(snapshot);
 });
+
+it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+  "maps non-finite movement %s to zero",
+  (movement) => {
+    const intent = normalizeInput({
+      moveX: movement,
+      moveY: movement,
+      attackPressed: false,
+      guardHeld: false,
+      dodgePressed: false,
+      lockPressed: false,
+    });
+
+    expect(intent).toMatchObject({ moveX: 0, moveY: 0 });
+    expect(Number.isFinite(intent.moveX)).toBe(true);
+    expect(Number.isFinite(intent.moveY)).toBe(true);
+  },
+);

@@ -9,7 +9,9 @@ export interface InputSnapshot {
 
 export type PlayerIntent = InputSnapshot;
 
-const clamp = (value: number): number => Math.max(-1, Math.min(1, value));
+const clamp = (value: number): number => Number.isFinite(value)
+  ? Math.max(-1, Math.min(1, value))
+  : 0;
 
 export const normalizeInput = (input: InputSnapshot): PlayerIntent => ({
   ...input,

@@ -15,7 +15,23 @@ export class DisposableScope {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    for (const resource of this.resources) resource.dispose();
-    this.resources.clear();
+
+    const errors: unknown[] = [];
+    try {
+      for (const resource of this.resources) {
+        try {
+          resource.dispose();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+    } finally {
+      this.resources.clear();
+    }
+
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) {
+      throw new AggregateError(errors, "DisposableScope failed to dispose one or more resources");
+    }
   }
 }
