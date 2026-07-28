@@ -179,10 +179,10 @@ describe("showcase workspace", () => {
     const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
     const currentCommands = readme.slice(
       readme.indexOf("### 当前基础层可执行命令"),
-      readme.indexOf("### 产品实现后启用的预留入口"),
+      readme.indexOf("### 当前可运行：Monster Forge｜怪物铸造所"),
     );
-    const reservedCommands = readme.slice(
-      readme.indexOf("### 产品实现后启用的预留入口"),
+    const monsterForgeCommands = readme.slice(
+      readme.indexOf("### 当前可运行：Monster Forge｜怪物铸造所"),
       readme.indexOf("## Skill 源码与安装目录"),
     );
 
@@ -192,11 +192,11 @@ describe("showcase workspace", () => {
     expect(currentCommands).toContain("npm run build");
     expect(currentCommands).not.toContain("npm run dev:forge");
     expect(currentCommands).not.toContain("npm run test:browser");
-    expect(reservedCommands).toContain("产品实现后启用的预留入口");
-    expect(reservedCommands).toContain("npm run dev:forge");
-    expect(reservedCommands).toContain("npm run dev:arena");
-    expect(reservedCommands).toContain("npm run dev:atelier");
-    expect(reservedCommands).toContain("npm run test:browser");
+    expect(monsterForgeCommands).toContain("当前可运行：Monster Forge｜怪物铸造所");
+    expect(monsterForgeCommands).toContain("npm run dev:forge");
+    expect(monsterForgeCommands).toContain("npm run test:browser --workspace @showcase/monster-forge");
+    expect(monsterForgeCommands).not.toContain("npm run dev:arena");
+    expect(monsterForgeCommands).not.toContain("npm run dev:atelier");
     expect(readme.match(/npm run test:browser/g)).toHaveLength(1);
   });
 
