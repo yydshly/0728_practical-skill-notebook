@@ -20,6 +20,7 @@ const recommendation = (name, score, price, href, image) => ({
   score,
   price,
   href,
+  visitHref: `https://www.framer.com/marketplace/templates/${href.split('/').at(-1)}/`,
   imageSrc: assetPath(`templates/${image}`),
   imageAlt: `${name} template preview`,
 });

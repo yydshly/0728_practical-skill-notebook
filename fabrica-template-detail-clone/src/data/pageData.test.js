@@ -26,19 +26,25 @@ test('uses the observed Fabrica visit destination and source scores', () => {
   ]);
 });
 
-test('keeps recommendation and mobile-menu destinations as observed routes', () => {
+test('keeps recommendation card and marketplace visit destinations separate', () => {
   expect(pageData.recommendations[0]).toMatchObject({
     name: 'Deformo',
     score: '7.00',
     price: '$99',
     href: '/templates/framer/deformo',
+    visitHref: 'https://www.framer.com/marketplace/templates/deformo/',
   });
   expect(pageData.recommendations.at(-1)).toMatchObject({
     name: 'Riwa',
     score: '9.40',
     price: '$99',
     href: '/templates/framer/riwa',
+    visitHref: 'https://www.framer.com/marketplace/templates/riwa/',
   });
+  expect(pageData.recommendations.every(({ visitHref }) => visitHref)).toBe(true);
+});
+
+test('keeps mobile-menu destinations as observed routes', () => {
   expect(mobileMenuItems).toEqual([
     { label: 'Templates', href: '/templates' },
     { label: 'Webflow', href: '/templates/webflow' },
