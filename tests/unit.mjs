@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
 import { computeThirdPersonPose } from '../src/camera-math.js';
 import { VILLAGE_LAYOUT, validateVillageLayout } from '../src/level-data.js';
+import { createMaterials } from '../src/world/materials.js';
 
 test('third-person pose starts above ground and behind its target', () => {
   const pose = computeThirdPersonPose({
@@ -32,4 +34,9 @@ test('village layout defines readable zones and collision separately', () => {
 
 test('every local light has a visible source id', () => {
   assert.ok(VILLAGE_LAYOUT.lights.every((light) => Boolean(light.sourceId)));
+});
+
+test('road material remains visible from above with authored orientation', () => {
+  const materials = createMaterials();
+  assert.equal(materials.road.side, THREE.DoubleSide);
 });

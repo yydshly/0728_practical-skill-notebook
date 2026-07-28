@@ -7,7 +7,7 @@ function standard(color, roughness = 0.9, metalness = 0) {
 export function createMaterials() {
   return {
     soil: standard(0x34382f, 1),
-    road: standard(0x655e4d, 0.98),
+    road: new THREE.MeshStandardMaterial({ color: 0x655e4d, roughness: 0.98, side: THREE.DoubleSide }),
     plaster: standard(0x9b8c6e, 0.94),
     plasterDark: standard(0x6f6756, 0.96),
     roof: standard(0x303b3a, 0.86),
