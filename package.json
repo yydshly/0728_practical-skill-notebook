@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node tests/smoke.mjs"
+    "test:unit": "node --test tests/unit.mjs",
+    "test": "npm run test:unit && node tests/smoke.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"

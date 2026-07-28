@@ -24,7 +24,7 @@ scene.fog = new THREE.Fog(0x9aa6a0, 20, 72);
 const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 120);
 const village = createVillage(scene);
 const player = createPlayer(scene, village.anchors.player_home);
-const cameraController = createCameraController(camera, player);
+const cameraController = createCameraController(camera, player, { occluders: village.cameraOccluders, groundY: 0 });
 createResident(scene, village.anchors.courtyard.clone().add(new THREE.Vector3(1.3, 0, 1.8)), 'neighbour');
 createResident(scene, village.anchors.granary.clone().add(new THREE.Vector3(-1.5, 0, 1.4)), 'barn_resident');
 const storyDirector = createStoryDirector({ ui: { objective, subtitle } });
@@ -96,13 +96,13 @@ function frame(now) {
   player.update(dt, input, village.bounds, cameraController.yaw);
   pursuer.update(dt, player);
   storyDirector.update(player, village.zones.south_gate_exit);
-  cameraController.update();
+  cameraController.update(dt);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 
 resize();
-cameraController.update();
+cameraController.snap();
 requestAnimationFrame(frame);
 
 window.__RURAL_ESCAPE__ = {
