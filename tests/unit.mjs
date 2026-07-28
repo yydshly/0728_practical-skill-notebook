@@ -93,6 +93,59 @@ test('third-person camera snap and update stay on the player side of a nearby ho
   assert.ok(controller.getPoseSnapshot().direction.every(Number.isFinite));
 });
 
+test('third-person camera never sweeps through village walls during abrupt corner turns', () => {
+  const turnCases = [
+    [-Math.PI, Math.PI / 2],
+    [Math.PI / 2, Math.PI],
+    [Math.PI / 2, Math.PI * 0.75],
+  ];
+
+  for (const [startYaw, endYaw] of turnCases) {
+    const scene = new THREE.Scene();
+    const village = createVillage(scene);
+    const player = createPlayer(
+      scene,
+      new THREE.Vector3(-6.38, 0, 23.4),
+      village.colliders,
+    );
+    const camera = new THREE.PerspectiveCamera();
+    const controller = createCameraController(camera, player, {
+      occluders: village.cameraOccluders,
+      groundY: 0,
+    });
+    const walls = [];
+    scene.traverse((object) => {
+      if (object.name === 'structure_solid_wall') {
+        walls.push({
+          id: object.parent.name,
+          bounds: new THREE.Box3().setFromObject(object),
+        });
+      }
+    });
+
+    controller.rotate((Math.PI - startYaw) / 0.0024, 0);
+    controller.snap();
+    assert.equal(
+      walls.some(({ bounds }) => bounds.containsPoint(camera.position)),
+      false,
+      `start camera must be safe at yaw ${startYaw}`,
+    );
+
+    controller.rotate((startYaw - endYaw) / 0.0024, 0);
+    for (let frame = 0; frame < 40; frame += 1) {
+      controller.update(1 / 60);
+      const containingWall = walls.find(({ bounds }) => bounds.containsPoint(camera.position));
+      assert.equal(
+        containingWall,
+        undefined,
+        `frame ${frame + 1} crossed ${containingWall?.id} for ${startYaw} -> ${endYaw}`,
+      );
+      assert.ok(camera.position.toArray().every(Number.isFinite));
+      assert.ok(controller.getPoseSnapshot().direction.every(Number.isFinite));
+    }
+  }
+});
+
 test('village layout defines readable zones and collision separately', () => {
   assert.deepEqual(
     Object.keys(VILLAGE_LAYOUT.zones),

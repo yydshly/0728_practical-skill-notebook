@@ -63,12 +63,31 @@ export function createCameraController(camera, player, { occluders = [], groundY
     desired.y = Math.max(desired.y, groundY + 0.65);
   }
 
+  function sweepCrossesOccluder() {
+    rayDirection.subVectors(desired, camera.position);
+    const sweepDistance = rayDirection.length();
+    if (sweepDistance <= minimumCameraDistance) return false;
+    rayDirection.normalize();
+    raycaster.set(camera.position, rayDirection);
+    raycaster.far = sweepDistance;
+    return raycaster
+      .intersectObjects(occluders, false)
+      .some(({ distance }) => (
+        distance > Number.EPSILON
+        && distance < sweepDistance - Number.EPSILON
+      ));
+  }
+
   function update(dt = 1 / 60) {
     if (!initialized) return snap();
     calculateDesired();
     if (mode === 'third-person') applyOcclusion();
     const alpha = 1 - Math.exp(-8 * dt);
-    camera.position.lerp(desired, alpha);
+    if (mode === 'third-person' && sweepCrossesOccluder()) {
+      camera.position.copy(desired);
+    } else {
+      camera.position.lerp(desired, alpha);
+    }
     camera.lookAt(target);
   }
 
