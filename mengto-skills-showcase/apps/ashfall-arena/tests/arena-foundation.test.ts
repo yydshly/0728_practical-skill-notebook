@@ -10,7 +10,7 @@ import { createGameCamera } from "../src/scene/create-game-camera";
 import { resolveCameraOcclusion } from "../src/scene/resolve-camera-occlusion";
 import {
   GamepadInputTracker,
-  HeldInputOwnership,
+  InputDeviceOwnership,
   InputAccumulator,
   mapStandardGamepad,
 } from "../src/input/create-input-adapter";
@@ -209,30 +209,58 @@ describe("game camera", () => {
 });
 
 describe("normalized device input", () => {
-  it("keeps held input owned by the last meaningful device", () => {
-    const held = new HeldInputOwnership();
+  it("atomically switches movement and held state to the last meaningful device", () => {
+    const ownership = new InputDeviceOwnership();
 
-    held.activate("keyboard-mouse");
-    expect(held.setGuard("keyboard-mouse", true)).toBe(true);
-    expect(held.setGuard("gamepad", false)).toBe(true);
-    expect(held.setGuard("gamepad", false)).toBe(true);
-    expect(held.getDeviceMode()).toBe("keyboard-mouse");
-    expect(held.setGuard("keyboard-mouse", false)).toBe(false);
+    ownership.setMove("gamepad", 0, 1);
+    expect(ownership.activate("gamepad")).toEqual({
+      moveX: 0,
+      moveY: 1,
+      guardHeld: false,
+    });
 
-    held.setGuard("touch", true);
-    expect(held.activate("touch")).toBe(true);
-    expect(held.setGuard("gamepad", false)).toBe(true);
-    expect(held.setGuard("touch", false)).toBe(false);
+    ownership.setGuard("keyboard-mouse", true);
+    expect(ownership.activate("keyboard-mouse")).toEqual({
+      moveX: 0,
+      moveY: 0,
+      guardHeld: true,
+    });
+    ownership.setMove("gamepad", 0, 0);
+    expect(ownership.getActiveState()).toEqual({
+      moveX: 0,
+      moveY: 0,
+      guardHeld: true,
+    });
 
-    held.setGuard("gamepad", true);
-    expect(held.activate("gamepad")).toBe(true);
-    expect(held.setGuard("gamepad", false)).toBe(false);
-    expect(held.getDeviceMode()).toBe("gamepad");
+    ownership.setMove("keyboard-mouse", 1, 0);
+    expect(ownership.getActiveState()).toEqual({
+      moveX: 1,
+      moveY: 0,
+      guardHeld: true,
+    });
+    ownership.setMove("gamepad", 0, 1);
+    ownership.setMove("gamepad", 0, 0);
+    expect(ownership.getActiveState().moveX).toBe(1);
 
-    held.setGuard("keyboard-mouse", true);
-    expect(held.activate("keyboard-mouse")).toBe(true);
-    expect(held.setGuard("gamepad", false)).toBe(true);
-    expect(held.getDeviceMode()).toBe("keyboard-mouse");
+    ownership.setMove("touch", -0.5, 0.75);
+    expect(ownership.activate("touch")).toEqual({
+      moveX: -0.5,
+      moveY: 0.75,
+      guardHeld: false,
+    });
+    ownership.setMove("gamepad", 0, 0);
+    expect(ownership.getActiveState()).toEqual({
+      moveX: -0.5,
+      moveY: 0.75,
+      guardHeld: false,
+    });
+
+    ownership.clear();
+    expect(ownership.getActiveState()).toEqual({
+      moveX: 0,
+      moveY: 0,
+      guardHeld: false,
+    });
   });
 
   it("emits edge actions once and clears all state on interruption", () => {

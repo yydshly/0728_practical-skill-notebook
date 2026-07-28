@@ -362,6 +362,204 @@ test("an idle connected gamepad never cancels mouse or touch guard ownership", a
   expect((await snapshot(page)).input.guardHeld).toBe(false);
 });
 
+test("mouse and touch actions atomically stop stale gamepad movement", async ({
+  page,
+}) => {
+  await installDeterministicGamepad(page);
+  await page.goto("/?fixture=fresh&reviewControls=1");
+  const canvas = page.locator("[data-game-canvas]");
+  const touchGuard = page.locator("[data-touch-held='guardHeld']");
+
+  const startPadMovement = async () => {
+    const before = await snapshot(page);
+    await page.evaluate(() => window.__setAshfallTestGamepad(true, -1, false));
+    await expect
+      .poll(async () => (await snapshot(page)).player.z)
+      .toBeGreaterThan(before.player.z + 0.3);
+  };
+  const expectStoppedWithGuard = async () => {
+    const stopped = await snapshot(page);
+    await page.waitForTimeout(240);
+    const settled = await snapshot(page);
+    expect(settled.player.z - stopped.player.z).toBeLessThan(0.1);
+    expect(settled.input).toMatchObject({
+      moveX: 0,
+      moveY: 0,
+      guardHeld: true,
+    });
+  };
+
+  await startPadMovement();
+  await canvas.evaluate((element) => {
+    element.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        pointerId: 71,
+        pointerType: "mouse",
+        button: 2,
+      }),
+    );
+    window.__setAshfallTestGamepad(true, 0, false);
+  });
+  await expectStoppedWithGuard();
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerId: 71,
+        pointerType: "mouse",
+        button: 2,
+      }),
+    ),
+  );
+  expect((await snapshot(page)).input.guardHeld).toBe(false);
+
+  await startPadMovement();
+  await touchGuard.evaluate((element) => {
+    element.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        pointerId: 72,
+        pointerType: "touch",
+        button: 0,
+      }),
+    );
+    window.__setAshfallTestGamepad(true, 0, false);
+  });
+  await expectStoppedWithGuard();
+  await touchGuard.dispatchEvent("pointerup", {
+    pointerId: 72,
+    pointerType: "touch",
+    button: 0,
+  });
+  expect((await snapshot(page)).input.guardHeld).toBe(false);
+
+  await startPadMovement();
+  await canvas.evaluate((element) => {
+    element.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        pointerId: 73,
+        pointerType: "mouse",
+        button: 2,
+      }),
+    );
+    window.__setAshfallTestGamepad(false, 0, false);
+    window.dispatchEvent(new Event("gamepaddisconnected"));
+  });
+  await expectStoppedWithGuard();
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerId: 73,
+        pointerType: "mouse",
+        button: 2,
+      }),
+    ),
+  );
+  expect((await snapshot(page)).input.guardHeld).toBe(false);
+
+  await startPadMovement();
+  await touchGuard.evaluate((element) => {
+    element.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        pointerId: 74,
+        pointerType: "touch",
+        button: 0,
+      }),
+    );
+    window.__setAshfallTestGamepad(false, 0, false);
+    window.dispatchEvent(new Event("gamepaddisconnected"));
+  });
+  await expectStoppedWithGuard();
+  await touchGuard.dispatchEvent("pointerup", {
+    pointerId: 74,
+    pointerType: "touch",
+    button: 0,
+  });
+  expect((await snapshot(page)).input.guardHeld).toBe(false);
+});
+
+test("idle or disconnected gamepads preserve active keyboard and touch movement", async ({
+  page,
+}) => {
+  await installDeterministicGamepad(page);
+  await page.goto("/?fixture=fresh&reviewControls=1");
+
+  await page.keyboard.down("w");
+  const keyboardStart = await snapshot(page);
+  await page.evaluate(() => window.__setAshfallTestGamepad(true, 0, false));
+  await page.waitForTimeout(220);
+  const keyboardWithIdlePad = await snapshot(page);
+  expect(keyboardWithIdlePad.player.z).toBeGreaterThan(
+    keyboardStart.player.z + 0.3,
+  );
+  await page.evaluate(() => {
+    window.__setAshfallTestGamepad(false, 0, false);
+    window.dispatchEvent(new Event("gamepaddisconnected"));
+  });
+  const keyboardBeforeDisconnect = await snapshot(page);
+  await page.waitForTimeout(220);
+  expect((await snapshot(page)).player.z).toBeGreaterThan(
+    keyboardBeforeDisconnect.player.z + 0.3,
+  );
+  await page.keyboard.up("w");
+
+  const stick = page.locator(".touch-stick");
+  const stickBox = await stick.boundingBox();
+  expect(stickBox).not.toBeNull();
+  await page.mouse.move(
+    stickBox!.x + stickBox!.width / 2,
+    stickBox!.y + 8,
+  );
+  await page.mouse.down();
+  const touchStart = await snapshot(page);
+  await page.evaluate(() => window.__setAshfallTestGamepad(true, 0, false));
+  await page.waitForTimeout(220);
+  const touchWithIdlePad = await snapshot(page);
+  expect(touchWithIdlePad.player.z).toBeGreaterThan(touchStart.player.z + 0.3);
+  await page.evaluate(() => {
+    window.__setAshfallTestGamepad(false, 0, false);
+    window.dispatchEvent(new Event("gamepaddisconnected"));
+  });
+  const touchBeforeDisconnect = await snapshot(page);
+  await page.waitForTimeout(220);
+  expect((await snapshot(page)).player.z).toBeGreaterThan(
+    touchBeforeDisconnect.player.z + 0.3,
+  );
+
+  await stick.dispatchEvent("pointercancel", {
+    pointerId: 1,
+    pointerType: "mouse",
+    button: 0,
+  });
+  await page.mouse.up();
+  expect((await snapshot(page)).input).toMatchObject({
+    moveX: 0,
+    moveY: 0,
+    guardHeld: false,
+  });
+
+  await page.keyboard.down("w");
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+  });
+  expect((await snapshot(page)).input).toMatchObject({
+    moveX: 0,
+    moveY: 0,
+    guardHeld: false,
+  });
+  await page.keyboard.up("w");
+});
+
 test("production camera path consumes occlusion, lock, and shake events", async ({
   page,
 }) => {

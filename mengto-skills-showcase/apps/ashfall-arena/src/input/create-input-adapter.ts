@@ -132,36 +132,61 @@ export class GamepadInputTracker {
   }
 }
 
-export class HeldInputOwnership {
+interface OwnedDeviceState {
+  moveX: number;
+  moveY: number;
+  guardHeld: boolean;
+}
+
+const createOwnedDeviceState = (): OwnedDeviceState => ({
+  moveX: 0,
+  moveY: 0,
+  guardHeld: false,
+});
+
+export class InputDeviceOwnership {
   private deviceMode: InputDeviceMode = "keyboard-mouse";
-  private readonly guardByDevice: Record<InputDeviceMode, boolean> = {
-    "keyboard-mouse": false,
-    touch: false,
-    gamepad: false,
+  private readonly stateByDevice: Record<InputDeviceMode, OwnedDeviceState> = {
+    "keyboard-mouse": createOwnedDeviceState(),
+    touch: createOwnedDeviceState(),
+    gamepad: createOwnedDeviceState(),
   };
 
-  activate(device: InputDeviceMode): boolean {
+  activate(device: InputDeviceMode): OwnedDeviceState {
     this.deviceMode = device;
-    return this.getGuardHeld();
+    return this.getActiveState();
   }
 
-  setGuard(device: InputDeviceMode, held: boolean): boolean {
-    this.guardByDevice[device] = held;
-    return this.getGuardHeld();
+  setMove(
+    device: InputDeviceMode,
+    moveX: number,
+    moveY: number,
+  ): OwnedDeviceState {
+    const state = this.stateByDevice[device];
+    state.moveX = moveX;
+    state.moveY = moveY;
+    return this.getActiveState();
+  }
+
+  setGuard(device: InputDeviceMode, held: boolean): OwnedDeviceState {
+    this.stateByDevice[device].guardHeld = held;
+    return this.getActiveState();
   }
 
   getDeviceMode(): InputDeviceMode {
     return this.deviceMode;
   }
 
-  getGuardHeld(): boolean {
-    return this.guardByDevice[this.deviceMode];
+  getActiveState(): OwnedDeviceState {
+    return { ...this.stateByDevice[this.deviceMode] };
   }
 
   clear(): void {
-    this.guardByDevice["keyboard-mouse"] = false;
-    this.guardByDevice.touch = false;
-    this.guardByDevice.gamepad = false;
+    for (const state of Object.values(this.stateByDevice)) {
+      state.moveX = 0;
+      state.moveY = 0;
+      state.guardHeld = false;
+    }
   }
 }
 
@@ -178,10 +203,10 @@ export function createInputAdapter(
   touchHost: HTMLElement = document.body,
 ): InputAdapter {
   const accumulator = new InputAccumulator();
-  const heldOwnership = new HeldInputOwnership();
+  const deviceOwnership = new InputDeviceOwnership();
   const keys = new Set<string>();
   let disposed = false;
-  let deviceMode = heldOwnership.getDeviceMode();
+  let deviceMode = deviceOwnership.getDeviceMode();
   let touchMove = { x: 0, y: 0 };
   let activeStickPointer: number | null = null;
   let guardPointerId: number | null = null;
@@ -189,23 +214,32 @@ export function createInputAdapter(
   let gamepadNeedsNeutral = false;
   const gamepadTracker = new GamepadInputTracker();
 
+  const applyActiveState = (state: OwnedDeviceState) => {
+    accumulator.setMove(state.moveX, state.moveY);
+    accumulator.setHeld("guardHeld", state.guardHeld);
+  };
   const setMode = (mode: InputDeviceMode) => {
     deviceMode = mode;
-    accumulator.setHeld("guardHeld", heldOwnership.activate(mode));
+    applyActiveState(deviceOwnership.activate(mode));
     document.documentElement.dataset.inputMode = mode;
   };
   document.documentElement.dataset.inputMode = deviceMode;
 
+  const setSourceMove = (
+    source: InputDeviceMode,
+    moveX: number,
+    moveY: number,
+  ) => {
+    applyActiveState(deviceOwnership.setMove(source, moveX, moveY));
+  };
   const setSourceGuard = (source: InputDeviceMode, held: boolean) => {
-    accumulator.setHeld(
-      "guardHeld",
-      heldOwnership.setGuard(source, held),
-    );
+    applyActiveState(deviceOwnership.setGuard(source, held));
   };
 
   const updateKeyboardMove = () => {
     if (activeStickPointer !== null) return;
-    accumulator.setMove(
+    setSourceMove(
+      "keyboard-mouse",
       Number(keys.has("KeyD")) - Number(keys.has("KeyA")),
       Number(keys.has("KeyW")) - Number(keys.has("KeyS")),
     );
@@ -258,7 +292,7 @@ export function createInputAdapter(
     guardPointerId = null;
     touchMove = { x: 0, y: 0 };
     gamepadTracker.disconnect();
-    heldOwnership.clear();
+    deviceOwnership.clear();
     accumulator.clear();
   };
   const onVisibility = () => {
@@ -269,7 +303,7 @@ export function createInputAdapter(
   };
   const onGamepadDisconnected = () => {
     gamepadTracker.disconnect();
-    if (deviceMode === "gamepad") accumulator.setMove(0, 0);
+    setSourceMove("gamepad", 0, 0);
     setSourceGuard("gamepad", false);
     sawGamepad = false;
     gamepadNeedsNeutral = false;
@@ -319,7 +353,7 @@ export function createInputAdapter(
     }
     touchMove = { x: x / maxRadius, y: -y / maxRadius };
     knob.style.transform = `translate(${x}px, ${y}px)`;
-    accumulator.setMove(touchMove.x, touchMove.y);
+    setSourceMove("touch", touchMove.x, touchMove.y);
   };
   const onStickDown = (event: PointerEvent) => {
     setMode("touch");
@@ -338,6 +372,7 @@ export function createInputAdapter(
     activeStickPointer = null;
     touchMove = { x: 0, y: 0 };
     knob.style.transform = "translate(0px, 0px)";
+    setSourceMove("touch", 0, 0);
     updateKeyboardMove();
   };
   const cancelStick = (event: PointerEvent) => {
@@ -389,7 +424,7 @@ export function createInputAdapter(
     if (!pad) {
       if (sawGamepad) {
         gamepadTracker.disconnect();
-        if (deviceMode === "gamepad") accumulator.setMove(0, 0);
+        setSourceMove("gamepad", 0, 0);
         setSourceGuard("gamepad", false);
         sawGamepad = false;
         gamepadNeedsNeutral = false;
@@ -410,17 +445,15 @@ export function createInputAdapter(
       raw.switchWeaponPressed ||
       raw.pausePressed;
     if (gamepadNeedsNeutral) {
-      if (deviceMode === "gamepad") accumulator.setMove(0, 0);
+      setSourceMove("gamepad", 0, 0);
       setSourceGuard("gamepad", false);
       gamepadTracker.disconnect();
       if (!meaningful) gamepadNeedsNeutral = false;
       return;
     }
+    setSourceMove("gamepad", mapped.moveX, mapped.moveY);
     setSourceGuard("gamepad", mapped.guardHeld);
     if (meaningful) setMode("gamepad");
-    if (deviceMode === "gamepad") {
-      accumulator.setMove(mapped.moveX, mapped.moveY);
-    }
     const edges: EdgeIntent[] = [
       "attackPressed",
       "dodgePressed",
