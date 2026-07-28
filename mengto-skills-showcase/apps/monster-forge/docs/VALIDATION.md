@@ -2,7 +2,7 @@
 
 ## 验证对象与边界
 
-- Fix Round 1 候选验证提交：`8d66825416b09ab18005c86fa62a2ef485d40c3c`。该提交已在干净工作区运行本记录列出的完整验证；旧候选没有包含真实单指/双指触控证明，不能再作为本记录的受测版本。本文件的后继证据提交只补充这条事实，不把尚未存在的 SHA 写成“已测试”。
+- 最终候选验证提交：`075be10fb3355c00da2e9d32a9d1cf26a70eadba`。该提交已在干净工作区完成开发服务与生产预览两条浏览器路径、全仓测试、构建、工作区契约、Skill 审计、资源配对和独立最终审查；独立审查结论为 **Ready**，整体审查提出的 3 项 Important 均已修复，production preview 问题已关闭，遗留 open 项为 0。
 - 本地运行入口：在套件根目录执行 `npm run dev:forge`，默认地址为 `http://127.0.0.1:4173`。
 - 确定性审阅入口：`/?review=ash-warden`；其他 ID 为 `glass-crawler`、`bell-knight`、`mire-hound`。`?capture=1` 仅用于生成目录预览。
 - 本记录不代表已部署：本任务没有发布、托管或外部服务连接。
@@ -31,18 +31,18 @@
 
 ## 资源、控制台与性能采样
 
-代表性场景为 Ash Warden（`1440 × 900`、DPR `1`、`Idle`、默认叠加关闭、浏览器本地开发服务）。在启动后采样 250ms，并在 1 秒后再次采样：帧计数从 `49` 到 `110`，即样本期间新增 `61` 帧；两次均无 console error 或 page error。
+代表性场景为生产构建经 Vite preview 提供的 Ash Warden（`1440 × 900`、DPR `1`、`Idle`、默认叠加关闭）。在实时画布就绪后等待 250ms 取得首个样本，并在约 1 秒后再次采样：帧计数从 `52` 到 `116`，即样本期间新增 `64` 帧。两次诊断均为 `hasRendered: true`、`lastError: null`、一个 canvas、一个场景根，回退层保持隐藏；console error 与 page error 均为 0。
 
 | 指标 | 采样值 |
 | --- | --- |
-| renderer calls / frame | 15 |
-| triangles / frame | 420 |
+| renderer calls / frame | 17 |
+| triangles / frame | 444 |
 | lines / frame | 34 |
-| geometries | 15 |
+| geometries | 17 |
 | textures | 1 |
 | device pixel ratio | 1 |
 | 生产 CSS | 6.16 kB raw / 2.04 kB gzip |
-| 生产 JavaScript | 693.49 kB raw / 180.94 kB gzip |
+| 生产 JavaScript | 563.30 kB raw / 144.82 kB gzip |
 | 生产 HTML | 0.47 kB raw / 0.35 kB gzip |
 
 回归浏览器测试会先让一次完整替换序列稳定，再执行 20 轮四资产切换（80 次选择），并断言：仅 1 个 canvas、仅 1 个场景根、仅 1 个叠加根、纹理数不增长、几何数不增长、RAF 帧计数继续前进、console/page error 均为 0。Three.js 的 `renderer.info.memory` 会在后续帧清理已释放几何体，因此该断言以“不会增长”而不是一次性临时计数的完全相等来判断资源没有累计泄漏。
@@ -51,17 +51,21 @@
 
 ## 自动化验证命令
 
-候选提交生成后，在干净候选提交上执行下列命令；结果会在精确 SHA 证据提交中固定：
+最终候选 `075be10fb3355c00da2e9d32a9d1cf26a70eadba` 在干净工作区执行了下列门槛：
 
 ```powershell
 npm test --workspace @showcase/monster-forge
 npm run test:browser --workspace @showcase/monster-forge
+npm run test:preview --workspace @showcase/monster-forge
 npm test
-npm run build --workspace @showcase/monster-forge
+npm run build
 npm run validate
 node scripts/check-selected-skills.mjs
+npm ls three
 git diff --check
 ```
+
+结果为：Monster Forge 单元测试 `15/15`，开发服务 Playwright `15/15`，生产预览 smoke `1/1`，全仓测试 `83/83`；全仓 build、workspace validate、16 项 Skill 只读审计和 `git diff --check` 全部通过。`npm ls three` 只解析到一个 `three@0.185.1`，生产预览正常显示实时 canvas，没有进入 fallback，也没有 console error 或 page error。四张目录 PNG 分别以 `build-vesperfall-review-assets/scripts/validate_pair.py <png> <model-source>` 对当前程序化模型源码完成四对配对校验，结果全部通过。
 
 ## 最终审查修复：目录重捕获与模型创建故障
 
@@ -69,7 +73,7 @@ git diff --check
 - manifest 与运行时 provenance 现在都记录为 `delivered-captured`：目录 PNG 来自同一程序化模型的当前运行时捕获，不再标记为等待重捕获。
 - `?forceModelFailure=1` 是一次性、确定性的模型构建故障夹具。首次真实模型工厂调用抛错并进入 `model-creation-failed` 边界；回退显示同一资产的 PNG、名称、程序化来源、尺寸、动作和中文具体原因。
 - 故障状态下切换目录卡会同步更新回退元数据。点击“重试 3D 预览”会消费故障并复用同一渲染场景恢复真实 3D：回退隐藏、像素非空、选中资产正确，页面始终只有一个 canvas。`forceWebglFailure=1` 的独立回退旅程继续通过。
-- 本节不预填最终候选 SHA；精确提交只在提交实际生成后由交付报告引用。
+- 最终候选 `075be10fb3355c00da2e9d32a9d1cf26a70eadba` 已包含上述修复，并通过生产预览 smoke；独立最终复核结论为 **Ready**。
 
 ## 已批准的非目标
 
