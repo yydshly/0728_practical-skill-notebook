@@ -13,40 +13,62 @@ const capabilities = [
     button: "沉浸式叙事",
     heading: "让产品故事可以被亲手探索",
     href: "../isle-of-quiet-signals/",
+    caseTitle: /雾屿灯塔/,
   },
   {
     button: "互动活动",
     heading: "让访客参与，而不只是观看",
     href: "../world-cup-letter-flags-demo/",
+    caseTitle: /Final Four/,
   },
   {
     button: "产品原型",
     heading: "让决策在真实界面中发生",
     href: "../fabrica-template-detail-clone/",
+    caseTitle: /Fabrica template detail/,
   },
 ];
+
+const deployedShowcase =
+  "http://127.0.0.1:4178/fungarium-product-showcase/";
+
+function collectRuntimeErrors(page, errors = []) {
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      errors.push(
+        `console: ${message.text()} (${message.location().url || "unknown"})`,
+      );
+    }
+  });
+  page.on("pageerror", (error) => {
+    errors.push(`pageerror: ${error.message}`);
+  });
+  return errors;
+}
+
+async function useWebGlFallback(page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, "gpu", {
+      configurable: true,
+      get: () => undefined,
+    });
+  });
+}
 
 if (process.env.VITEST) {
   globalThis.test.skip("Playwright browser checks run through npm run test:browser");
 } else {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      Object.defineProperty(Navigator.prototype, "gpu", {
-        configurable: true,
-        get: () => undefined,
-      });
-    });
+    await useWebGlFallback(page);
   });
 
   test("a visitor can select every capability and preserve the active view", async ({
     page,
+    context,
   }, testInfo) => {
-    const errors = [];
-    page.on("console", (message) => {
-      if (message.type() === "error") errors.push(message.text());
-    });
+    const errors = collectRuntimeErrors(page);
 
-    await page.goto("/");
+    await page.goto(deployedShowcase);
     await page.getByRole("button", { name: "案例" }).click();
 
     for (const capability of capabilities) {
@@ -67,6 +89,38 @@ if (process.env.VITEST) {
       await access(path.resolve(packageRoot, capability.href));
     }
 
+    const deploymentPage = await context.newPage();
+    await useWebGlFallback(deploymentPage);
+    collectRuntimeErrors(deploymentPage, errors);
+    for (const capability of capabilities) {
+      await deploymentPage.goto(deployedShowcase);
+      await deploymentPage
+        .getByRole("region", { name: "能力展品" })
+        .getByRole("button", { name: capability.button, exact: true })
+        .click();
+
+      const caseLink = deploymentPage.getByRole("link", {
+        name: "查看案例",
+      });
+      await expect(caseLink).toHaveAttribute("href", capability.href);
+      const expectedCaseUrl = new URL(capability.href, deployedShowcase).href;
+      const navigationPromise = deploymentPage.waitForNavigation();
+      await caseLink.click();
+      const response = await navigationPromise;
+      expect(response?.ok()).toBe(true);
+      await expect(deploymentPage).toHaveURL(expectedCaseUrl);
+      await expect(deploymentPage).toHaveTitle(capability.caseTitle);
+      await expect(deploymentPage.locator("body")).toBeVisible();
+      expect(
+        (await deploymentPage.locator("body").innerText()).trim().length,
+      ).toBeGreaterThan(50);
+    }
+    await deploymentPage.close();
+
+    await page
+      .getByRole("region", { name: "能力展品" })
+      .getByRole("button", { name: "产品原型", exact: true })
+      .click();
     await page.screenshot({
       path: testInfo.outputPath("showroom.png"),
       fullPage: true,
@@ -77,12 +131,9 @@ if (process.env.VITEST) {
   test("a visitor can switch views, drag the artifact, and save the canvas", async ({
     page,
   }) => {
-    const errors = [];
-    page.on("console", (message) => {
-      if (message.type() === "error") errors.push(message.text());
-    });
+    const errors = collectRuntimeErrors(page);
 
-    await page.goto("/");
+    await page.goto(deployedShowcase);
     const canvas = page.locator("canvas");
     await expect(canvas).toBeVisible();
 

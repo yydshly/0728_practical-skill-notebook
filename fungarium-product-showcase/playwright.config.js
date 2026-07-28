@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: "./tests/browser",
   outputDir: "./test-results",
   use: {
-    baseURL: "http://127.0.0.1:4174",
+    baseURL: "http://127.0.0.1:4178/fungarium-product-showcase/",
     trace: "retain-on-failure",
   },
   projects: [
@@ -23,8 +23,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- --port 4174",
-    url: "http://127.0.0.1:4174",
+    command: "node scripts/verify-showcase.mjs --serve-deployment",
+    url: "http://127.0.0.1:4178/__health",
     reuseExistingServer: !process.env.CI,
   },
 });
