@@ -41,4 +41,16 @@ describe("showcase workspace", () => {
     expect(lock.branch).toBe("main");
     expect(lock.commit).toMatch(/^[0-9a-f]{40}$/);
   });
+
+  it("documents every selected skill and the global install impact", async () => {
+    const selection = await readJson("../config/selected-skills.json");
+    const guide = await readFile(new URL("../docs/skill-installation.md", import.meta.url), "utf8");
+    for (const skill of selection.skills) {
+      expect(guide).toContain(`\`${skill.name}\``);
+    }
+    expect(guide).toContain("C:\\Users\\yun68\\.codex\\skills");
+    expect(guide).toContain("开发操作规范");
+    expect(guide).toContain("不是运行时依赖");
+    expect(guide).toContain("所有 Codex 项目");
+  });
 });
