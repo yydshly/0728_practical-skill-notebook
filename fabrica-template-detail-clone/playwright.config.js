@@ -17,9 +17,11 @@ export default defineConfig({
     { name: 'desktop', use: { browserName: 'chromium', viewport: { width: 1280, height: 720 } } },
     { name: 'mobile', use: { browserName: 'chromium', viewport: { width: 390, height: 844 }, isMobile: true } },
   ],
-  webServer: {
-    command: `npm run dev -- --host 0.0.0.0 --port ${port} --strictPort`,
-    url: baseURL,
-    reuseExistingServer: false,
-  },
+  webServer: process.env.PLAYWRIGHT_EXTERNAL_SERVER === 'true'
+    ? undefined
+    : {
+      command: `npm run dev -- --host 0.0.0.0 --port ${port} --strictPort`,
+      url: baseURL,
+      reuseExistingServer: false,
+    },
 });
