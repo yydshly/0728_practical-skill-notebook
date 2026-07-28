@@ -103,28 +103,70 @@ export const pageData = {
   ],
   footerGroups: [
     {
-      heading: 'Explore',
+      heading: 'Templates',
       links: [
-        { label: 'Templates', href: '/templates' },
-        { label: 'Framer', href: '/templates/framer' },
-        { label: 'Webflow', href: '/templates/webflow' },
-        { label: 'Shopify', href: '/templates/shopify' },
+        { label: 'All', href: '/templates' },
+        { label: 'Webflow Templates', href: '/templates/webflow' },
+        { label: 'Framer Templates', href: '/templates/framer' },
+        { label: 'Shopify Themes', href: '/templates/shopify' },
       ],
     },
     {
-      heading: 'Resources',
+      heading: 'Framer',
       links: [
-        { label: 'Blog', href: '/blog' },
+        { label: 'All', href: '/templates/framer' },
+        { label: 'Free', href: '/templates/framer/free' },
+        { label: 'Paid', href: '/templates/framer/paid' },
+      ],
+    },
+    {
+      heading: 'Webflow',
+      links: [
+        { label: 'All', href: '/templates/webflow' },
+        { label: 'Free', href: '/templates/webflow/free' },
+        { label: 'Paid', href: '/templates/webflow/paid' },
+      ],
+    },
+    {
+      heading: 'Shopify',
+      links: [
+        { label: 'All', href: '/templates/shopify' },
+        { label: 'Free', href: '/templates/shopify/free' },
+        { label: 'Paid', href: '/templates/shopify/paid' },
+      ],
+    },
+    {
+      heading: 'Pages',
+      links: [
+        { label: 'Blogs', href: '/blog' },
+        { label: 'About', href: '/about' },
         { label: 'Scoring Methodology', href: '/methodology' },
         { label: 'Free Cost Calculator', href: '/platform-cost-calculator' },
+        { label: 'Platform Comparison', href: '/blog/webflow-vs-framer-vs-shopify-which-platform-should-you-build-on' },
       ],
     },
     {
-      heading: 'Company',
+      heading: 'Links',
       links: [
-        { label: 'About', href: '/about' },
+        { label: 'Glossary', href: '/blog/website-template-glossary-every-term-youll-actually-need' },
         { label: 'Sitemap', href: '/site-map' },
-        { label: 'Privacy', href: '/privacy-policy' },
+        { label: 'Privacy Policy', href: '/privacy-policy' },
+        { label: 'Cookies Policy', href: '/cookies' },
+        { label: 'For AI', href: '/for-ai' },
+      ],
+    },
+    {
+      heading: 'Socials',
+      links: [
+        { label: 'LinkedIn', href: 'https://www.linkedin.com/company/best-website-templates', icon: 'linkedin' },
+        { label: 'Instagram', href: 'https://www.instagram.com/best_website_templates', icon: 'instagram' },
+        { label: 'TikTok', href: 'https://www.tiktok.com/@bestwebsitetemplate', icon: 'tiktok' },
+        { label: 'X', href: 'https://x.com/website_tmplts', icon: 'x' },
+        { label: 'YouTube', href: 'https://www.youtube.com/@Bestwebsitetemplate', icon: 'youtube' },
+        { label: 'Facebook', href: 'https://www.facebook.com/people/Best-Website-Templates/61578580390250/', icon: 'facebook' },
+        { label: 'Pinterest', href: 'https://www.pinterest.com/bestwebsitetmplts/', icon: 'pinterest' },
+        { label: 'Bluesky', href: 'https://bsky.app/profile/bestwebsitetmplts.bsky.social', icon: 'bluesky' },
+        { label: 'Threads', href: 'https://www.threads.com/@best_website_templates', icon: 'threads' },
       ],
     },
   ],

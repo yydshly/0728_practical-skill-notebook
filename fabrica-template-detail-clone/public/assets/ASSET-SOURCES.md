@@ -12,3 +12,4 @@ The user expressly authorized copying the source-page media into this local clon
 | `blogs/we-scored-860-website-templates-2026.webp` | `https://pub-ff8ef2f3b06f4e22a4e02d560599e045.r2.dev/blog-we-scored-860-website-templates-here-is-what-the-data-shows-in-2026.webp` | User authorization | copied locally |
 | `icons/site-mark.svg` | `https://bestwebsitetemplate.com/icon.svg` | User authorization | copied locally |
 | `icons/menu.svg` | `https://bestwebsitetemplate.com/burger-menu.svg` | User authorization | copied locally |
+| `icons/{linkedin,instagram,tiktok,x,youtube,facebook,pinterest,bluesky,threads}.svg` | `https://bestwebsitetemplate.com/social/<name>.svg` | User authorization | copied locally |
