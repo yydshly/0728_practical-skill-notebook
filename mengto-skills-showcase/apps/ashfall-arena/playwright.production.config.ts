@@ -1,15 +1,18 @@
 import { defineConfig } from "@playwright/test";
 
+const port = process.env.ASHFALL_PREVIEW_PORT ?? "4184";
+const baseURL = `http://127.0.0.1:${port}`;
+
 export default defineConfig({
   testDir: "./tests/production",
   fullyParallel: false,
   workers: 1,
   use: {
-    baseURL: "http://127.0.0.1:4184",
+    baseURL,
   },
   webServer: {
-    command: "npm run preview",
-    url: "http://127.0.0.1:4184",
+    command: `vite preview --host 127.0.0.1 --port ${port} --strictPort`,
+    url: baseURL,
     reuseExistingServer: false,
   },
 });

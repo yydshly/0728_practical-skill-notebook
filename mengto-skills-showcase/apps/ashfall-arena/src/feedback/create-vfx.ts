@@ -15,7 +15,7 @@ import type {
   GameStatus,
 } from "../simulation/types";
 
-export type VfxQuality = "low" | "high";
+export type VfxQuality = "low" | "medium" | "high";
 export type VfxPoolName =
   | "hitSparks"
   | "guardArcs"
@@ -106,6 +106,7 @@ export interface VfxController {
   sync(state: Readonly<GameState>): void;
   update(deltaSeconds: number, paused: boolean): void;
   setReducedMotion(reduced: boolean): void;
+  setQuality(quality: VfxQuality): void;
   reset(): void;
   getDiagnostics(): VfxDiagnostics;
   dispose(): void;
@@ -239,7 +240,7 @@ export function createVfx(
   scene.add(root);
 
   let reducedMotion = options.reducedMotion;
-  const quality = options.quality;
+  let quality = options.quality;
   let damageFlashRemaining = 0;
   let previousPhase: EncounterPhase | null = null;
   let previousStatus: GameStatus | null = null;
@@ -305,7 +306,12 @@ export function createVfx(
         event.actorId === state.player.id &&
         event.actionId === "dodge"
       ) {
-        const count = reducedMotion || quality === "low" ? 1 : 3;
+        const count =
+          reducedMotion || quality === "low"
+            ? 1
+            : quality === "medium"
+              ? 2
+              : 3;
         for (let index = 0; index < count; index += 1) {
           const direction = index % 2 === 0 ? -1 : 1;
           spawn(
@@ -340,7 +346,12 @@ export function createVfx(
           );
           continue;
         }
-        const count = reducedMotion || quality === "low" ? 1 : 4;
+        const count =
+          reducedMotion || quality === "low"
+            ? 1
+            : quality === "medium"
+              ? 2
+              : 4;
         for (let index = 0; index < count; index += 1) {
           const angle = index * Math.PI * 0.5;
           spawn(
@@ -478,6 +489,9 @@ export function createVfx(
           }
         }
       }
+    },
+    setQuality(nextQuality) {
+      quality = nextQuality;
     },
     reset,
     getDiagnostics,

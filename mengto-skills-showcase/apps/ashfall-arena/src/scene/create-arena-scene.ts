@@ -14,21 +14,30 @@ import {
   PointLight,
   RingGeometry,
   Scene,
+  type Light,
   WebGLRenderer,
 } from "three";
 import {
   ARENA_LEVEL,
   type ArenaZone,
 } from "../content/arena-level";
+import type { QualityTier } from "../performance/create-quality-controller";
 
 export interface ArenaScene {
   scene: Scene;
   renderer: WebGLRenderer;
+  setQuality(quality: QualityTier): void;
   setGateOpen(open: boolean): void;
   resize(width: number, height: number, pixelRatio?: number): void;
   render(camera: PerspectiveCamera): void;
   getDiagnostics(): {
     preserveDrawingBuffer: boolean;
+    qualityTier: QualityTier;
+    pixelRatio: number;
+    drawingBufferWidth: number;
+    drawingBufferHeight: number;
+    shadowMapEnabled: boolean;
+    activeLocalLights: number;
     localLights: Array<{
       id: string;
       emitterId: string;
@@ -41,7 +50,10 @@ export interface ArenaScene {
 
 export function createArenaScene(
   canvas: HTMLCanvasElement,
-  options: { preserveDrawingBuffer?: boolean } = {},
+  options: {
+    preserveDrawingBuffer?: boolean;
+    quality?: QualityTier;
+  } = {},
 ): ArenaScene {
   const preserveDrawingBuffer = options.preserveDrawingBuffer ?? false;
   const scene = new Scene();
@@ -61,6 +73,12 @@ export function createArenaScene(
     powerPreference: "high-performance",
   });
   renderer.setClearColor(0x121014, 1);
+  renderer.shadowMap.enabled = false;
+  let qualityTier = options.quality ?? "high";
+  let lastWidth = 1;
+  let lastHeight = 1;
+  let lastDevicePixelRatio = 1;
+  const localLights: Light[] = [];
 
   const ownedGeometry = new Set<BufferGeometry>();
   const ownedMaterial = new Set<MeshBasicMaterial | MeshStandardMaterial>();
@@ -213,20 +231,67 @@ export function createArenaScene(
     light.position.y = 1.38;
     light.userData.emitterId = record.emitterId;
     emitter.add(light);
+    localLights.push(light);
     scene.add(emitter);
   }
+
+  const qualityProfiles: Record<
+    QualityTier,
+    {
+      renderScale: number;
+      maxPixelRatio: number;
+      activeLocalLights: number;
+    }
+  > = {
+    high: {
+      renderScale: 1,
+      maxPixelRatio: 2,
+      activeLocalLights: localLights.length,
+    },
+    medium: {
+      renderScale: 0.8,
+      maxPixelRatio: 1.25,
+      activeLocalLights: Math.ceil(localLights.length / 2),
+    },
+    low: {
+      renderScale: 0.65,
+      maxPixelRatio: 0.85,
+      activeLocalLights: 0,
+    },
+  };
+  const applyQuality = () => {
+    const profile = qualityProfiles[qualityTier];
+    renderer.setPixelRatio(
+      Math.min(
+        profile.maxPixelRatio,
+        Math.max(0.5, lastDevicePixelRatio * profile.renderScale),
+      ),
+    );
+    renderer.setSize(lastWidth, lastHeight, false);
+    localLights.forEach((light, index) => {
+      light.visible = index < profile.activeLocalLights;
+    });
+  };
+  applyQuality();
 
   let disposed = false;
   return {
     scene,
     renderer,
+    setQuality(quality) {
+      if (quality === qualityTier) return;
+      qualityTier = quality;
+      applyQuality();
+    },
     setGateOpen(open) {
       gate.position.y = open ? -gateCollision.height - 0.5 : 0;
       gate.visible = !open;
     },
     resize(width, height, pixelRatio = window.devicePixelRatio || 1) {
-      renderer.setPixelRatio(Math.min(2, Math.max(1, pixelRatio)));
-      renderer.setSize(Math.max(1, width), Math.max(1, height), false);
+      lastWidth = Math.max(1, width);
+      lastHeight = Math.max(1, height);
+      lastDevicePixelRatio = Math.max(0.5, pixelRatio);
+      applyQuality();
     },
     render(camera) {
       renderer.render(scene, camera);
@@ -234,6 +299,13 @@ export function createArenaScene(
     getDiagnostics() {
       return {
         preserveDrawingBuffer,
+        qualityTier,
+        pixelRatio: renderer.getPixelRatio(),
+        drawingBufferWidth: renderer.domElement.width,
+        drawingBufferHeight: renderer.domElement.height,
+        shadowMapEnabled: renderer.shadowMap.enabled,
+        activeLocalLights: localLights.filter(({ visible }) => visible)
+          .length,
         localLights: ARENA_LEVEL.localLights.map((record) => {
           const light = scene.getObjectByName(record.id);
           const emitter = scene.getObjectByName(record.emitterId);

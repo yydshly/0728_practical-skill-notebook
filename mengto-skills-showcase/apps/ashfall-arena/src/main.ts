@@ -9,6 +9,12 @@ import { createVfx } from "./feedback/create-vfx";
 import { createInputAdapter } from "./input/create-input-adapter";
 import { FixedStepAccumulator } from "./main-loop";
 import {
+  createQualityController,
+  type QualityDiagnostics,
+  type QualityMode,
+  type QualityTier,
+} from "./performance/create-quality-controller";
+import {
   clearSave,
   createStateFromSave,
   getSafeStorage,
@@ -16,6 +22,10 @@ import {
   writeSave,
 } from "./persistence/save-game";
 import { installReviewApi } from "./review/create-review-api";
+import {
+  createPerformanceSampler,
+  type FramePerformanceSnapshot,
+} from "./review/create-performance-sampler";
 import { createArenaScene } from "./scene/create-arena-scene";
 import { createGameCamera } from "./scene/create-game-camera";
 import { resolveCameraOcclusion } from "./scene/resolve-camera-occlusion";
@@ -55,6 +65,7 @@ interface AshfallSnapshot {
   frameCount: number;
   tick: number;
   droppedSeconds: number;
+  manualReviewClock: boolean;
   paused: boolean;
   preserveDrawingBuffer: boolean;
   input: GameIntent;
@@ -93,10 +104,48 @@ interface AshfallSnapshot {
     attached: boolean;
     emitterVisible: boolean;
   }>;
+  performance: AshfallPerformanceSnapshot;
+}
+
+interface AshfallPerformanceSnapshot {
+  qualityMode: QualityMode;
+  qualityTier: QualityTier;
+  quality: QualityDiagnostics;
+  frame: FramePerformanceSnapshot;
+  renderer: {
+    calls: number;
+    triangles: number;
+    geometries: number;
+    textures: number;
+    pixelRatio: number;
+    drawingBufferWidth: number;
+    drawingBufferHeight: number;
+    shadowMapEnabled: boolean;
+    activeLocalLights: number;
+  };
+  heap:
+    | {
+        supported: true;
+        usedBytes: number;
+        totalBytes: number;
+        limitBytes: number;
+      }
+    | { supported: false };
+  lifecycle: {
+    disposed: boolean;
+    sceneChildren: number;
+    entityRoots: number;
+    listenerRegistrations: number;
+    pooledObjects: number;
+    activePooledObjects: number;
+  };
 }
 
 interface AshfallReviewApi {
   snapshot(): AshfallSnapshot;
+  resetPerformanceSamples(): void;
+  setManualReviewClock(enabled: boolean): void;
+  advanceInput(intent: Partial<GameIntent>, ticks?: number): void;
   triggerCameraShake(): void;
   getSerializableState(): GameState;
   queueEnemyMove(enemyId: string, moveId: EnemyMoveId): string;
@@ -109,6 +158,7 @@ interface AshfallReviewApi {
 declare global {
   interface Window {
     __ashfallDiagnostics?: AshfallReviewApi;
+    __ashfallReleaseDisposalSnapshot?: AshfallPerformanceSnapshot;
   }
 }
 
@@ -134,20 +184,44 @@ const safeTraining = query.get("safeTraining") === "1";
 const manualEnemyAi = query.get("manualEnemyAi") === "1";
 const captureMode = query.get("capture") === "1";
 const forcedMonsterFailure = query.get("forceEnemyModelFailure");
+const qualityParameter = query.get("quality");
+const qualityMode: QualityMode =
+  qualityParameter === "low" ||
+  qualityParameter === "medium" ||
+  qualityParameter === "high"
+    ? qualityParameter
+    : "auto";
+const qualityController = createQualityController(qualityMode);
+let qualityTier = qualityController.getDiagnostics().tier;
+const acceleratedReviewFixture =
+  reviewControls && fixtureParameter !== null;
+const reviewEnemyHealthCap = fixture === "fresh" ? 1 : 18;
 document.documentElement.dataset.reviewControls = reviewControls ? "on" : "off";
 const saveStorage = getSafeStorage(() => window.localStorage);
 
 let saveNoticeMessage = "";
+const applyReviewEnemyHealthCap = (candidate: GameState): GameState => {
+  if (!acceleratedReviewFixture) return candidate;
+  let changed = false;
+  const enemies = Object.fromEntries(
+    Object.entries(candidate.enemies).map(([id, enemy]) => {
+      const health = Math.min(enemy.health, reviewEnemyHealthCap);
+      if (health !== enemy.health) changed = true;
+      return [id, health === enemy.health ? enemy : { ...enemy, health }];
+    }),
+  );
+  return changed ? { ...candidate, enemies } : candidate;
+};
 const createFixtureState = () =>
-  createEncounterFixture(
+  applyReviewEnemyHealthCap(createEncounterFixture(
     7481,
     fixture,
     {
-      accelerated: reviewControls && fixture !== "fresh",
+      accelerated: acceleratedReviewFixture,
       trainingAiEnabled: !safeTraining,
       ...(manualEnemyAi ? { enemyAiEnabled: false } : {}),
     },
-  );
+  ));
 const savedContinuation =
   fixtureParameter === null ? readSave(saveStorage) : null;
 let state: GameState =
@@ -268,11 +342,12 @@ let hud: HudController | null = null;
 
 const arena = createArenaScene(canvas, {
   preserveDrawingBuffer: reviewControls || captureMode,
+  quality: qualityTier,
 });
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const vfx = createVfx(arena.scene, {
   reducedMotion: reducedMotion.matches,
-  quality: query.get("quality") === "low" ? "low" : "high",
+  quality: qualityTier,
 });
 const player = createVesperKnight();
 arena.scene.add(player.root);
@@ -313,6 +388,9 @@ const audio = createAudioFeedback({
   visibilityDocument: document,
 });
 const accumulator = new FixedStepAccumulator(1 / 60, 5, 0.25);
+const performanceSampler = reviewControls
+  ? createPerformanceSampler()
+  : null;
 const playerTarget = new Vector3();
 const trainingLockTarget = new Vector3(
   arenaContent.arena.trainingCenter.x,
@@ -332,6 +410,7 @@ let previousTimestamp: number | null = null;
 let frameRequest = 0;
 let frameCount = 0;
 let disposed = false;
+let manualReviewClock = false;
 let focusGameOnNextFrame = false;
 let menuAxisLatch = 0;
 
@@ -357,7 +436,7 @@ const persistCheckpoint = (): boolean => {
 };
 
 const replaceRunState = (next: GameState) => {
-  state = next;
+  state = applyReviewEnemyHealthCap(next);
   input.clear();
   accumulator.reset();
   previousTimestamp = null;
@@ -392,7 +471,7 @@ const onUpgrade = (upgradeId: UpgradeId) => {
   ) {
     return;
   }
-  state = applyUpgrade(state, upgradeId);
+  state = applyReviewEnemyHealthCap(applyUpgrade(state, upgradeId));
   persistCheckpoint();
 };
 
@@ -484,7 +563,7 @@ const persistFromEvents = (events: readonly GameEvent[]) => {
 
 const commitAuthoritativeResult = (result: StepGameResult) => {
   const settled = settleAuthoritativeResult(result);
-  state = settled.state;
+  state = applyReviewEnemyHealthCap(settled.state);
   routeGameplayEvents(settled.events);
   persistFromEvents(settled.events);
 };
@@ -550,7 +629,7 @@ const step = (fixedDelta: number) => {
     menuAxisLatch = 0;
   }
   const result = stepGame(state, intent, fixedDelta, arenaContent);
-  state = result.state;
+  state = applyReviewEnemyHealthCap(result.state);
   routeGameplayEvents(result.events);
   persistFromEvents(result.events);
   audio.setPaused(state.paused || state.status === "upgrade");
@@ -571,7 +650,17 @@ const frame = (timestamp: number) => {
       ? 0
       : Math.max(0, (timestamp - previousTimestamp) / 1000);
   previousTimestamp = timestamp;
-  accumulator.advance(frameDelta, step);
+  const frameMs = frameDelta * 1_000;
+  performanceSampler?.recordFrame(frameMs);
+  if (qualityController.recordFrame(frameMs)) {
+    qualityTier = qualityController.getDiagnostics().tier;
+    arena.setQuality(qualityTier);
+    vfx.setQuality(qualityTier);
+    performanceSampler?.reset();
+  }
+  if (!manualReviewClock) {
+    accumulator.advance(frameDelta, step);
+  }
   synchronizer.sync(state, frameDelta);
   vfx.sync(state);
   const presentationPaused =
@@ -618,6 +707,100 @@ const onReducedMotion = (event: MediaQueryListEvent) => {
 document.addEventListener("visibilitychange", onVisibility);
 reducedMotion.addEventListener("change", onReducedMotion);
 
+const getPerformanceSnapshot = (
+  runtimeDisposed = false,
+): AshfallPerformanceSnapshot => {
+  const rendererInfo = arena.renderer.info;
+  const arenaDiagnostics = arena.getDiagnostics();
+  const effects = vfx.getDiagnostics();
+  const entityDiagnostics = synchronizer.getDiagnostics();
+  const poolDiagnostics = Object.values(effects.pools);
+  const memory = (
+    performance as Performance & {
+      memory?: {
+        usedJSHeapSize: number;
+        totalJSHeapSize: number;
+        jsHeapSizeLimit: number;
+      };
+    }
+  ).memory;
+  const heap =
+    memory &&
+      Number.isFinite(memory.usedJSHeapSize) &&
+      Number.isFinite(memory.totalJSHeapSize) &&
+      Number.isFinite(memory.jsHeapSizeLimit)
+      ? {
+          supported: true as const,
+          usedBytes: memory.usedJSHeapSize,
+          totalBytes: memory.totalJSHeapSize,
+          limitBytes: memory.jsHeapSizeLimit,
+        }
+      : { supported: false as const };
+  const playerRoots = arena.scene.children.filter(
+    ({ name }) => name === "vesper-knight",
+  ).length;
+  const controllerListeners =
+    input.getLifecycleDiagnostics().listenerRegistrations +
+    (hud?.getLifecycleDiagnostics().listenerRegistrations ?? 0) +
+    audio.getDiagnostics().listenerRegistrations;
+
+  return {
+    qualityMode,
+    qualityTier,
+    quality: qualityController.getDiagnostics(),
+    frame: performanceSampler?.getFrameSnapshot() ?? {
+      sampleCount: 0,
+      averageMs: 0,
+      medianMs: 0,
+      p95Ms: 0,
+      maxMs: 0,
+    },
+    renderer: runtimeDisposed
+      ? {
+          calls: 0,
+          triangles: 0,
+          geometries: 0,
+          textures: 0,
+          pixelRatio: 0,
+          drawingBufferWidth: 0,
+          drawingBufferHeight: 0,
+          shadowMapEnabled: false,
+          activeLocalLights: 0,
+        }
+      : {
+          calls: rendererInfo.render.calls,
+          triangles: rendererInfo.render.triangles,
+          geometries: rendererInfo.memory.geometries,
+          textures: rendererInfo.memory.textures,
+          pixelRatio: arenaDiagnostics.pixelRatio,
+          drawingBufferWidth: arenaDiagnostics.drawingBufferWidth,
+          drawingBufferHeight: arenaDiagnostics.drawingBufferHeight,
+          shadowMapEnabled: arenaDiagnostics.shadowMapEnabled,
+          activeLocalLights: arenaDiagnostics.activeLocalLights,
+        },
+    heap,
+    lifecycle: {
+      disposed: runtimeDisposed,
+      sceneChildren: arena.scene.children.length,
+      entityRoots:
+        playerRoots +
+        entityDiagnostics.modelRootCount +
+        entityDiagnostics.fallbackRootCount +
+        entityDiagnostics.enemyProjectileTraceCount,
+      listenerRegistrations:
+        controllerListeners + (runtimeDisposed ? 0 : 4),
+      pooledObjects: poolDiagnostics.reduce(
+        (total, pool) => total + pool.capacity,
+        0,
+      ),
+      activePooledObjects: poolDiagnostics.reduce(
+        (total, pool) => total + pool.active,
+        0,
+      ),
+    },
+  };
+};
+
 const reviewApi = installReviewApi(reviewControls, {
   readState: () => state,
   commit: commitAuthoritativeResult,
@@ -643,6 +826,60 @@ const reviewApi = installReviewApi(reviewControls, {
 
 if (reviewControls) {
   window.__ashfallDiagnostics = {
+    resetPerformanceSamples() {
+      performanceSampler?.reset();
+    },
+    setManualReviewClock(enabled) {
+      manualReviewClock = enabled;
+      accumulator.reset();
+      previousTimestamp = null;
+      input.clear();
+    },
+    advanceInput(intent, ticks = 1) {
+      if (!manualReviewClock) {
+        throw new Error(
+          "review input requires the manual review clock",
+        );
+      }
+      if (!Number.isInteger(ticks) || ticks < 1 || ticks > 600) {
+        throw new RangeError("review input ticks must be between 1 and 600");
+      }
+      const base: GameIntent = {
+        moveX: 0,
+        moveY: 0,
+        attackPressed: false,
+        guardHeld: false,
+        dodgePressed: false,
+        lockPressed: false,
+        healPressed: false,
+        switchWeaponPressed: false,
+        pausePressed: false,
+      };
+      for (let index = 0; index < ticks; index += 1) {
+        const edge = index === 0;
+        const stepIntent: GameIntent = {
+          ...base,
+          ...intent,
+          attackPressed: edge && Boolean(intent.attackPressed),
+          dodgePressed: edge && Boolean(intent.dodgePressed),
+          lockPressed: edge && Boolean(intent.lockPressed),
+          healPressed: edge && Boolean(intent.healPressed),
+          switchWeaponPressed:
+            edge && Boolean(intent.switchWeaponPressed),
+          pausePressed: edge && Boolean(intent.pausePressed),
+        };
+        const result = stepGame(
+          state,
+          stepIntent,
+          1 / 60,
+          arenaContent,
+        );
+        state = applyReviewEnemyHealthCap(result.state);
+        routeGameplayEvents(result.events);
+        persistFromEvents(result.events);
+      }
+      audio.setPaused(state.paused || state.status === "upgrade");
+    },
     snapshot() {
       const cameraDiagnostics = cameraController.getDiagnostics();
       const arenaDiagnostics = arena.getDiagnostics();
@@ -667,6 +904,7 @@ if (reviewControls) {
         frameCount,
         tick: state.tick,
         droppedSeconds: accumulator.getDiagnostics().droppedSeconds,
+        manualReviewClock,
         paused: state.paused,
         preserveDrawingBuffer: arenaDiagnostics.preserveDrawingBuffer,
         input: input.getDiagnostics(),
@@ -709,6 +947,7 @@ if (reviewControls) {
           shakeAmplitude: cameraDiagnostics.shakeAmplitude,
         },
         localLights: arenaDiagnostics.localLights,
+        performance: getPerformanceSnapshot(),
       };
     },
     triggerCameraShake() {
@@ -962,6 +1201,10 @@ const dispose = () => {
   cameraController.dispose();
   player.dispose();
   arena.dispose();
+  if (reviewControls) {
+    window.__ashfallReleaseDisposalSnapshot =
+      getPerformanceSnapshot(true);
+  }
   delete window.__ashfallDiagnostics;
   document.documentElement.dataset.runtimeDisposed = "true";
 };

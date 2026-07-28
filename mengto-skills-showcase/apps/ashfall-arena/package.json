@@ -6,9 +6,10 @@
     "dev": "vite --host 127.0.0.1 --port 4174",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4184 --strictPort",
+    "verify:release": "node scripts/verify-release.mjs",
     "test": "vitest run",
     "test:browser": "playwright test",
-    "test:preview": "npm run build && playwright test --config playwright.production.config.ts"
+    "test:preview": "npm run build && npm run verify:release && playwright test --config playwright.production.config.ts"
   },
   "dependencies": {
     "@showcase/game-assets": "*",

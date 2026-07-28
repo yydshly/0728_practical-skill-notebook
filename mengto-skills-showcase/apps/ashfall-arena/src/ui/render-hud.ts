@@ -133,6 +133,10 @@ export interface HudController {
   moveDialogFocus(direction: -1 | 1): boolean;
   hasOpenDialog(): boolean;
   consumeFocusGameRequest(): boolean;
+  getLifecycleDiagnostics(): {
+    readonly disposed: boolean;
+    readonly listenerRegistrations: number;
+  };
   dispose(): void;
 }
 
@@ -476,6 +480,12 @@ export function createHudController(
   };
 
   const openDialog = () => dialogs.find((dialog) => dialog.open) ?? null;
+  const listenerRegistrations =
+    upgradeButtons.length +
+    2 +
+    newRunButtons.length +
+    4 +
+    dialogs.length * 2;
 
   return {
     render,
@@ -531,6 +541,10 @@ export function createHudController(
       focusGameRequested = false;
       return requested;
     },
+    getLifecycleDiagnostics: () => ({
+      disposed,
+      listenerRegistrations: disposed ? 0 : listenerRegistrations,
+    }),
     dispose() {
       if (disposed) return;
       disposed = true;

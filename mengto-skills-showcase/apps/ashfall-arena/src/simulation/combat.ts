@@ -136,6 +136,14 @@ export function cancelActiveAttack(
 
   const nextState: GameState = {
     ...state,
+    player:
+      state.player.action === "attack"
+        ? {
+            ...state.player,
+            action: "idle",
+            actionTime: 0,
+          }
+        : state.player,
     combat: {
       ...state.combat,
       activeAttack: null,

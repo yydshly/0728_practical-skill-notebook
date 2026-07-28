@@ -2102,6 +2102,10 @@ describe("combat state integration", () => {
 
       expect(result.state.status).toBe(status);
       expect(result.state.combat.activeAttack).toBeNull();
+      expect(result.state.player).toMatchObject({
+        action: "idle",
+        actionTime: 0,
+      });
       expect(eventsNamed(result.events, "attack-resolved")).toEqual([
         {
           type: "attack-resolved",

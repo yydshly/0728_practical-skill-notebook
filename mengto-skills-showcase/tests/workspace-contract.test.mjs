@@ -175,7 +175,7 @@ describe("showcase workspace", () => {
     }
   });
 
-  it("划分当前可执行命令与未来产品的预留入口", async () => {
+  it("划分当前产品命令与未来产品的预留入口", async () => {
     const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
     const currentCommands = readme.slice(
       readme.indexOf("### 当前基础层可执行命令"),
@@ -183,6 +183,10 @@ describe("showcase workspace", () => {
     );
     const monsterForgeCommands = readme.slice(
       readme.indexOf("### 当前可运行：Monster Forge｜怪物铸造所"),
+      readme.indexOf("### 当前可运行：Ashfall Arena｜灰烬竞技场"),
+    );
+    const ashfallCommands = readme.slice(
+      readme.indexOf("### 当前可运行：Ashfall Arena｜灰烬竞技场"),
       readme.indexOf("## Skill 源码与安装目录"),
     );
 
@@ -196,8 +200,14 @@ describe("showcase workspace", () => {
     expect(monsterForgeCommands).toContain("npm run dev:forge");
     expect(monsterForgeCommands).toContain("npm run test:browser --workspace @showcase/monster-forge");
     expect(monsterForgeCommands).not.toContain("npm run dev:arena");
+    expect(ashfallCommands).toContain("当前可运行：Ashfall Arena｜灰烬竞技场");
+    expect(ashfallCommands).toContain("npm run dev:arena");
+    expect(ashfallCommands).toContain("npm run test:browser --workspace @showcase/ashfall-arena");
+    expect(ashfallCommands).toContain("npm run test:preview --workspace @showcase/ashfall-arena");
+    expect(ashfallCommands).not.toContain("npm run dev:forge");
+    expect(ashfallCommands).not.toContain("npm run dev:atelier");
     expect(monsterForgeCommands).not.toContain("npm run dev:atelier");
-    expect(readme.match(/npm run test:browser/g)).toHaveLength(1);
+    expect(readme.match(/npm run test:browser/g)).toHaveLength(2);
   });
 
   it("为每个新产品路由到明确且狭范围的 Skills", async () => {

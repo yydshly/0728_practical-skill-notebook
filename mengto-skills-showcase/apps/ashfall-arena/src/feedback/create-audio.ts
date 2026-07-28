@@ -87,6 +87,7 @@ export interface AudioDiagnostics {
   readonly paused: boolean;
   readonly settings: AudioSettings;
   readonly disposed: boolean;
+  readonly listenerRegistrations: number;
 }
 
 export interface AudioFeedback {
@@ -512,6 +513,9 @@ export function createAudioFeedback(options: {
       paused,
       settings: { ...settings },
       disposed,
+      listenerRegistrations: disposed
+        ? 0
+        : (gestureTarget ? 2 : 0) + (visibilityDocument ? 1 : 0),
     }),
     dispose() {
       if (disposed) return;

@@ -194,6 +194,10 @@ export interface InputAdapter {
   sample(): GameIntent;
   getDeviceMode(): InputDeviceMode;
   getDiagnostics(): GameIntent;
+  getLifecycleDiagnostics(): {
+    readonly disposed: boolean;
+    readonly listenerRegistrations: number;
+  };
   clear(): void;
   dispose(): void;
 }
@@ -403,6 +407,7 @@ export function createInputAdapter(
   const touchButtons = [
     ...controls.querySelectorAll<HTMLButtonElement>("button"),
   ];
+  const listenerRegistrations = 15 + touchButtons.length * 3;
   const onTouchButtonDown = (event: PointerEvent) => {
     const button = event.currentTarget as HTMLButtonElement;
     setMode("touch");
@@ -490,6 +495,10 @@ export function createInputAdapter(
     },
     getDeviceMode: () => deviceMode,
     getDiagnostics: () => accumulator.peek(),
+    getLifecycleDiagnostics: () => ({
+      disposed,
+      listenerRegistrations: disposed ? 0 : listenerRegistrations,
+    }),
     clear,
     dispose() {
       if (disposed) return;

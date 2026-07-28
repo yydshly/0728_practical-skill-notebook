@@ -4,9 +4,26 @@ test("production dist renders and advances the real arena runtime", async ({
   page,
 }) => {
   const errors: string[] = [];
+  const failedRequests: string[] = [];
+  const failedResponses: string[] = [];
+  const productionAssets = new Set<string>();
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
+  });
+  page.on("requestfailed", (request) => {
+    failedRequests.push(
+      `${request.url()}: ${request.failure()?.errorText ?? "unknown"}`,
+    );
+  });
+  page.on("response", (assetResponse) => {
+    const url = assetResponse.url();
+    if (url.includes("/assets/")) {
+      productionAssets.add(url);
+    }
+    if (assetResponse.status() >= 400) {
+      failedResponses.push(`${assetResponse.status()} ${url}`);
+    }
   });
 
   const response = await page.goto("/?fixture=fresh&reviewControls=1");
@@ -69,5 +86,8 @@ test("production dist renders and advances the real arena runtime", async ({
   );
   expect(after.frameCount).toBeGreaterThan(before.frameCount);
   expect(after.playerRootCount).toBe(1);
+  expect(productionAssets.size).toBeGreaterThanOrEqual(5);
+  expect(failedRequests).toEqual([]);
+  expect(failedResponses).toEqual([]);
   expect(errors).toEqual([]);
 });
