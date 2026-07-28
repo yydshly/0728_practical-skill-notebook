@@ -1,0 +1,47 @@
+:root {
+  color: #f5f0dc;
+  background: #10130f;
+  font-family: Inter, "Noto Sans SC", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; min-width: 320px; }
+
+.game-shell {
+  min-height: 100vh;
+  overflow: hidden;
+  position: relative;
+  background:
+    radial-gradient(circle at 73% 12%, rgba(230, 184, 105, .33), transparent 27%),
+    linear-gradient(180deg, #6f7772 0%, #343f35 49%, #151b15 100%);
+}
+
+#game { display: block; width: 100%; height: 100vh; }
+
+.story-card {
+  position: absolute;
+  left: clamp(1.2rem, 5vw, 4.5rem);
+  bottom: clamp(3.4rem, 12vh, 7rem);
+  width: min(34rem, calc(100vw - 2.4rem));
+  border-left: 2px solid rgba(233, 191, 110, .86);
+  padding-left: 1.1rem;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, .72);
+}
+
+.eyebrow { color: #e4bc79; font-size: .73rem; font-weight: 700; letter-spacing: .16em; margin: 0 0 .6rem; }
+h1 { font-family: Georgia, "Noto Serif SC", serif; font-size: clamp(2.5rem, 7vw, 5.8rem); font-weight: 500; letter-spacing: .07em; margin: 0; }
+#objective { font-size: 1.02rem; font-weight: 700; margin: .9rem 0 .35rem; }
+#subtitle { color: rgba(245, 240, 220, .82); line-height: 1.65; margin: 0; }
+
+.controls {
+  bottom: 1.25rem;
+  color: rgba(245, 240, 220, .64);
+  font-size: .72rem;
+  left: 50%;
+  letter-spacing: .06em;
+  position: absolute;
+  text-align: center;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
