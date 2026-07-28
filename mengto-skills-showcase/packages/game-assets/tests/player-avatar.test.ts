@@ -36,6 +36,29 @@ it("grounds its authored visual footprint on the gameplay plane", () => {
   knight.dispose();
 });
 
+it("reparents equipped weapons between real hand and back sockets", () => {
+  const knight = createVesperKnight();
+  const oathblade = knight.root.getObjectByName("oathblade-placeholder")!;
+  const bow = knight.root.getObjectByName("ember-bow-placeholder")!;
+
+  expect(oathblade.parent).toBe(knight.sockets.get("right-hand"));
+  expect(bow.parent).toBe(knight.sockets.get("back"));
+
+  knight.equipWeapon("ember-bow");
+  expect(bow.parent).toBe(knight.sockets.get("left-hand"));
+  expect(oathblade.parent).toBe(knight.sockets.get("back"));
+  expect(knight.root.userData.equippedWeapon).toBe("ember-bow");
+
+  knight.equipWeapon("ember-bow");
+  expect(bow.parent).toBe(knight.sockets.get("left-hand"));
+  expect(oathblade.parent).toBe(knight.sockets.get("back"));
+
+  knight.equipWeapon("oathblade");
+  expect(oathblade.parent).toBe(knight.sockets.get("right-hand"));
+  expect(bow.parent).toBe(knight.sockets.get("back"));
+  knight.dispose();
+});
+
 it("releases every owned geometry and material exactly once", () => {
   const knight = createVesperKnight();
   const spies = knight.root

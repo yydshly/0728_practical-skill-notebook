@@ -14,11 +14,13 @@ test.afterEach(() => {
   expect(errors, "browser console and page errors").toEqual([]);
 });
 
+const snapshot = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => window.__ashfallDiagnostics!.snapshot());
+
 test("fresh start renders a live arena and moves authoritative state", async ({
   page,
 }) => {
-
-  await page.goto("/?fixture=fresh");
+  await page.goto("/?fixture=fresh&reviewControls=1");
   await expect(page.getByRole("heading", { name: /灰烬竞技场/ })).toBeVisible();
   await expect(page.getByText("进入第一个琥珀训练环")).toBeVisible();
   await expect(page.getByText("105 / 105")).toBeVisible();
@@ -45,14 +47,15 @@ test("fresh start renders a live arena and moves authoritative state", async ({
   );
   expect(pixels.colored).toBeGreaterThan(pixels.samples * 0.01);
 
-  const before = await page.evaluate(() => window.__ashfallDiagnostics.snapshot());
+  const before = await snapshot(page);
   await page.keyboard.down("w");
   await page.waitForTimeout(350);
   await page.keyboard.up("w");
-  const after = await page.evaluate(() => window.__ashfallDiagnostics.snapshot());
+  const after = await snapshot(page);
   expect(after.player.z).toBeGreaterThan(before.player.z + 0.5);
   expect(after.cameraTarget.z).toBeGreaterThan(before.cameraTarget.z);
   expect(after.canvasCount).toBe(1);
+  expect(after.preserveDrawingBuffer).toBe(true);
   expect(after.localLights).toHaveLength(4);
   expect(
     after.localLights.every(
@@ -62,11 +65,21 @@ test("fresh start renders a live arena and moves authoritative state", async ({
   ).toBe(true);
 });
 
-test("touch baseline has reachable controls and no portrait overflow", async ({
+test("production defaults keep review diagnostics private and portrait controls reachable", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/?fixture=fresh");
+  expect(
+    await page.evaluate(() => window.__ashfallDiagnostics),
+  ).toBeUndefined();
+  expect(
+    await page.locator("[data-game-canvas]").evaluate(
+      (canvas: HTMLCanvasElement) =>
+        (canvas.getContext("webgl2") ?? canvas.getContext("webgl"))
+          ?.getContextAttributes()?.preserveDrawingBuffer,
+    ),
+  ).toBe(false);
 
   await expect(page.getByLabel("移动摇杆")).toBeVisible();
   for (const name of [
@@ -117,62 +130,68 @@ test("edge input and interruption paths never leave authoritative movement stuck
       configurable: true,
       value: () => (active ? [gamepad] : []),
     });
-    window.__setAshfallTestGamepad = (enabled: boolean) => {
+    window.__setAshfallTestGamepad = (
+      enabled: boolean,
+      verticalAxis = -1,
+    ) => {
       active = enabled;
+      gamepad.axes[1] = verticalAxis;
     };
   });
-  await page.goto("/?fixture=fresh");
+  await page.goto("/?fixture=fresh&reviewControls=1");
 
   await page.keyboard.down("Escape");
   await page.waitForTimeout(120);
-  expect(
-    (await page.evaluate(() => window.__ashfallDiagnostics.snapshot())).paused,
-  ).toBe(true);
+  expect((await snapshot(page)).paused).toBe(true);
   await page.waitForTimeout(450);
-  expect(
-    (await page.evaluate(() => window.__ashfallDiagnostics.snapshot())).paused,
-  ).toBe(true);
+  expect((await snapshot(page)).paused).toBe(true);
   await page.keyboard.up("Escape");
   await page.keyboard.press("Escape");
   await page.waitForTimeout(100);
-  expect(
-    (await page.evaluate(() => window.__ashfallDiagnostics.snapshot())).paused,
-  ).toBe(false);
+  expect((await snapshot(page)).paused).toBe(false);
 
   await page.keyboard.down("w");
   await page.waitForTimeout(120);
   await page.evaluate(() => window.dispatchEvent(new Event("blur")));
-  const afterBlur = await page.evaluate(() =>
-    window.__ashfallDiagnostics.snapshot(),
-  );
+  const afterBlur = await snapshot(page);
   await page.waitForTimeout(220);
-  const settledAfterBlur = await page.evaluate(() =>
-    window.__ashfallDiagnostics.snapshot(),
-  );
+  const settledAfterBlur = await snapshot(page);
   expect(settledAfterBlur.player.z - afterBlur.player.z).toBeLessThan(0.1);
   await page.keyboard.up("w");
 
-  await page.evaluate(() => window.__setAshfallTestGamepad(true));
-  const beforePad = await page.evaluate(() =>
-    window.__ashfallDiagnostics.snapshot(),
-  );
+  await page.evaluate(() => window.__setAshfallTestGamepad(true, -1));
+  const beforePad = await snapshot(page);
   await page.waitForTimeout(220);
-  const withPad = await page.evaluate(() =>
-    window.__ashfallDiagnostics.snapshot(),
-  );
+  const withPad = await snapshot(page);
   expect(withPad.player.z).toBeGreaterThan(beforePad.player.z + 0.4);
+
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  const blurredPad = await snapshot(page);
+  await page.waitForTimeout(220);
+  const afterPadBlur = await snapshot(page);
+  expect(afterPadBlur.player.z - blurredPad.player.z).toBeLessThan(0.1);
+
+  await page.evaluate(() => window.__setAshfallTestGamepad(true, 0));
+  await page.waitForTimeout(80);
+  await page.evaluate(() => window.__setAshfallTestGamepad(true, -1));
+  const rearmed = await snapshot(page);
+  await page.waitForTimeout(180);
+  const afterRearm = await snapshot(page);
+  expect(afterRearm.player.z).toBeGreaterThan(rearmed.player.z + 0.3);
+
+  await page.evaluate(() => window.__setAshfallTestGamepad(true, 0));
+  const centered = await snapshot(page);
+  await page.waitForTimeout(220);
+  const afterCenter = await snapshot(page);
+  expect(afterCenter.player.z - centered.player.z).toBeLessThan(0.1);
 
   await page.evaluate(() => {
     window.__setAshfallTestGamepad(false);
     window.dispatchEvent(new Event("gamepaddisconnected"));
   });
-  const disconnected = await page.evaluate(() =>
-    window.__ashfallDiagnostics.snapshot(),
-  );
+  const disconnected = await snapshot(page);
   await page.waitForTimeout(220);
-  const afterDisconnect = await page.evaluate(() =>
-    window.__ashfallDiagnostics.snapshot(),
-  );
+  const afterDisconnect = await snapshot(page);
   expect(afterDisconnect.player.z - disconnected.player.z).toBeLessThan(0.1);
 
   expect(
@@ -195,6 +214,117 @@ test("edge input and interruption paths never leave authoritative movement stuck
       };
     }),
   ).toEqual({ canvasPrevented: true, outsidePrevented: false });
+
+  await page.locator("[data-game-canvas]").dispatchEvent("pointerdown", {
+    pointerId: 42,
+    pointerType: "mouse",
+    button: 2,
+  });
+  expect((await snapshot(page)).input.guardHeld).toBe(true);
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerId: 42,
+        pointerType: "mouse",
+        button: 2,
+      }),
+    ),
+  );
+  expect((await snapshot(page)).input.guardHeld).toBe(false);
+
+  for (const [pointerId, interruption] of [
+    [43, "pointercancel"],
+    [44, "blur"],
+    [45, "visibilitychange"],
+  ] as const) {
+    await page.locator("[data-game-canvas]").dispatchEvent("pointerdown", {
+      pointerId,
+      pointerType: "mouse",
+      button: 2,
+    });
+    expect((await snapshot(page)).input.guardHeld).toBe(true);
+    await page.evaluate(
+      ({ id, kind }) => {
+        if (kind === "pointercancel") {
+          window.dispatchEvent(
+            new PointerEvent("pointercancel", {
+              pointerId: id,
+              pointerType: "mouse",
+              button: 2,
+            }),
+          );
+        } else if (kind === "blur") {
+          window.dispatchEvent(new Event("blur"));
+        } else {
+          Object.defineProperty(document, "visibilityState", {
+            configurable: true,
+            value: "hidden",
+          });
+          document.dispatchEvent(new Event("visibilitychange"));
+          Object.defineProperty(document, "visibilityState", {
+            configurable: true,
+            value: "visible",
+          });
+        }
+      },
+      { id: pointerId, kind: interruption },
+    );
+    expect((await snapshot(page)).input.guardHeld).toBe(false);
+  }
+});
+
+test("production camera path consumes occlusion, lock, and shake events", async ({
+  page,
+}) => {
+  await page.goto("/?fixture=fresh&reviewControls=1");
+  const initial = await snapshot(page);
+  expect(initial.camera.occlusionLimited).toBe(false);
+  expect(initial.camera.lockFraming).toBe(false);
+
+  await page.keyboard.down("w");
+  await expect
+    .poll(async () => (await snapshot(page)).camera.occlusionLimited)
+    .toBe(true);
+  await page.keyboard.up("w");
+  const occluded = await snapshot(page);
+  expect(occluded.camera.resolvedDistance).toBeLessThan(
+    occluded.camera.desiredDistance,
+  );
+
+  const unlockedTarget = occluded.camera.target;
+  await page.keyboard.press("q");
+  await expect
+    .poll(async () => (await snapshot(page)).lockTargetId)
+    .toBe("training-lock-target");
+  const locked = await snapshot(page);
+  expect(locked.camera.lockFraming).toBe(true);
+  expect(locked.camera.target).not.toEqual(unlockedTarget);
+
+  await page.keyboard.press("q");
+  await expect
+    .poll(async () => (await snapshot(page)).camera.lockFraming)
+    .toBe(false);
+
+  await page.evaluate(() =>
+    window.__ashfallDiagnostics!.triggerCameraShake(),
+  );
+  await expect
+    .poll(async () => (await snapshot(page)).camera.shakeAmplitude)
+    .toBeGreaterThan(0);
+});
+
+test("reduced motion suppresses the real review shake event", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/?fixture=fresh&reviewControls=1");
+  await page.evaluate(() =>
+    window.__ashfallDiagnostics!.triggerCameraShake(),
+  );
+  await page.waitForTimeout(80);
+  const state = await snapshot(page);
+  expect(state.camera.reducedMotion).toBe(true);
+  expect(state.camera.shakeAmplitude).toBe(0);
 });
 
 test("pagehide stops the frame loop and releases the runtime once", async ({
@@ -208,16 +338,16 @@ test("pagehide stops the frame loop and releases the runtime once", async ({
       nativeCancel(handle);
     };
   });
-  await page.goto("/?fixture=fresh");
+  await page.goto("/?fixture=fresh&reviewControls=1");
   await page.evaluate(() =>
     window.dispatchEvent(new PageTransitionEvent("pagehide")),
   );
 
   const firstDispose = await page.evaluate(() => ({
-      disposed: document.documentElement.dataset.runtimeDisposed,
-      diagnosticsPresent: "__ashfallDiagnostics" in window,
-      cancelledFrames: window.__ashfallCancelledFrames,
-    }));
+    disposed: document.documentElement.dataset.runtimeDisposed,
+    diagnosticsPresent: "__ashfallDiagnostics" in window,
+    cancelledFrames: window.__ashfallCancelledFrames,
+  }));
   expect(firstDispose).toMatchObject({
     disposed: "true",
     diagnosticsPresent: false,
@@ -233,23 +363,7 @@ test("pagehide stops the frame loop and releases the runtime once", async ({
 
 declare global {
   interface Window {
-    __ashfallDiagnostics: {
-      snapshot(): {
-        player: { x: number; z: number };
-        cameraTarget: { x: number; z: number };
-        canvasCount: number;
-        tick: number;
-        droppedSeconds: number;
-        paused: boolean;
-        localLights: Array<{
-          id: string;
-          emitterId: string;
-          attached: boolean;
-          emitterVisible: boolean;
-        }>;
-      };
-    };
-    __setAshfallTestGamepad(enabled: boolean): void;
+    __setAshfallTestGamepad(enabled: boolean, verticalAxis?: number): void;
     __ashfallCancelledFrames: number;
   }
 }

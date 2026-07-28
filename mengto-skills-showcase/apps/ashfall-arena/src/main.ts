@@ -3,35 +3,57 @@ import { PerspectiveCamera, Vector3 } from "three";
 import { arenaContent } from "./content/arena-content";
 import { createInputAdapter } from "./input/create-input-adapter";
 import { FixedStepAccumulator } from "./main-loop";
-import {
-  createArenaScene,
-  resolveArenaMovement,
-} from "./scene/create-arena-scene";
+import { createArenaScene } from "./scene/create-arena-scene";
 import { createGameCamera } from "./scene/create-game-camera";
+import { resolveCameraOcclusion } from "./scene/resolve-camera-occlusion";
 import { createEntitySynchronizer } from "./scene/sync-entities";
 import { createInitialState } from "./simulation/create-initial-state";
 import { stepGame } from "./simulation/step-game";
-import type { GameState } from "./simulation/types";
+import type {
+  GameEvent,
+  GameIntent,
+  GameState,
+} from "./simulation/types";
 import "./styles.css";
+
+interface AshfallSnapshot {
+  player: { x: number; z: number };
+  cameraTarget: { x: number; z: number };
+  canvasCount: number;
+  playerRootCount: number;
+  frameCount: number;
+  tick: number;
+  droppedSeconds: number;
+  paused: boolean;
+  preserveDrawingBuffer: boolean;
+  input: GameIntent;
+  lockTargetId: string | null;
+  camera: {
+    target: { x: number; y: number; z: number };
+    desiredDistance: number;
+    resolvedDistance: number;
+    occlusionLimited: boolean;
+    occluderId: string | null;
+    lockFraming: boolean;
+    reducedMotion: boolean;
+    shakeAmplitude: number;
+  };
+  localLights: Array<{
+    id: string;
+    emitterId: string;
+    attached: boolean;
+    emitterVisible: boolean;
+  }>;
+}
+
+interface AshfallReviewApi {
+  snapshot(): AshfallSnapshot;
+  triggerCameraShake(): void;
+}
 
 declare global {
   interface Window {
-    __ashfallDiagnostics: {
-      snapshot(): {
-        player: { x: number; z: number };
-        cameraTarget: { x: number; z: number };
-        canvasCount: number;
-        tick: number;
-        droppedSeconds: number;
-        paused: boolean;
-        localLights: Array<{
-          id: string;
-          emitterId: string;
-          attached: boolean;
-          emitterVisible: boolean;
-        }>;
-      };
-    };
+    __ashfallDiagnostics?: AshfallReviewApi;
   }
 }
 
@@ -40,6 +62,9 @@ if (!app) throw new Error("Ashfall Arena requires #app");
 
 const query = new URLSearchParams(window.location.search);
 const fixture = query.get("fixture") ?? "fresh";
+const reviewControls = query.get("reviewControls") === "1";
+const captureMode = query.get("capture") === "1";
+document.documentElement.dataset.reviewControls = reviewControls ? "on" : "off";
 if (fixture !== "fresh") {
   console.warn(`Unknown Task 2 fixture "${fixture}", using fresh.`);
 }
@@ -87,22 +112,93 @@ const stamina = app.querySelector<HTMLElement>("[data-stamina]")!;
 const healthMeter = app.querySelector<HTMLElement>("[data-health-meter]")!;
 const staminaMeter = app.querySelector<HTMLElement>("[data-stamina-meter]")!;
 
-const arena = createArenaScene(canvas);
+let state: GameState = createInitialState(7481);
+const arena = createArenaScene(canvas, {
+  preserveDrawingBuffer: reviewControls || captureMode,
+});
 const player = createVesperKnight();
 arena.scene.add(player.root);
 const synchronizer = createEntitySynchronizer(player);
 const camera = new PerspectiveCamera(42, 1, 0.1, 80);
-const cameraController = createGameCamera(camera);
+let cameraOccluderId: string | null = null;
+const cameraController = createGameCamera(camera, {
+  bounds: {
+    minX: arenaContent.arena.min.x,
+    maxX: arenaContent.arena.max.x,
+    minZ: arenaContent.arena.min.y,
+    maxZ: arenaContent.arena.max.y,
+  },
+  resolveDistance(target, desiredPosition) {
+    const result = resolveCameraOcclusion(
+      target,
+      desiredPosition,
+      arenaContent.arena.collisions,
+      state.encounter.gateOpen,
+    );
+    cameraOccluderId = result.occluderId;
+    return result.distance;
+  },
+});
 const input = createInputAdapter(canvas, stage);
 const accumulator = new FixedStepAccumulator(1 / 60, 5, 0.25);
 const playerTarget = new Vector3();
+const trainingLockTarget = new Vector3(
+  arenaContent.arena.trainingCenter.x,
+  0.8,
+  arenaContent.arena.trainingCenter.y,
+);
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 cameraController.setReducedMotion(reducedMotion.matches);
 
-let state: GameState = createInitialState(7481);
+type PresentationEvent = {
+  type: "camera-shake";
+  amplitude: number;
+  duration: number;
+};
+const presentationEvents: PresentationEvent[] = [];
 let previousTimestamp: number | null = null;
 let frameRequest = 0;
+let frameCount = 0;
 let disposed = false;
+
+const dispatchPresentationEvent = (event: PresentationEvent) => {
+  presentationEvents.push(event);
+};
+
+const routeGameplayEvents = (events: readonly GameEvent[]) => {
+  if (
+    events.some(
+      (event) => event.type === "damage" && event.targetId === state.player.id,
+    )
+  ) {
+    dispatchPresentationEvent({
+      type: "camera-shake",
+      amplitude: 0.16,
+      duration: 0.22,
+    });
+  }
+};
+
+const lockCandidates = () => {
+  const enemies = Object.values(state.enemies)
+    .filter(({ health }) => health > 0)
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map((enemy) => ({
+      id: enemy.id,
+      target: new Vector3(enemy.position.x, 0.8, enemy.position.y),
+    }));
+  return enemies.length > 0
+    ? enemies
+    : [{ id: "training-lock-target", target: trainingLockTarget }];
+};
+
+const currentLockTarget = () => {
+  if (state.player.lockTargetId === null) return null;
+  return (
+    lockCandidates().find(({ id }) => id === state.player.lockTargetId)
+      ?.target ?? null
+  );
+};
 
 const resize = () => {
   const rect = stage.getBoundingClientRect();
@@ -123,25 +219,10 @@ arena.setGateOpen(state.encounter.gateOpen);
 arena.render(camera);
 
 const step = (fixedDelta: number) => {
-  const previousPosition = state.player.position;
-  const result = stepGame(state, input.sample(), fixedDelta, arenaContent);
-  const candidate = result.state.player.position;
-  const resolved = resolveArenaMovement(
-    { x: previousPosition.x, z: previousPosition.y },
-    { x: candidate.x, z: candidate.y },
-    0.35,
-    result.state.encounter.gateOpen,
-  );
-  state =
-    resolved.x === candidate.x && resolved.z === candidate.y
-      ? result.state
-      : {
-          ...result.state,
-          player: {
-            ...result.state.player,
-            position: { x: resolved.x, y: resolved.z },
-          },
-        };
+  const intent = input.sample();
+  const result = stepGame(state, intent, fixedDelta, arenaContent);
+  state = result.state;
+  routeGameplayEvents(result.events);
 };
 
 const updateHud = () => {
@@ -152,18 +233,31 @@ const updateHud = () => {
   document.documentElement.dataset.paused = state.paused ? "true" : "false";
 };
 
+const consumePresentationEvents = () => {
+  for (const event of presentationEvents.splice(0)) {
+    if (event.type === "camera-shake") {
+      cameraController.shake(event.amplitude, event.duration);
+    }
+  }
+};
+
 const frame = (timestamp: number) => {
   if (disposed) return;
   const frameDelta =
-    previousTimestamp === null ? 0 : Math.max(0, (timestamp - previousTimestamp) / 1000);
+    previousTimestamp === null
+      ? 0
+      : Math.max(0, (timestamp - previousTimestamp) / 1000);
   previousTimestamp = timestamp;
   accumulator.advance(frameDelta, step);
   synchronizer.sync(state);
   arena.setGateOpen(state.encounter.gateOpen);
   playerTarget.set(state.player.position.x, 0, state.player.position.y);
+  cameraController.setLockTarget(currentLockTarget());
+  consumePresentationEvents();
   cameraController.update(playerTarget, frameDelta);
   updateHud();
   arena.render(camera);
+  frameCount += 1;
   frameRequest = requestAnimationFrame(frame);
 };
 frameRequest = requestAnimationFrame(frame);
@@ -179,26 +273,57 @@ const onReducedMotion = (event: MediaQueryListEvent) => {
 document.addEventListener("visibilitychange", onVisibility);
 reducedMotion.addEventListener("change", onReducedMotion);
 
-window.__ashfallDiagnostics = {
-  snapshot() {
-    const cameraDiagnostics = cameraController.getDiagnostics();
-    return {
-      player: {
-        x: state.player.position.x,
-        z: state.player.position.y,
-      },
-      cameraTarget: {
-        x: cameraDiagnostics.target.x,
-        z: cameraDiagnostics.target.z,
-      },
-      canvasCount: document.querySelectorAll("[data-game-canvas]").length,
-      tick: state.tick,
-      droppedSeconds: accumulator.getDiagnostics().droppedSeconds,
-      paused: state.paused,
-      localLights: arena.getDiagnostics().localLights,
-    };
-  },
-};
+if (reviewControls) {
+  window.__ashfallDiagnostics = {
+    snapshot() {
+      const cameraDiagnostics = cameraController.getDiagnostics();
+      const arenaDiagnostics = arena.getDiagnostics();
+      return {
+        player: {
+          x: state.player.position.x,
+          z: state.player.position.y,
+        },
+        cameraTarget: {
+          x: cameraDiagnostics.target.x,
+          z: cameraDiagnostics.target.z,
+        },
+        canvasCount: document.querySelectorAll("[data-game-canvas]").length,
+        playerRootCount: arena.scene.children.filter(
+          ({ name }) => name === "vesper-knight",
+        ).length,
+        frameCount,
+        tick: state.tick,
+        droppedSeconds: accumulator.getDiagnostics().droppedSeconds,
+        paused: state.paused,
+        preserveDrawingBuffer: arenaDiagnostics.preserveDrawingBuffer,
+        input: input.getDiagnostics(),
+        lockTargetId: state.player.lockTargetId,
+        camera: {
+          target: {
+            x: cameraDiagnostics.target.x,
+            y: cameraDiagnostics.target.y,
+            z: cameraDiagnostics.target.z,
+          },
+          desiredDistance: cameraDiagnostics.desiredDistance,
+          resolvedDistance: cameraDiagnostics.resolvedDistance,
+          occlusionLimited: cameraDiagnostics.occlusionLimited,
+          occluderId: cameraOccluderId,
+          lockFraming: cameraDiagnostics.lockFraming,
+          reducedMotion: cameraDiagnostics.reducedMotion,
+          shakeAmplitude: cameraDiagnostics.shakeAmplitude,
+        },
+        localLights: arenaDiagnostics.localLights,
+      };
+    },
+    triggerCameraShake() {
+      dispatchPresentationEvent({
+        type: "camera-shake",
+        amplitude: 0.2,
+        duration: 0.45,
+      });
+    },
+  };
+}
 
 const dispose = () => {
   if (disposed) return;
@@ -212,7 +337,7 @@ const dispose = () => {
   cameraController.dispose();
   player.dispose();
   arena.dispose();
-  delete (window as Partial<Window>).__ashfallDiagnostics;
+  delete window.__ashfallDiagnostics;
   document.documentElement.dataset.runtimeDisposed = "true";
 };
 window.addEventListener("pagehide", dispose, { once: true });

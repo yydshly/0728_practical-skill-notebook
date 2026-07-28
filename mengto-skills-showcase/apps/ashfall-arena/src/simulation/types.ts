@@ -5,6 +5,23 @@ export interface Vec2 {
   y: number;
 }
 
+export type ArenaCollisionKind =
+  | "perimeter"
+  | "interior"
+  | "portal-wall"
+  | "gate";
+
+export interface ArenaCollisionData {
+  id: string;
+  x: number;
+  y: 0;
+  z: number;
+  halfWidth: number;
+  halfDepth: number;
+  height: number;
+  kind: ArenaCollisionKind;
+}
+
 export type GameStatus = "playing" | "upgrade" | "defeated" | "complete";
 export type EnemyKind =
   | "glass-crawler"
@@ -50,6 +67,7 @@ export interface GameState {
     souls: number;
     powerMultiplier: 1 | 1.2;
     upgradeId: "vitality" | "power" | null;
+    lockTargetId: string | null;
   };
   enemies: Record<
     string,
@@ -93,9 +111,11 @@ export interface GameContent {
     waveCenter: Vec2;
     eliteCenter: Vec2;
     bossCenter: Vec2;
+    collisions: readonly ArenaCollisionData[];
   };
   playerMovement: {
     walkSpeed: number;
+    actorRadius: number;
     dodge: {
       speed: number;
       duration: number;

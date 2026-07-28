@@ -27,6 +27,7 @@ export function createInitialState(seed: number): GameState {
       souls: 0,
       powerMultiplier: 1,
       upgradeId: null,
+      lockTargetId: null,
     },
     enemies: {},
     encounter: {

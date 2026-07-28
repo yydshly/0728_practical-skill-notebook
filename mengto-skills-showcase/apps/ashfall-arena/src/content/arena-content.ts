@@ -1,4 +1,5 @@
 import type { GameContent } from "../simulation/types";
+import { ARENA_LEVEL } from "./arena-level";
 
 export const arenaContent: GameContent = {
   arena: {
@@ -9,9 +10,11 @@ export const arenaContent: GameContent = {
     waveCenter: { x: 0, y: 0 },
     eliteCenter: { x: 0, y: 6 },
     bossCenter: { x: 0, y: 10 },
+    collisions: ARENA_LEVEL.collisions,
   },
   playerMovement: {
     walkSpeed: 4.2,
+    actorRadius: 0.35,
     dodge: {
       speed: 9,
       duration: 0.24,

@@ -23,6 +23,9 @@ export interface GameCameraDiagnostics {
   target: Vector3;
   position: Vector3;
   distance: number;
+  desiredDistance: number;
+  resolvedDistance: number;
+  occlusionLimited: boolean;
   lockFraming: boolean;
   reducedMotion: boolean;
   shakeAmplitude: number;
@@ -67,6 +70,8 @@ export function createGameCamera(
   let shakeAmplitude = 0;
   let shakeDuration = 0;
   let shakeElapsed = 0;
+  let desiredDistance = positionOffset.length();
+  let resolvedDistance = desiredDistance;
   let disposed = false;
 
   const assertLive = () => {
@@ -95,18 +100,20 @@ export function createGameCamera(
     desiredPosition
       .copy(desiredTarget)
       .addScaledVector(positionOffset, distanceScale);
+    desiredDistance = desiredPosition.distanceTo(desiredTarget);
     const requestedDistance =
       options.resolveDistance?.(desiredTarget, desiredPosition) ??
-      desiredPosition.distanceTo(desiredTarget);
+      desiredDistance;
     const safeDistance = Math.max(
       minimumDistance,
       Math.min(
-        desiredPosition.distanceTo(desiredTarget),
+        desiredDistance,
         Number.isFinite(requestedDistance)
           ? requestedDistance
-          : desiredPosition.distanceTo(desiredTarget),
+          : desiredDistance,
       ),
     );
+    resolvedDistance = safeDistance;
     workingDirection
       .copy(desiredPosition)
       .sub(desiredTarget)
@@ -193,6 +200,9 @@ export function createGameCamera(
         target: currentTarget.clone(),
         position: camera.position.clone(),
         distance: camera.position.distanceTo(currentTarget),
+        desiredDistance,
+        resolvedDistance,
+        occlusionLimited: resolvedDistance < desiredDistance - 1e-5,
         lockFraming: lockTarget !== null,
         reducedMotion,
         shakeAmplitude,

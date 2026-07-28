@@ -158,18 +158,35 @@ export function createVesperKnight(): VesperKnight {
   ]);
 
   let disposed = false;
-  let equipped: VesperKnightWeapon = "oathblade";
+  let equipped: VesperKnightWeapon | null = null;
 
   const equipWeapon = (weapon: VesperKnightWeapon) => {
     if (disposed) throw new Error("Vesper Knight is disposed");
+    if (equipped === weapon) return;
     equipped = weapon;
-    oathblade.visible = weapon === "oathblade";
+    if (weapon === "oathblade") {
+      rightHand.add(oathblade);
+      oathblade.position.set(0, 0, 0);
+      oathblade.rotation.set(0, 0, Math.PI);
+      back.add(bow);
+      bow.position.set(0, 0, 0);
+      bow.rotation.set(0, 0, 0);
+    } else {
+      leftHand.add(bow);
+      bow.position.set(0, -0.08, 0.02);
+      bow.rotation.set(0, 0, 0);
+      back.add(oathblade);
+      oathblade.position.set(-0.14, 0.08, 0.02);
+      oathblade.rotation.set(0, 0, Math.PI);
+    }
+    oathblade.visible = true;
     bow.visible = true;
+    oathblade.userData.equipped = weapon === "oathblade";
     bow.userData.equipped = weapon === "ember-bow";
     root.userData.equippedWeapon = weapon;
   };
 
-  equipWeapon(equipped);
+  equipWeapon("oathblade");
 
   return {
     root,

@@ -5,11 +5,9 @@ import type {
   StepGameResult,
   Vec2,
 } from "./types";
+import { resolveArenaMovement } from "./resolve-movement";
 
 const FIXED_DELTA = 1 / 60;
-
-const clamp = (value: number, min: number, max: number): number =>
-  Math.max(min, Math.min(max, value));
 
 export function isDodgeInvulnerable(
   actor: Pick<GameState["player"], "action" | "actionTime">,
@@ -49,19 +47,18 @@ function movedPosition(
   direction: Vec2,
   distance: number,
   content: GameContent,
+  gateOpen: boolean,
 ): Vec2 {
-  return {
-    x: clamp(
-      position.x + direction.x * distance,
-      content.arena.min.x,
-      content.arena.max.x,
-    ),
-    y: clamp(
-      position.y + direction.y * distance,
-      content.arena.min.y,
-      content.arena.max.y,
-    ),
-  };
+  return resolveArenaMovement(
+    position,
+    {
+      x: position.x + direction.x * distance,
+      y: position.y + direction.y * distance,
+    },
+    content.playerMovement.actorRadius,
+    gateOpen,
+    content.arena,
+  );
 }
 
 function stepDodge(
@@ -76,6 +73,7 @@ function stepDodge(
     directionFromFacing(state.player.facingRadians),
     dodge.speed * travelTime,
     content,
+    state.encounter.gateOpen,
   );
   const elapsed = state.player.actionTime + travelTime;
   const finished = elapsed >= dodge.duration;
@@ -112,6 +110,7 @@ function stepPlayer(
         directionFromFacing(facingRadians),
         dodge.speed * FIXED_DELTA,
         content,
+        state.encounter.gateOpen,
       ),
       facingRadians,
       stamina: state.player.stamina - dodge.staminaCost,
@@ -144,6 +143,7 @@ function stepPlayer(
           direction,
           content.playerMovement.walkSpeed * FIXED_DELTA,
           content,
+          state.encounter.gateOpen,
         )
       : state.player.position,
     facingRadians,
@@ -151,6 +151,30 @@ function stepPlayer(
     actionTime,
   };
 }
+
+const availableLockTargets = (state: GameState) => {
+  const enemyIds = Object.values(state.enemies)
+    .filter(({ health }) => health > 0)
+    .map(({ id }) => id)
+    .sort();
+  return enemyIds.length > 0 ? enemyIds : ["training-lock-target"];
+};
+
+const nextLockTarget = (
+  state: GameState,
+  lockPressed: boolean,
+): string | null => {
+  const candidates = availableLockTargets(state);
+  const current = candidates.includes(state.player.lockTargetId ?? "")
+    ? state.player.lockTargetId
+    : null;
+  if (!lockPressed) return current;
+  if (current === null) return candidates[0]!;
+  const index = candidates.indexOf(current);
+  return index >= 0 && index < candidates.length - 1
+    ? candidates[index + 1]!
+    : null;
+};
 
 export function stepGame(
   state: GameState,
@@ -186,7 +210,12 @@ export function stepGame(
     };
   }
 
-  const player = stepPlayer(state, intent, content);
+  const steppedPlayer = stepPlayer(state, intent, content);
+  const lockTargetId = nextLockTarget(state, intent.lockPressed);
+  const player =
+    steppedPlayer.lockTargetId === lockTargetId
+      ? steppedPlayer
+      : { ...steppedPlayer, lockTargetId };
 
   return {
     state: {

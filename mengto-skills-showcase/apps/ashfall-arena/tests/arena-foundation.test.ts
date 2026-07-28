@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   ARENA_LEVEL,
   getArenaDiagnostics,
-  resolveArenaMovement,
-} from "../src/scene/create-arena-scene";
+} from "../src/content/arena-level";
+import { arenaContent } from "../src/content/arena-content";
+import { resolveArenaMovement } from "../src/simulation/resolve-movement";
 import { createGameCamera } from "../src/scene/create-game-camera";
+import { resolveCameraOcclusion } from "../src/scene/resolve-camera-occlusion";
 import {
+  GamepadInputTracker,
   InputAccumulator,
   mapStandardGamepad,
 } from "../src/input/create-input-adapter";
@@ -50,20 +53,22 @@ describe("authored flat arena contract", () => {
 
   it("uses explicit collision primitives and lets encounter state open the boss gate", () => {
     const blocked = resolveArenaMovement(
-      { x: 0, z: 7.4 },
-      { x: 0, z: 8.6 },
+      { x: 0, y: 7.4 },
+      { x: 0, y: 8.6 },
       0.35,
       false,
+      arenaContent.arena,
     );
     const opened = resolveArenaMovement(
-      { x: 0, z: 7.4 },
-      { x: 0, z: 8.6 },
+      { x: 0, y: 7.4 },
+      { x: 0, y: 8.6 },
       0.35,
       true,
+      arenaContent.arena,
     );
 
-    expect(blocked.z).toBeLessThan(8);
-    expect(opened).toEqual({ x: 0, z: 8.6 });
+    expect(blocked.y).toBeLessThan(8);
+    expect(opened).toEqual({ x: 0, y: 8.6 });
   });
 
   it("associates every local light with a visible emitter", () => {
@@ -81,6 +86,36 @@ describe("authored flat arena contract", () => {
 });
 
 describe("game camera", () => {
+  it("measures real occlusion against the same collision data used by simulation", () => {
+    const clearTarget = new Vector3(0, 1.05, -8.15);
+    const clearDesired = new Vector3(7.8, 10.45, 1.65);
+    const clear = resolveCameraOcclusion(
+      clearTarget,
+      clearDesired,
+      arenaContent.arena.collisions,
+      false,
+    );
+    expect(clear.occluderId).toBeNull();
+    expect(clear.distance).toBeCloseTo(
+      clearTarget.distanceTo(clearDesired),
+      10,
+    );
+
+    const blockedTarget = new Vector3(0, 1.05, -4.15);
+    const blockedDesired = new Vector3(7.8, 10.45, 5.65);
+    const blocked = resolveCameraOcclusion(
+      blockedTarget,
+      blockedDesired,
+      arenaContent.arena.collisions,
+      false,
+    );
+    expect(blocked.occluderId).toBe("collision-east-brazier-bank");
+    expect(blocked.distance).toBeLessThan(
+      blockedTarget.distanceTo(blockedDesired),
+    );
+    expect(blocked.distance).toBeGreaterThan(5.5);
+  });
+
   it("follows with independent smoothing, world bounds, and a safe obstacle distance", () => {
     const camera = new PerspectiveCamera(42, 16 / 9, 0.1, 100);
     const controller = createGameCamera(camera, {
@@ -179,6 +214,34 @@ describe("normalized device input", () => {
       healPressed: true,
       switchWeaponPressed: true,
       pausePressed: true,
+    });
+  });
+
+  it("writes centered axes every frame and keeps gamepad edges single-shot", () => {
+    const tracker = new GamepadInputTracker();
+    const buttons = Array.from({ length: 16 }, (_, index) => ({
+      pressed: index === 0,
+      value: index === 0 ? 1 : 0,
+    }));
+    const moving = tracker.update({ axes: [0, -1], buttons });
+    const centered = tracker.update({ axes: [0, 0], buttons });
+
+    expect(moving).toMatchObject({ moveX: 0, moveY: 1, attackPressed: true });
+    expect(centered).toMatchObject({
+      moveX: 0,
+      moveY: 0,
+      attackPressed: false,
+    });
+    expect(tracker.disconnect()).toEqual({
+      moveX: 0,
+      moveY: 0,
+      attackPressed: false,
+      guardHeld: false,
+      dodgePressed: false,
+      lockPressed: false,
+      healPressed: false,
+      switchWeaponPressed: false,
+      pausePressed: false,
     });
   });
 });

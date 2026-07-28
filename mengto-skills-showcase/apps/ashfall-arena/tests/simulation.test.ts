@@ -84,22 +84,26 @@ describe("fixed-step simulation", () => {
     ).toThrow("fixedDelta must equal 1 / 60");
   });
 
-  it("moves at 4.2 units per second and clamps to the authored bounds", () => {
+  it("moves at 4.2 units per second and keeps the actor radius inside the authored bounds", () => {
     const initial = createInitialState(1);
     const afterOneSecond = runTicks(
       initial,
       new Map(Array.from({ length: 60 }, (_, tick) => [tick, { moveY: 1 }])),
       60,
     ).state;
+    const gateOpen = {
+      ...initial,
+      encounter: { ...initial.encounter, gateOpen: true },
+    };
     const atNorthWall = runTicks(
-      initial,
+      gateOpen,
       new Map(Array.from({ length: 600 }, (_, tick) => [tick, { moveY: 1 }])),
       600,
     ).state;
 
     expect(afterOneSecond.player.position.x).toBe(0);
     expect(afterOneSecond.player.position.y).toBeCloseTo(-4.8, 10);
-    expect(atNorthWall.player.position).toEqual({ x: 0, y: 12 });
+    expect(atNorthWall.player.position).toEqual({ x: 0, y: 11.65 });
   });
 
   it("normalizes diagonal input so it cannot move faster", () => {

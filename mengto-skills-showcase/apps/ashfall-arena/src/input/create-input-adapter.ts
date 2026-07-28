@@ -46,7 +46,13 @@ export class InputAccumulator {
   }
 
   sample(): GameIntent {
-    const snapshot: GameIntent = {
+    const snapshot = this.peek();
+    this.edges.clear();
+    return snapshot;
+  }
+
+  peek(): GameIntent {
+    return {
       moveX: this.moveX,
       moveY: this.moveY,
       attackPressed: this.edges.has("attackPressed"),
@@ -57,8 +63,6 @@ export class InputAccumulator {
       switchWeaponPressed: this.edges.has("switchWeaponPressed"),
       pausePressed: this.edges.has("pausePressed"),
     };
-    this.edges.clear();
-    return snapshot;
   }
 
   clear(): void {
@@ -102,9 +106,36 @@ export function mapStandardGamepad(gamepad: GamepadLike): GameIntent {
   };
 }
 
+export class GamepadInputTracker {
+  private previous = { ...EMPTY_INTENT };
+
+  update(gamepad: GamepadLike): GameIntent {
+    const mapped = mapStandardGamepad(gamepad);
+    const next = {
+      ...mapped,
+      attackPressed:
+        mapped.attackPressed && !this.previous.attackPressed,
+      dodgePressed: mapped.dodgePressed && !this.previous.dodgePressed,
+      lockPressed: mapped.lockPressed && !this.previous.lockPressed,
+      healPressed: mapped.healPressed && !this.previous.healPressed,
+      switchWeaponPressed:
+        mapped.switchWeaponPressed && !this.previous.switchWeaponPressed,
+      pausePressed: mapped.pausePressed && !this.previous.pausePressed,
+    };
+    this.previous = mapped;
+    return next;
+  }
+
+  disconnect(): GameIntent {
+    this.previous = { ...EMPTY_INTENT };
+    return { ...EMPTY_INTENT };
+  }
+}
+
 export interface InputAdapter {
   sample(): GameIntent;
   getDeviceMode(): InputDeviceMode;
+  getDiagnostics(): GameIntent;
   clear(): void;
   dispose(): void;
 }
@@ -119,8 +150,10 @@ export function createInputAdapter(
   let deviceMode: InputDeviceMode = "keyboard-mouse";
   let touchMove = { x: 0, y: 0 };
   let activeStickPointer: number | null = null;
+  let guardPointerId: number | null = null;
   let sawGamepad = false;
-  let previousGamepad = { ...EMPTY_INTENT };
+  let gamepadNeedsNeutral = false;
+  const gamepadTracker = new GamepadInputTracker();
 
   const setMode = (mode: InputDeviceMode) => {
     deviceMode = mode;
@@ -162,19 +195,26 @@ export function createInputAdapter(
     if (event.pointerType === "touch") return;
     setMode("keyboard-mouse");
     if (event.button === 0) accumulator.press("attackPressed");
-    if (event.button === 2) accumulator.setHeld("guardHeld", true);
+    if (event.button === 2) {
+      guardPointerId = event.pointerId;
+      accumulator.setHeld("guardHeld", true);
+    }
   };
-  const onCanvasPointerUp = (event: PointerEvent) => {
-    if (event.button === 2) accumulator.setHeld("guardHeld", false);
+  const releasePointerGuard = (event: PointerEvent) => {
+    if (guardPointerId !== event.pointerId) return;
+    guardPointerId = null;
+    accumulator.setHeld("guardHeld", false);
   };
   const preventCanvasContextMenu = (event: MouseEvent) => {
     event.preventDefault();
   };
   const clear = () => {
+    if (sawGamepad) gamepadNeedsNeutral = true;
     keys.clear();
     activeStickPointer = null;
+    guardPointerId = null;
     touchMove = { x: 0, y: 0 };
-    previousGamepad = { ...EMPTY_INTENT };
+    gamepadTracker.disconnect();
     accumulator.clear();
   };
   const onVisibility = () => {
@@ -185,6 +225,7 @@ export function createInputAdapter(
   };
   const onGamepadDisconnected = () => {
     sawGamepad = false;
+    gamepadNeedsNeutral = false;
     clear();
   };
 
@@ -195,9 +236,10 @@ export function createInputAdapter(
   window.addEventListener("gamepaddisconnected", onGamepadDisconnected);
   document.addEventListener("visibilitychange", onVisibility);
   canvas.addEventListener("pointerdown", onCanvasPointerDown);
-  canvas.addEventListener("pointerup", onCanvasPointerUp);
   canvas.addEventListener("pointercancel", clear);
   canvas.addEventListener("contextmenu", preventCanvasContextMenu);
+  window.addEventListener("pointerup", releasePointerGuard);
+  window.addEventListener("pointercancel", releasePointerGuard);
 
   const controls = document.createElement("section");
   controls.className = "touch-controls";
@@ -300,25 +342,36 @@ export function createInputAdapter(
     const pad = [...pads].find((candidate) => candidate?.mapping === "standard");
     if (!pad) {
       if (sawGamepad) {
-        previousGamepad = { ...EMPTY_INTENT };
+        gamepadTracker.disconnect();
+        if (deviceMode === "gamepad") accumulator.setMove(0, 0);
         accumulator.setHeld("guardHeld", false);
+        sawGamepad = false;
+        gamepadNeedsNeutral = false;
       }
       return;
     }
     sawGamepad = true;
-    const mapped = mapStandardGamepad(pad);
+    const raw = mapStandardGamepad(pad);
+    const mapped = gamepadTracker.update(pad);
     const meaningful =
-      Math.abs(mapped.moveX) > 0 ||
-      Math.abs(mapped.moveY) > 0 ||
-      mapped.guardHeld ||
-      mapped.attackPressed ||
-      mapped.dodgePressed ||
-      mapped.lockPressed ||
-      mapped.healPressed ||
-      mapped.switchWeaponPressed ||
-      mapped.pausePressed;
+      Math.abs(raw.moveX) > 0 ||
+      Math.abs(raw.moveY) > 0 ||
+      raw.guardHeld ||
+      raw.attackPressed ||
+      raw.dodgePressed ||
+      raw.lockPressed ||
+      raw.healPressed ||
+      raw.switchWeaponPressed ||
+      raw.pausePressed;
+    if (gamepadNeedsNeutral) {
+      accumulator.setMove(0, 0);
+      accumulator.setHeld("guardHeld", false);
+      gamepadTracker.disconnect();
+      if (!meaningful) gamepadNeedsNeutral = false;
+      return;
+    }
     if (meaningful) setMode("gamepad");
-    if (Math.abs(mapped.moveX) > 0 || Math.abs(mapped.moveY) > 0) {
+    if (deviceMode === "gamepad") {
       accumulator.setMove(mapped.moveX, mapped.moveY);
     }
     accumulator.setHeld("guardHeld", mapped.guardHeld);
@@ -331,9 +384,8 @@ export function createInputAdapter(
       "pausePressed",
     ];
     for (const edge of edges) {
-      if (mapped[edge] && !previousGamepad[edge]) accumulator.press(edge);
+      if (mapped[edge]) accumulator.press(edge);
     }
-    previousGamepad = mapped;
   };
 
   return {
@@ -343,6 +395,7 @@ export function createInputAdapter(
       return accumulator.sample();
     },
     getDeviceMode: () => deviceMode,
+    getDiagnostics: () => accumulator.peek(),
     clear,
     dispose() {
       if (disposed) return;
@@ -355,9 +408,10 @@ export function createInputAdapter(
       window.removeEventListener("gamepaddisconnected", onGamepadDisconnected);
       document.removeEventListener("visibilitychange", onVisibility);
       canvas.removeEventListener("pointerdown", onCanvasPointerDown);
-      canvas.removeEventListener("pointerup", onCanvasPointerUp);
       canvas.removeEventListener("pointercancel", clear);
       canvas.removeEventListener("contextmenu", preventCanvasContextMenu);
+      window.removeEventListener("pointerup", releasePointerGuard);
+      window.removeEventListener("pointercancel", releasePointerGuard);
       stick.removeEventListener("pointerdown", onStickDown);
       stick.removeEventListener("pointermove", onStickMove);
       stick.removeEventListener("pointerup", releaseStick);
