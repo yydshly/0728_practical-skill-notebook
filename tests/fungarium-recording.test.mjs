@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   RECORDINGS,
   UPSTREAM_COMMIT,
+  assertNoTrackedUpstreamFiles,
   assertGifFile,
   commandInvocation,
   resolveChromium,
@@ -39,4 +40,14 @@ test("npm uses a shell invocation on Windows", () => {
 test("resolveChromium accepts Playwright's CommonJS default export shape", () => {
   const chromium = { launch: () => undefined };
   assert.equal(resolveChromium({ default: { chromium } }), chromium);
+});
+
+test("tracked upstream source paths are rejected while GIF artifacts remain allowed", () => {
+  assert.throws(
+    () => assertNoTrackedUpstreamFiles(["artifacts/fungarium-upstream-run/src/main.jsx"]),
+    /upstream checkout/,
+  );
+  assert.doesNotThrow(() => {
+    assertNoTrackedUpstreamFiles(["docs/demos/05-fungarium-original.gif"]);
+  });
 });
