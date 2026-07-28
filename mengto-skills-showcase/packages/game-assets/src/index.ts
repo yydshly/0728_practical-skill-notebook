@@ -22,6 +22,27 @@ export type {
   VesperKnightSocketName,
   VesperKnightWeapon,
 } from "./player/create-vesper-knight";
+export {
+  MECH_VISUAL_CATALOG,
+  defaultMechFinish,
+} from "./mechs/catalog";
+export { createMechAssembly } from "./mechs/create-mech-assembly";
+export type {
+  MechArmorId,
+  MechAssembly,
+  MechChassisId,
+  MechEnvironment,
+  MechEnvironmentRequest,
+  MechFinish,
+  MechFinishUpdate,
+  MechHeadId,
+  MechLeftWeaponId,
+  MechModuleSlot,
+  MechPartSlot,
+  MechRearModuleId,
+  MechRightWeaponId,
+  MechVisualConfiguration,
+} from "./mechs/types";
 
 export class AssetRegistry {
   constructor(private readonly assets: readonly AssetManifest[]) {}
