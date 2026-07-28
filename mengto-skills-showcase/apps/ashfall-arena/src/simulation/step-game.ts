@@ -8,6 +8,12 @@ import type {
 import { stepCombat } from "./combat";
 import { stepEnemyAi } from "./enemy-ai";
 import { stepEncounter } from "./encounters";
+import {
+  collectNearbyDrops,
+  createDropsForDefeats,
+  settlePendingDrops,
+  useHealingCharge,
+} from "./inventory";
 import { resolveArenaMovement } from "./resolve-movement";
 
 const FIXED_DELTA = 1 / 60;
@@ -234,31 +240,56 @@ export function stepGame(
     };
   }
 
-  const steppedPlayer = stepPlayer(state, intent, content);
+  const progressionState =
+    intent.healPressed &&
+      !intent.attackPressed &&
+      !intent.dodgePressed &&
+      !intent.guardHeld
+      ? useHealingCharge(state)
+      : state;
+  const steppedPlayer = stepPlayer(progressionState, intent, content);
   const movedState =
-    steppedPlayer === state.player
-      ? state
+    steppedPlayer === progressionState.player
+      ? progressionState
       : {
-          ...state,
+          ...progressionState,
           player: steppedPlayer,
         };
   const aiState = stepEnemyAi(movedState, content);
   const combat = stepCombat(aiState, intent, [], content);
-  const encounter = stepEncounter(combat.state, combat.events);
+  const rewards = createDropsForDefeats(
+    combat.state,
+    combat.events,
+  );
+  const collected = collectNearbyDrops(rewards.state);
+  const encounter = stepEncounter(collected, combat.events);
+  const crossedRewardBoundary = encounter.events.some(
+    (event) =>
+      event.type === "upgrade-offered" ||
+      event.type === "encounter-complete" ||
+      (event.type === "encounter-phase" && event.phase === "boss"),
+  );
+  const progressedEncounterState = crossedRewardBoundary
+    ? settlePendingDrops(encounter.state)
+    : encounter.state;
   const lockTargetId = canHandleLockIntent(state)
-    ? nextLockTarget(encounter.state, intent.lockPressed)
-    : encounter.state.player.lockTargetId;
+    ? nextLockTarget(progressedEncounterState, intent.lockPressed)
+    : progressedEncounterState.player.lockTargetId;
   const player =
-    encounter.state.player.lockTargetId === lockTargetId
-      ? encounter.state.player
-      : { ...encounter.state.player, lockTargetId };
+    progressedEncounterState.player.lockTargetId === lockTargetId
+      ? progressedEncounterState.player
+      : { ...progressedEncounterState.player, lockTargetId };
 
   return {
     state: {
-      ...encounter.state,
+      ...progressedEncounterState,
       tick: state.tick + 1,
       player,
     },
-    events: [...combat.events, ...encounter.events],
+    events: [
+      ...combat.events,
+      ...rewards.events,
+      ...encounter.events,
+    ],
   };
 }

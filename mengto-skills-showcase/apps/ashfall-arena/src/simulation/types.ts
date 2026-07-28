@@ -71,6 +71,11 @@ export type EnemyRewardId =
   | "warden-reward"
   | "elite-reward"
   | "sovereign-reward";
+export type DropDefinitionId =
+  | "glass-crawler-souls"
+  | "ash-warden-souls"
+  | "bell-elite-souls"
+  | "bell-elite-healing";
 export type EncounterPhase =
   | "training"
   | "wave-one"
@@ -222,10 +227,11 @@ export interface GameState {
   };
   drops: Array<{
     id: string;
+    definitionId: DropDefinitionId;
     position: Vec2;
-    kind: "souls" | "healing";
-    amount: number;
   }>;
+  rewardedEnemyIds: string[];
+  claimedDropIds: string[];
   combat: CombatState;
 }
 

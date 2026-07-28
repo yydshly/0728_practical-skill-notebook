@@ -54,6 +54,8 @@ export function createInitialState(seed: number): GameState {
       supportSlotOwner: null,
     },
     drops: [],
+    rewardedEnemyIds: [],
+    claimedDropIds: [],
     combat: {
       attackSequence: 0,
       activeAttack: null,

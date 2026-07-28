@@ -387,3 +387,115 @@ html[data-paused="true"] .arena-status::after {
 .enemy-telegraph-banner[hidden] {
   display: none;
 }
+
+.save-notice {
+  position: absolute;
+  top: 4.2rem;
+  left: 50%;
+  z-index: 8;
+  max-width: min(78vw, 34rem);
+  margin: 0;
+  padding: 0.55rem 0.85rem;
+  transform: translateX(-50%);
+  border: 1px solid rgb(238 173 98 / 42%);
+  border-radius: 0.65rem;
+  background: rgb(27 20 22 / 92%);
+  color: #ffe0ad;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.new-run-button {
+  position: absolute;
+  right: 1.25rem;
+  top: 1.25rem;
+  z-index: 8;
+  min-height: 44px;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid rgb(255 218 167 / 28%);
+  border-radius: 999px;
+  background: rgb(28 22 26 / 82%);
+  color: #f2dfcf;
+}
+
+.progression-dialog {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 20;
+  width: min(92%, 31rem);
+  padding: 1.35rem;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgb(240 174 102 / 55%);
+  border-radius: 1rem;
+  background:
+    linear-gradient(150deg, rgb(51 34 31 / 98%), rgb(19 17 21 / 98%));
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 55%);
+  color: #f4e6da;
+}
+
+.progression-dialog[hidden],
+.save-notice[hidden] {
+  display: none;
+}
+
+.progression-dialog h2 {
+  margin: 0.3rem 0 0.55rem;
+  font: 500 1.65rem/1.15 Georgia, "Songti SC", serif;
+}
+
+.progression-dialog > p:not(.progression-dialog__kicker) {
+  margin: 0 0 1rem;
+  color: #cdbdb1;
+  line-height: 1.55;
+}
+
+.progression-dialog__kicker {
+  margin: 0;
+  color: #f0ae66;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.progression-dialog__actions {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.progression-dialog button {
+  min-height: 48px;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgb(255 218 167 / 30%);
+  border-radius: 0.7rem;
+  background: rgb(116 65 45 / 72%);
+  color: #fff4e5;
+  font: inherit;
+  text-align: left;
+}
+
+.progression-dialog button:focus-visible,
+.new-run-button:focus-visible {
+  outline: 3px solid #ffd28c;
+  outline-offset: 3px;
+}
+
+@media (max-width: 620px) {
+  .new-run-button {
+    top: 10rem;
+    right: 0.75rem;
+  }
+
+  .save-notice {
+    top: 12.9rem;
+  }
+
+  .progression-dialog {
+    width: calc(100% - 1.5rem);
+    padding: 1rem;
+  }
+
+  .progression-dialog button {
+    min-height: 52px;
+  }
+}

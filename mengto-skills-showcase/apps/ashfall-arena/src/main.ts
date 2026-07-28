@@ -6,6 +6,12 @@ import { PerspectiveCamera, Vector3 } from "three";
 import { arenaContent } from "./content/arena-content";
 import { createInputAdapter } from "./input/create-input-adapter";
 import { FixedStepAccumulator } from "./main-loop";
+import {
+  clearSave,
+  createStateFromSave,
+  readSave,
+  writeSave,
+} from "./persistence/save-game";
 import { createArenaScene } from "./scene/create-arena-scene";
 import { createGameCamera } from "./scene/create-game-camera";
 import { resolveCameraOcclusion } from "./scene/resolve-camera-occlusion";
@@ -15,6 +21,7 @@ import {
   type EncounterFixture,
 } from "./simulation/encounters";
 import { requestEnemyMove } from "./simulation/enemy-ai";
+import { applyUpgrade, type UpgradeId } from "./simulation/inventory";
 import { stepGame } from "./simulation/step-game";
 import type {
   EnemyMoveId,
@@ -83,6 +90,8 @@ interface AshfallReviewApi {
   queueEnemyMove(enemyId: string, moveId: EnemyMoveId): string;
   drivePlayerDodge(enemyId: string, moveId: EnemyMoveId): string;
   drivePlayerStrike(enemyId: string): void;
+  drivePlayerDefeat(enemyId: string): void;
+  retryLatestCheckpoint(): boolean;
 }
 
 declare global {
@@ -95,7 +104,8 @@ const app = document.querySelector<HTMLElement>("#app");
 if (!app) throw new Error("Ashfall Arena requires #app");
 
 const query = new URLSearchParams(window.location.search);
-const requestedFixture = query.get("fixture") ?? "fresh";
+const fixtureParameter = query.get("fixture");
+const requestedFixture = fixtureParameter ?? "fresh";
 const allowedFixtures = new Set<EncounterFixture>([
   "fresh",
   "wave-one",
@@ -113,6 +123,35 @@ const manualEnemyAi = query.get("manualEnemyAi") === "1";
 const captureMode = query.get("capture") === "1";
 const forcedMonsterFailure = query.get("forceEnemyModelFailure");
 document.documentElement.dataset.reviewControls = reviewControls ? "on" : "off";
+
+let saveNoticeMessage = "";
+const createFixtureState = () =>
+  createEncounterFixture(
+    7481,
+    fixture,
+    {
+      accelerated: reviewControls && fixture !== "fresh",
+      trainingAiEnabled: !safeTraining,
+      ...(manualEnemyAi ? { enemyAiEnabled: false } : {}),
+    },
+  );
+const savedContinuation =
+  fixtureParameter === null ? readSave(window.localStorage) : null;
+let state: GameState =
+  savedContinuation?.ok
+    ? createStateFromSave(savedContinuation.save, "continue")
+    : createFixtureState();
+if (savedContinuation && !savedContinuation.ok) {
+  if (
+    savedContinuation.reason === "malformed-json" ||
+    savedContinuation.reason === "unsupported-version" ||
+    savedContinuation.reason === "invalid-schema"
+  ) {
+    saveNoticeMessage = "存档损坏，已安全回到全新开局。";
+  } else if (savedContinuation.reason === "storage-unavailable") {
+    saveNoticeMessage = "当前浏览器无法读取存档，已继续本次游戏。";
+  }
+}
 
 app.innerHTML = `
   <main class="arena-shell">
@@ -139,7 +178,7 @@ app.innerHTML = `
         <div class="hud__loadout">
           <span data-weapon>誓约刃</span>
           <span data-action>待机</span>
-          <span>治疗瓶 × 3</span>
+          <span data-healing>治疗瓶 × 3</span>
         </div>
       </aside>
       <div class="enemy-telegraph-banner" data-enemy-telegraph hidden>
@@ -151,6 +190,30 @@ app.innerHTML = `
         <p>使用 WASD 或左侧摇杆移动。攻击、格挡与闪避将在训练环内依次解锁。</p>
       </section>
       <div class="arena-status" role="status" aria-live="polite">训练阶段 · 闸门关闭</div>
+      <p class="save-notice" data-save-notice role="status" aria-live="polite" hidden></p>
+      <button class="new-run-button" type="button" data-new-run>新开一局</button>
+      <section class="progression-dialog" data-upgrade-modal role="dialog" aria-modal="true" aria-label="选择一次升级" tabindex="-1" hidden>
+        <p class="progression-dialog__kicker">第一波奖励</p>
+        <h2>选择一次升级</h2>
+        <p>本局只能选择一项，确认后进入精英战。</p>
+        <div class="progression-dialog__actions">
+          <button type="button" data-upgrade-id="vitality">活力：生命上限提升至 125，并恢复 20</button>
+          <button type="button" data-upgrade-id="power">力量：武器伤害提升 20%</button>
+        </div>
+      </section>
+      <section class="progression-dialog" data-defeat-modal role="dialog" aria-modal="true" aria-label="本轮挑战失败" tabindex="-1" hidden>
+        <p class="progression-dialog__kicker">检查点仍然安全</p>
+        <h2>本轮挑战失败</h2>
+        <p>重试会恢复最近阶段、完整生命与精力，并保留升级和已保存奖励。</p>
+        <div class="progression-dialog__actions">
+          <button type="button" data-retry>从检查点重试</button>
+        </div>
+      </section>
+      <section class="progression-dialog" data-complete-modal role="dialog" aria-modal="true" aria-label="挑战完成记录" tabindex="-1" hidden>
+        <p class="progression-dialog__kicker">本地完成记录</p>
+        <h2>挑战完成记录</h2>
+        <p>钟鸣君主已被击败；重新载入仍会保留这份完成记录。</p>
+      </section>
     </section>
   </main>`;
 
@@ -162,21 +225,24 @@ const healthMeter = app.querySelector<HTMLElement>("[data-health-meter]")!;
 const staminaMeter = app.querySelector<HTMLElement>("[data-stamina-meter]")!;
 const weapon = app.querySelector<HTMLElement>("[data-weapon]")!;
 const action = app.querySelector<HTMLElement>("[data-action]")!;
+const healing = app.querySelector<HTMLElement>("[data-healing]")!;
 const objectiveTitle = app.querySelector<HTMLElement>(".objective-card h2")!;
 const arenaStatus = app.querySelector<HTMLElement>(".arena-status")!;
 const telegraphBanner = app.querySelector<HTMLElement>(
   "[data-enemy-telegraph]",
 )!;
+const saveNotice = app.querySelector<HTMLElement>("[data-save-notice]")!;
+const upgradeModal = app.querySelector<HTMLElement>("[data-upgrade-modal]")!;
+const defeatModal = app.querySelector<HTMLElement>("[data-defeat-modal]")!;
+const completeModal = app.querySelector<HTMLElement>("[data-complete-modal]")!;
+const upgradeButtons = [
+  ...upgradeModal.querySelectorAll<HTMLButtonElement>("[data-upgrade-id]"),
+];
+const retryButton = app.querySelector<HTMLButtonElement>("[data-retry]")!;
+const newRunButtons = [
+  ...app.querySelectorAll<HTMLButtonElement>("[data-new-run]"),
+];
 
-let state: GameState = createEncounterFixture(
-  7481,
-  fixture,
-  {
-    accelerated: reviewControls && fixture !== "fresh",
-    trainingAiEnabled: !safeTraining,
-    ...(manualEnemyAi ? { enemyAiEnabled: false } : {}),
-  },
-);
 const arena = createArenaScene(canvas, {
   preserveDrawingBuffer: reviewControls || captureMode,
 });
@@ -234,6 +300,89 @@ let previousTimestamp: number | null = null;
 let frameRequest = 0;
 let frameCount = 0;
 let disposed = false;
+let focusedStatus: GameState["status"] | null = null;
+
+const setSaveNotice = (message: string) => {
+  saveNoticeMessage = message;
+  saveNotice.textContent = message;
+  saveNotice.hidden = message.length === 0;
+};
+setSaveNotice(saveNoticeMessage);
+
+const persistCheckpoint = (): boolean => {
+  const result = writeSave(state, window.localStorage);
+  if (!result.ok) {
+    setSaveNotice(
+      result.reason === "invalid-schema"
+        ? "当前阶段无法安全保存，但本次游戏仍可继续。"
+        : "无法写入存档，但本次游戏仍可继续。",
+    );
+    return false;
+  }
+  setSaveNotice("检查点已保存。");
+  return true;
+};
+
+const replaceRunState = (next: GameState) => {
+  state = next;
+  input.clear();
+  accumulator.reset();
+  previousTimestamp = null;
+  presentationEvents.length = 0;
+  recentEvents.length = 0;
+  focusedStatus = null;
+};
+
+const retryLatestCheckpoint = (): boolean => {
+  if (state.status !== "defeated") return false;
+  const saved = readSave(window.localStorage);
+  if (saved.ok) {
+    replaceRunState(createStateFromSave(saved.save, "retry"));
+    setSaveNotice("已恢复最近检查点。");
+  } else {
+    replaceRunState(createEncounterFixture(state.seed, "fresh"));
+    setSaveNotice(
+      saved.reason === "missing-save"
+        ? "没有可用检查点，已回到全新开局。"
+        : "存档不可用，已安全回到全新开局。",
+    );
+  }
+  return true;
+};
+
+const onUpgradeClick = (event: Event) => {
+  if (
+    state.status !== "upgrade" ||
+    state.player.upgradeId !== null
+  ) {
+    return;
+  }
+  const button = event.currentTarget as HTMLButtonElement;
+  const upgradeId = button.dataset.upgradeId as UpgradeId;
+  state = applyUpgrade(state, upgradeId);
+  focusedStatus = null;
+  persistCheckpoint();
+};
+upgradeButtons.forEach((button) =>
+  button.addEventListener("click", onUpgradeClick));
+
+const onRetry = () => {
+  retryLatestCheckpoint();
+};
+retryButton.addEventListener("click", onRetry);
+
+const onNewRun = () => {
+  if (!window.confirm("确认清除灰烬竞技场存档并新开一局？")) return;
+  const cleared = clearSave(window.localStorage);
+  replaceRunState(createEncounterFixture(7481, "fresh"));
+  setSaveNotice(
+    cleared.ok
+      ? "已清除本产品存档，开始全新一局。"
+      : "无法清除浏览器存档；当前画面已开始全新一局。",
+  );
+};
+newRunButtons.forEach((button) =>
+  button.addEventListener("click", onNewRun));
 
 const dispatchPresentationEvent = (event: PresentationEvent) => {
   presentationEvents.push(event);
@@ -256,6 +405,19 @@ const routeGameplayEvents = (events: readonly GameEvent[]) => {
       amplitude: 0.16,
       duration: 0.22,
     });
+  }
+};
+
+const persistFromEvents = (events: readonly GameEvent[]) => {
+  if (
+    events.some(
+      (event) =>
+        event.type === "encounter-complete" ||
+        (event.type === "encounter-phase" &&
+          (event.phase === "wave-one" || event.phase === "boss")),
+    )
+  ) {
+    persistCheckpoint();
   }
 };
 
@@ -303,6 +465,7 @@ const step = (fixedDelta: number) => {
   const result = stepGame(state, intent, fixedDelta, arenaContent);
   state = result.state;
   routeGameplayEvents(result.events);
+  persistFromEvents(result.events);
 };
 
 const updateHud = () => {
@@ -320,6 +483,7 @@ const updateHud = () => {
   weapon.textContent =
     state.player.weaponId === "oathblade" ? "誓约刃" : "余烬弓";
   action.textContent = actionLabels[state.player.action];
+  healing.textContent = `治疗瓶 × ${state.player.healingCharges}`;
   weapon.dataset.weaponId = state.player.weaponId;
   action.dataset.actionId = state.player.action;
   healthMeter.style.width = `${100 * state.player.health / state.player.maxHealth}%`;
@@ -349,6 +513,19 @@ const updateHud = () => {
     entityDiagnostics.telegraphIds.length === 0
       ? ""
       : `敌人正在蓄力：${entityDiagnostics.telegraphIds.join("、")}`;
+  upgradeModal.hidden = state.status !== "upgrade";
+  defeatModal.hidden = state.status !== "defeated";
+  completeModal.hidden = state.status !== "complete";
+  if (focusedStatus !== state.status) {
+    focusedStatus = state.status;
+    if (state.status === "upgrade") {
+      upgradeButtons[0]?.focus();
+    } else if (state.status === "defeated") {
+      retryButton.focus();
+    } else if (state.status === "complete") {
+      completeModal.focus();
+    }
+  }
 };
 
 const consumePresentationEvents = () => {
@@ -596,6 +773,7 @@ if (reviewControls) {
         );
         state = result.state;
         routeGameplayEvents(result.events);
+        persistFromEvents(result.events);
         if (dodgeIssued && state.enemies[enemyId]?.currentMoveId === null) {
           break;
         }
@@ -678,9 +856,94 @@ if (reviewControls) {
         );
         state = result.state;
         routeGameplayEvents(result.events);
+        persistFromEvents(result.events);
         if (state.status !== "playing") break;
       }
     },
+    drivePlayerDefeat(enemyId) {
+      const enemy = state.enemies[enemyId];
+      if (!enemy) throw new Error(`Unknown enemy: ${enemyId}`);
+      if (state.status !== "playing") {
+        throw new Error("Player defeat requires a playing simulation");
+      }
+      const moveId: EnemyMoveId =
+        enemy.kind === "ash-warden"
+          ? "warden-bolt"
+          : enemy.kind === "bell-elite"
+            ? "elite-sweep"
+            : enemy.kind === "bell-sovereign"
+              ? "sovereign-sweep"
+              : "crawler-lunge";
+      const distance = moveId === "warden-bolt" ? 4.5 : 1.25;
+      const forward = {
+        x: Math.sin(state.player.facingRadians),
+        y: Math.cos(state.player.facingRadians),
+      };
+      const position = {
+        x: state.player.position.x + forward.x * distance,
+        y: state.player.position.y + forward.y * distance,
+      };
+      const facingRadians = Math.atan2(
+        state.player.position.x - position.x,
+        state.player.position.y - position.y,
+      );
+      const requested = requestEnemyMove(
+        {
+          ...enemy,
+          position,
+          facingRadians,
+          lockedFacingRadians: facingRadians,
+          aiEnabled: false,
+          targetId: state.player.id,
+          action: "idle",
+          actionTime: 0,
+          currentMoveId: null,
+          movePhase: "none",
+          moveElapsedTicks: 0,
+          cooldownTicks: 0,
+          hitTargetIds: [],
+        },
+        moveId,
+        state.tick,
+      );
+      state = {
+        ...state,
+        player: {
+          ...state.player,
+          health: 1,
+          action: "idle",
+          actionTime: 0,
+        },
+        enemies: {
+          ...state.enemies,
+          [enemyId]: requested,
+        },
+      };
+      const neutral: GameIntent = {
+        moveX: 0,
+        moveY: 0,
+        attackPressed: false,
+        guardHeld: false,
+        dodgePressed: false,
+        lockPressed: false,
+        healPressed: false,
+        switchWeaponPressed: false,
+        pausePressed: false,
+      };
+      for (let tick = 0; tick < 240; tick += 1) {
+        const result = stepGame(
+          state,
+          neutral,
+          1 / 60,
+          arenaContent,
+        );
+        state = result.state;
+        routeGameplayEvents(result.events);
+        if (state.status === "defeated") return;
+      }
+      throw new Error(`${enemyId} did not defeat the player`);
+    },
+    retryLatestCheckpoint,
   };
 }
 
@@ -691,6 +954,11 @@ const dispose = () => {
   resizeObserver.disconnect();
   document.removeEventListener("visibilitychange", onVisibility);
   reducedMotion.removeEventListener("change", onReducedMotion);
+  upgradeButtons.forEach((button) =>
+    button.removeEventListener("click", onUpgradeClick));
+  retryButton.removeEventListener("click", onRetry);
+  newRunButtons.forEach((button) =>
+    button.removeEventListener("click", onNewRun));
   input.dispose();
   synchronizer.dispose();
   cameraController.dispose();
