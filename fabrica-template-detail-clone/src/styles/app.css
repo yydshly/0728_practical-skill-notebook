@@ -1,0 +1,58 @@
+:root {
+  --header-height: clamp(52px, 3.125vw, 60px);
+  --side-padding: calc(100vw / 48);
+  --detail-padding: clamp(16px, 2.08vw, 40px);
+  --detail-label-width: clamp(120px, 17vw, 240px);
+  --card-radius: 10px;
+  --page-background: #ffffff;
+  --surface-muted: #f2f2f2;
+  --text-color: #111111;
+  --border-color: #dedede;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color: var(--text-color);
+  background: var(--page-background);
+  font-family: Poppins, Arial, sans-serif;
+  line-height: 1.5;
+}
+
+body,
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+  background: var(--page-background);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img,
+video {
+  display: block;
+  max-width: 100%;
+}
