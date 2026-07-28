@@ -1,0 +1,366 @@
+:root {
+  color: #f7eee2;
+  background: #0e0d11;
+  font-family:
+    Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui,
+    sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 72% -10%, rgb(127 56 40 / 28%), transparent 42%),
+    linear-gradient(150deg, #171219, #0c0d10 70%);
+}
+
+button {
+  color: inherit;
+  font: inherit;
+}
+
+.arena-shell {
+  display: grid;
+  grid-template-rows: auto minmax(620px, calc(100vh - 86px));
+  min-height: 100vh;
+}
+
+.arena-header {
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 86px;
+  padding: 14px clamp(18px, 4vw, 56px);
+  border-bottom: 1px solid rgb(255 210 155 / 14%);
+  background: rgb(16 14 17 / 88%);
+  backdrop-filter: blur(14px);
+}
+
+.arena-header h1 {
+  margin: 2px 0 0;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: clamp(25px, 3vw, 38px);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.eyebrow,
+.objective-card__kicker {
+  margin: 0;
+  color: #d89b5a;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+}
+
+.device-legend {
+  margin: 0;
+  color: #bdafa7;
+  font-size: 13px;
+}
+
+.game-stage {
+  position: relative;
+  min-height: 620px;
+  overflow: hidden;
+  isolation: isolate;
+  background: #121014;
+}
+
+[data-game-canvas] {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  touch-action: none;
+}
+
+[data-game-canvas]:focus-visible,
+.touch-actions button:focus-visible,
+.touch-stick:focus-visible {
+  outline: 3px solid #ffd28c;
+  outline-offset: 3px;
+}
+
+.hud {
+  position: absolute;
+  top: max(20px, env(safe-area-inset-top));
+  left: max(20px, env(safe-area-inset-left));
+  display: grid;
+  width: min(328px, calc(100% - 40px));
+  padding: 16px;
+  gap: 11px;
+  border: 1px solid rgb(255 210 155 / 18%);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgb(17 15 19 / 91%), rgb(39 26 28 / 82%));
+  box-shadow: 0 18px 45px rgb(0 0 0 / 30%);
+  pointer-events: none;
+}
+
+.hud__vitals {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 13px;
+}
+
+.hud__label {
+  color: #c7b8ae;
+}
+
+.hud__vitals strong {
+  justify-self: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud__meter {
+  grid-column: 1 / -1;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 10%);
+}
+
+.hud__meter i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #a83c3f, #f07855);
+}
+
+.hud__meter--stamina i {
+  background: linear-gradient(90deg, #b7873e, #f0c761);
+}
+
+.hud__loadout {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 3px;
+  color: #d8c8bd;
+  font-size: 12px;
+}
+
+.objective-card {
+  position: absolute;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: max(24px, calc(env(safe-area-inset-bottom) + 10px));
+  width: min(372px, calc(100% - 40px));
+  padding: 18px 20px;
+  border: 1px solid rgb(240 163 66 / 25%);
+  border-radius: 16px;
+  background: rgb(18 15 18 / 88%);
+  box-shadow: 0 18px 45px rgb(0 0 0 / 26%);
+  pointer-events: none;
+}
+
+.objective-card h2 {
+  margin: 6px 0;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.objective-card p:last-child {
+  margin: 0;
+  color: #c0b1a8;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.arena-status {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  padding: 8px 13px;
+  transform: translateX(-50%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  color: #d8c7b9;
+  background: rgb(17 15 18 / 72%);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.touch-controls {
+  position: absolute;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(150px, calc(env(safe-area-inset-bottom) + 120px));
+  left: max(18px, env(safe-area-inset-left));
+  z-index: 4;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.touch-stick {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  border: 1px solid rgb(255 221 177 / 25%);
+  border-radius: 50%;
+  background: rgb(19 16 20 / 45%);
+  box-shadow: inset 0 0 24px rgb(0 0 0 / 25%);
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.touch-stick__knob {
+  position: absolute;
+  top: 33px;
+  left: 33px;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgb(255 220 176 / 38%);
+  border-radius: 50%;
+  background: rgb(174 111 65 / 72%);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 30%);
+  pointer-events: none;
+}
+
+.touch-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 48px);
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.touch-actions button {
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  border: 1px solid rgb(255 218 167 / 26%);
+  border-radius: 50%;
+  background: rgb(28 22 26 / 76%);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 24%);
+  touch-action: none;
+}
+
+.touch-actions button[data-pressed="true"] {
+  border-color: #f0ae66;
+  background: rgb(154 83 48 / 90%);
+  transform: scale(0.94);
+}
+
+html[data-paused="true"] .arena-status::after {
+  content: " · 已暂停";
+  color: #ffd28c;
+}
+
+@media (hover: hover) and (pointer: fine) and (min-width: 900px) {
+  .touch-controls {
+    opacity: 0.5;
+  }
+}
+
+@media (max-width: 620px) {
+  .arena-shell {
+    grid-template-rows: auto minmax(700px, calc(100svh - 74px));
+  }
+
+  .arena-header {
+    min-height: 74px;
+    padding: 12px 16px;
+  }
+
+  .arena-header h1 {
+    font-size: 25px;
+  }
+
+  .device-legend {
+    max-width: 92px;
+    text-align: right;
+    font-size: 11px;
+  }
+
+  .game-stage {
+    min-height: 700px;
+  }
+
+  .hud {
+    top: max(12px, env(safe-area-inset-top));
+    left: 12px;
+    width: calc(100% - 24px);
+    padding: 12px 14px;
+  }
+
+  .hud__loadout {
+    font-size: 11px;
+  }
+
+  .arena-status {
+    top: 155px;
+    font-size: 11px;
+  }
+
+  .objective-card {
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: calc(100% - 24px);
+    padding: 13px 15px;
+  }
+
+  .objective-card h2 {
+    font-size: 17px;
+  }
+
+  .objective-card p:last-child {
+    font-size: 12px;
+  }
+
+  .touch-controls {
+    right: 14px;
+    bottom: max(144px, calc(env(safe-area-inset-bottom) + 132px));
+    left: 14px;
+  }
+
+  .touch-stick {
+    width: 94px;
+    height: 94px;
+  }
+
+  .touch-stick__knob {
+    top: 27px;
+    left: 27px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .touch-actions {
+    grid-template-columns: repeat(4, 44px);
+    max-width: 200px;
+    gap: 6px;
+  }
+
+  .touch-actions button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}

@@ -3,10 +3,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit",
-    "test": "vitest run"
+    "dev": "vite --host 127.0.0.1 --port 4174",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "test:browser": "playwright test"
   },
   "dependencies": {
-    "@showcase/input-system": "*"
+    "@showcase/game-assets": "*",
+    "@showcase/input-system": "*",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.1"
   }
 }

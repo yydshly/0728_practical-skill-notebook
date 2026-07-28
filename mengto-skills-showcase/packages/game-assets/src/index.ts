@@ -16,6 +16,12 @@ export type {
   MonsterGroundContact,
   MonsterInstance,
 } from "./monsters/create-procedural-monster";
+export { createVesperKnight } from "./player/create-vesper-knight";
+export type {
+  VesperKnight,
+  VesperKnightSocketName,
+  VesperKnightWeapon,
+} from "./player/create-vesper-knight";
 
 export class AssetRegistry {
   constructor(private readonly assets: readonly AssetManifest[]) {}
