@@ -13,8 +13,24 @@ import type {
   PartSlot,
 } from "../src/configuration/types";
 
-function createExpandedCatalog(optionCount: number, accessBudget: number) {
+interface ExpandedCatalogOptions {
+  weightFor?: (
+    group: "head" | "armor" | "weapon" | "rear",
+    index: number,
+  ) => number;
+  weightLimit?: number;
+}
+
+function createExpandedCatalog(
+  optionCount: number,
+  accessBudget: number,
+  options: ExpandedCatalogOptions = {},
+) {
   let idAccesses = 0;
+  const weightFor =
+    options.weightFor ??
+    ((_group: "head" | "armor" | "weapon" | "rear", index: number) =>
+      index === 0 ? 1 : 4);
 
   function createParts(
     prefix: string,
@@ -24,7 +40,7 @@ function createExpandedCatalog(optionCount: number, accessBudget: number) {
       const part = {
         name: `${prefix} ${index}`,
         priceCredits: 0,
-        weight: index === 0 ? 1 : 4,
+        weight: weightFor(prefix as "head" | "armor" | "rear", index),
         power: 0,
         guard: 0,
         mobility: 0,
@@ -48,7 +64,7 @@ function createExpandedCatalog(optionCount: number, accessBudget: number) {
     const part = {
       name: `weapon ${index}`,
       priceCredits: 0,
-      weight: index === 0 ? 1 : 4,
+      weight: weightFor("weapon", index),
       power: 0,
       guard: 0,
       mobility: 0,
@@ -75,7 +91,7 @@ function createExpandedCatalog(optionCount: number, accessBudget: number) {
     power: 0,
     guard: 0,
     mobility: 0,
-    weightLimit: 14,
+    weightLimit: options.weightLimit ?? 14,
   };
 
   const expandedCatalog = {
@@ -89,6 +105,50 @@ function createExpandedCatalog(optionCount: number, accessBudget: number) {
   return {
     catalog: expandedCatalog,
     getIdAccesses: () => idAccesses,
+  };
+}
+
+function createSignedWeightCatalog(): Catalog {
+  const part = (
+    id: string,
+    slots: readonly PartSlot[],
+    weight: number,
+  ): PartDefinition =>
+    ({
+      id,
+      name: id,
+      priceCredits: 0,
+      weight,
+      power: 0,
+      guard: 0,
+      mobility: 0,
+      slots,
+    }) as PartDefinition;
+
+  return {
+    chassis: [
+      {
+        id: "strider-scout",
+        name: "有符号重量测试底盘",
+        priceCredits: 0,
+        weight: 0,
+        power: 0,
+        guard: 0,
+        mobility: 0,
+        weightLimit: 5,
+      },
+    ],
+    heads: [part("surveyor-head", ["head"], 10)],
+    armors: [part("ceramic-shell", ["armor"], 0)],
+    weapons: [
+      part("arc-blade", ["leftWeapon", "rightWeapon"], 0),
+    ],
+    rearModules: [
+      part("jump-pack", ["rearModule"], 0),
+      part("rear-nan", ["rearModule"], Number.NaN),
+      part("rear-infinity", ["rearModule"], Number.POSITIVE_INFINITY),
+      part("field-relay", ["rearModule"], -6),
+    ],
   };
 }
 
@@ -375,6 +435,97 @@ describe("normalizeConfiguration", () => {
       issues: [],
     });
     expect(expanded.getIdAccesses()).toBeLessThanOrEqual(5_000);
+  });
+
+  it("keeps distinct-weight catalog work below a linear access budget", () => {
+    const scaleByGroup = {
+      head: 1,
+      armor: 20,
+      weapon: 400,
+      rear: 8_000,
+    } as const;
+    const expanded = createExpandedCatalog(12, 5_000, {
+      weightFor: (group, index) => scaleByGroup[group] * index,
+      weightLimit: 97_030,
+    });
+    const input = {
+      ...defaultConfiguration,
+      headId: "head-11",
+      armorId: "armor-11",
+      leftWeaponId: "weapon-11",
+      rightWeaponId: "weapon-11",
+      rearModuleId: "rear-11",
+    };
+
+    const result = normalizeConfiguration(input, expanded.catalog);
+
+    expect(result.config).toMatchObject({
+      headId: "head-0",
+      armorId: "armor-11",
+      leftWeaponId: "weapon-11",
+      rightWeaponId: "weapon-11",
+      rearModuleId: "rear-11",
+    });
+    expect(result.issues).toEqual([
+      { field: "weight", code: "weight-limit", value: 97_031 },
+    ]);
+    expect(validateConfiguration(result.config, expanded.catalog)).toEqual({
+      ok: true,
+      issues: [],
+    });
+    expect(expanded.getIdAccesses()).toBeLessThanOrEqual(5_000);
+  });
+
+  it("uses a negative suffix to repair an overweight prefix", () => {
+    const signedCatalog = createSignedWeightCatalog();
+    const input = {
+      ...defaultConfiguration,
+      rightWeaponId: "arc-blade",
+    };
+
+    const result = normalizeConfiguration(input, signedCatalog);
+
+    expect(result.config).toEqual({
+      ...input,
+      rearModuleId: "field-relay",
+    });
+    expect(result.issues).toEqual([
+      { field: "weight", code: "weight-limit", value: 10 },
+    ]);
+    expect(validateConfiguration(result.config, signedCatalog)).toEqual({
+      ok: true,
+      issues: [],
+    });
+  });
+
+  it("filters non-finite catalog weights and returns a stable finite repair", () => {
+    const signedCatalog = createSignedWeightCatalog();
+
+    for (const [rearModuleId, value] of [
+      ["rear-nan", Number.NaN],
+      ["rear-infinity", Number.POSITIVE_INFINITY],
+    ] as const) {
+      const input = {
+        ...defaultConfiguration,
+        rightWeaponId: "arc-blade",
+        rearModuleId,
+      };
+      const first = normalizeConfiguration(input, signedCatalog);
+      const second = normalizeConfiguration(input, signedCatalog);
+
+      expect(first).toEqual(second);
+      expect(first.config).toEqual({
+        ...input,
+        rearModuleId: "field-relay",
+      });
+      expect(first.issues).toEqual([
+        { field: "weight", code: "weight-limit", value },
+      ]);
+      expect(validateConfiguration(first.config, signedCatalog)).toEqual({
+        ok: true,
+        issues: [],
+      });
+    }
   });
 
   it("returns a deterministic issue-bearing fallback when no legal configuration exists", () => {

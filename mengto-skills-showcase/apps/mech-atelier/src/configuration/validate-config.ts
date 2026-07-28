@@ -53,8 +53,9 @@ function createPartIndex(catalog: Catalog): ReadonlyMap<unknown, PartDefinition>
     ...catalog.weapons,
     ...catalog.rearModules,
   ]) {
-    if (!index.has(part.id)) {
-      index.set(part.id, part);
+    const id = part.id;
+    if (!index.has(id)) {
+      index.set(id, part);
     }
   }
   return index;
@@ -184,7 +185,11 @@ export function validateConfiguration(
 
   if (chassis) {
     const weight = selectionWeight(config, chassis, partIndex);
-    if (weight > chassis.weightLimit) {
+    if (
+      !Number.isFinite(weight) ||
+      !Number.isFinite(chassis.weightLimit) ||
+      weight > chassis.weightLimit
+    ) {
       pushIssue(issues, "weight", "weight-limit", weight);
     }
   }
@@ -262,8 +267,13 @@ function legalOptions(
   );
 }
 
-interface WeightSearchState {
-  weight: number;
+interface IndexedPart {
+  part: PartDefinition;
+  id: string;
+  catalogIndex: number;
+}
+
+interface WeightSearchCandidate {
   changes: number;
   optionIndices: readonly number[];
   partIds: readonly string[];
@@ -282,9 +292,9 @@ function compareIndexVectors(
   return left.length - right.length;
 }
 
-function isPreferredState(
-  candidate: WeightSearchState,
-  current: WeightSearchState | undefined,
+function isPreferredCandidate(
+  candidate: WeightSearchCandidate,
+  current: WeightSearchCandidate | undefined,
 ): boolean {
   if (!current) return true;
   if (candidate.changes !== current.changes) {
@@ -308,60 +318,104 @@ function repairWeight(
   }
 
   const chassis = findChassis(config.chassisId, catalog);
-  if (!chassis) return config;
+  if (
+    !chassis ||
+    !Number.isFinite(chassis.weight) ||
+    !Number.isFinite(chassis.weightLimit)
+  ) {
+    return config;
+  }
 
   const currentIds = selectionFields.map((field) => config[field]);
   const optionGroups = selectionFields.map((field) =>
-    legalOptions(field, catalog, config.chassisId),
+    legalOptions(field, catalog, config.chassisId)
+      .map<IndexedPart>((part, catalogIndex) => ({
+        part,
+        id: part.id,
+        catalogIndex,
+      }))
+      .filter(({ part }) => Number.isFinite(part.weight)),
   );
   if (optionGroups.some((options) => options.length === 0)) {
     return config;
   }
 
-  let frontier = new Map<number, WeightSearchState>([
-    [
-      chassis.weight,
-      {
-        weight: chassis.weight,
-        changes: 0,
-        optionIndices: [],
-        partIds: [],
-      },
-    ],
-  ]);
+  let best: WeightSearchCandidate | undefined;
+  const subsetCount = 1 << selectionFields.length;
 
-  for (let fieldIndex = 0; fieldIndex < optionGroups.length; fieldIndex += 1) {
-    const nextFrontier = new Map<number, WeightSearchState>();
-    const options = optionGroups[fieldIndex];
+  for (let changedMask = 0; changedMask < subsetCount; changedMask += 1) {
+    const choices = optionGroups.map((options, fieldIndex) => {
+      const fieldChanges = (changedMask & (1 << fieldIndex)) !== 0;
+      return options.filter(({ id }) =>
+        fieldChanges
+          ? id !== currentIds[fieldIndex]
+          : id === currentIds[fieldIndex],
+      );
+    });
+    if (choices.some((options) => options.length === 0)) continue;
 
-    for (const state of frontier.values()) {
-      for (let optionIndex = 0; optionIndex < options.length; optionIndex += 1) {
-        const part = options[optionIndex];
-        const weight = state.weight + part.weight;
-        if (weight > chassis.weightLimit) continue;
-
-        const partId = part.id;
-        const candidate: WeightSearchState = {
-          weight,
-          changes:
-            state.changes + Number(partId !== currentIds[fieldIndex]),
-          optionIndices: [...state.optionIndices, optionIndex],
-          partIds: [...state.partIds, partId],
-        };
-        const current = nextFrontier.get(weight);
-        if (isPreferredState(candidate, current)) {
-          nextFrontier.set(weight, candidate);
-        }
+    const suffixMinimum = new Array<number>(selectionFields.length + 1).fill(0);
+    let suffixIsFinite = true;
+    for (
+      let fieldIndex = selectionFields.length - 1;
+      fieldIndex >= 0;
+      fieldIndex -= 1
+    ) {
+      const minimum = choices[fieldIndex].reduce(
+        (current, { part }) => Math.min(current, part.weight),
+        Number.POSITIVE_INFINITY,
+      );
+      const suffix = minimum + suffixMinimum[fieldIndex + 1];
+      if (!Number.isFinite(suffix)) {
+        suffixIsFinite = false;
+        break;
       }
+      suffixMinimum[fieldIndex] = suffix;
+    }
+    if (
+      !suffixIsFinite ||
+      chassis.weight + suffixMinimum[0] > chassis.weightLimit
+    ) {
+      continue;
     }
 
-    frontier = nextFrontier;
-    if (frontier.size === 0) return config;
-  }
+    let prefixWeight = chassis.weight;
+    const selected: IndexedPart[] = [];
+    for (
+      let fieldIndex = 0;
+      fieldIndex < selectionFields.length;
+      fieldIndex += 1
+    ) {
+      const option = choices[fieldIndex].find(({ part }) => {
+        const possibleTotal =
+          prefixWeight + part.weight + suffixMinimum[fieldIndex + 1];
+        return (
+          Number.isFinite(possibleTotal) &&
+          possibleTotal <= chassis.weightLimit
+        );
+      });
+      if (!option) break;
+      selected.push(option);
+      prefixWeight += option.part.weight;
+    }
+    if (
+      selected.length !== selectionFields.length ||
+      !Number.isFinite(prefixWeight) ||
+      prefixWeight > chassis.weightLimit
+    ) {
+      continue;
+    }
 
-  let best: WeightSearchState | undefined;
-  for (const candidate of frontier.values()) {
-    if (isPreferredState(candidate, best)) {
+    const candidate: WeightSearchCandidate = {
+      changes: selected.reduce(
+        (count, option, fieldIndex) =>
+          count + Number(option.id !== currentIds[fieldIndex]),
+        0,
+      ),
+      optionIndices: selected.map(({ catalogIndex }) => catalogIndex),
+      partIds: selected.map(({ id }) => id),
+    };
+    if (isPreferredCandidate(candidate, best)) {
       best = candidate;
     }
   }
