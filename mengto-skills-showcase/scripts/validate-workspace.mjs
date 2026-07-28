@@ -1,4 +1,12 @@
 import { access, readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { inspectSkillSourcePin } from "./validate-skill-source.mjs";
+
+const scriptDirectory = dirname(fileURLToPath(import.meta.url));
+const workspaceRoot = resolve(scriptDirectory, "..");
+const repositoryRoot = resolve(workspaceRoot, "..");
+const fromWorkspace = (path) => resolve(workspaceRoot, path);
 
 const toSkillRows = (markdown, pattern) => [...markdown.matchAll(pattern)].map(
   ([, name, sourcePath, products, phases]) => ({
@@ -20,14 +28,14 @@ const required = [
 const failures = [];
 for (const path of required) {
   try {
-    await access(path);
+    await access(fromWorkspace(path));
   } catch {
     failures.push(`Missing required file: ${path}`);
   }
 }
 
 if (failures.length === 0) {
-  const selection = JSON.parse(await readFile("config/selected-skills.json", "utf8"));
+  const selection = JSON.parse(await readFile(fromWorkspace("config/selected-skills.json"), "utf8"));
   if (!Array.isArray(selection.skills) || selection.skills.length !== 16) {
     failures.push("config/selected-skills.json must contain exactly 16 approved skills");
   }
@@ -36,17 +44,25 @@ if (failures.length === 0) {
     failures.push("config/selected-skills.json must use unique skill names");
   }
 
-  const lock = JSON.parse(await readFile("config/skill-source-lock.json", "utf8"));
+  const lock = JSON.parse(await readFile(fromWorkspace("config/skill-source-lock.json"), "utf8"));
   if (lock.repository !== "https://github.com/MengTo/Skills.git" || lock.branch !== "main") {
     failures.push("config/skill-source-lock.json must pin the approved MengTo/Skills source");
   }
   if (!/^[0-9a-f]{40}$/.test(lock.commit ?? "")) {
     failures.push("config/skill-source-lock.json must contain a full commit SHA");
+  } else {
+    failures.push(...inspectSkillSourcePin({
+      lockCommit: lock.commit,
+      submodulePath: fromWorkspace("skills-source/MengTo-Skills"),
+      repositoryRoot,
+      gitlinkPath: "mengto-skills-showcase/skills-source/MengTo-Skills",
+      displayPath: "skills-source/MengTo-Skills",
+    }));
   }
 
-  const guide = await readFile("docs/skill-installation.md", "utf8");
-  const readme = await readFile("README.md", "utf8");
-  const agents = await readFile("AGENTS.md", "utf8");
+  const guide = await readFile(fromWorkspace("docs/skill-installation.md"), "utf8");
+  const readme = await readFile(fromWorkspace("README.md"), "utf8");
+  const agents = await readFile(fromWorkspace("AGENTS.md"), "utf8");
   const expectedRows = selection.skills.map(({ name, sourcePath, products, phases }) => ({
     name,
     sourcePath,
