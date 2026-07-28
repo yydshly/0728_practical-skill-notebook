@@ -2,7 +2,7 @@
 
 ## 验证对象与边界
 
-- 候选验证提交：`ba14fca15d460d9267fdf7c953e938613e1b098e`。该提交已在干净工作区运行本记录列出的完整验证；本文件的后继证据提交只补充这条事实，不把尚未存在的 SHA 写成“已测试”。
+- Fix Round 1 候选验证提交：将在本轮运行时代码、触控测试与本记录一同提交后，由后继证据提交写入精确 SHA；旧候选没有包含真实单指/双指触控证明，不能再作为本记录的受测版本。
 - 本地运行入口：在套件根目录执行 `npm run dev:forge`，默认地址为 `http://127.0.0.1:4173`。
 - 确定性审阅入口：`/?review=ash-warden`；其他 ID 为 `glass-crawler`、`bell-knight`、`mire-hound`。`?capture=1` 仅用于生成目录预览。
 - 本记录不代表已部署：本任务没有发布、托管或外部服务连接。
@@ -25,7 +25,7 @@
 - 桌面：在 `1440 × 900` 打开 Ash Warden，切换四项资产；检查器始终只有一个实时 canvas，支持拖拽旋转、滚轮缩放、动作与叠加切换。
 - 五个确定性动作：`Idle`、`Walk`、`Attack`、`Hit`、`Death`；另有暂停/继续和重新播放。
 - 键盘：原生 Tab 顺序覆盖四张卡、五个动作、暂停、重新播放、骨架/碰撞体/挂点三个复选框。焦点使用 `:focus-visible` 3px 描边；选中卡同步 `aria-pressed` 与 `aria-current`，状态区域以 `aria-live="polite"` 播报。
-- 移动端：Playwright 在 `390 × 844` 竖屏与 `844 × 390` 横屏验证了无横向溢出、44 CSS px 最小控制目标、画布 `touch-action: none`，以及触控指针拖拽路径。
+- 移动端：Playwright 在 `390 × 844` 竖屏与 `844 × 390` 横屏验证了无横向溢出、44 CSS px 最小控制目标和画布 `touch-action: none`。390 宽度使用 Chromium 的 `Input.dispatchTouchEvent` 真实触控事件路径：单指 down/move/up 会改变只读相机 yaw（radius 不变），双指 pinch 会在 `1.2–10` 的 clamp 内改变 radius；两种手势均保持 `scrollY` 不变，结束后 `activePointerCount` 和 `pinchDistance` 都归零。
 - 减少动态效果：`prefers-reduced-motion: reduce` 模拟中，卡片的 CSS 过渡被压缩至 `0.01ms`；实时相机本来就采用即时定位，诊断值为 `cameraEasing: "none"`，因此没有在减少动态效果模式下伪造一个额外的相机动画开关。
 - WebGL 回退：当 WebGL 被禁用或渲染器/模型创建失败时，仍显示同一 PNG、名称、来源、尺寸、动作、具体原因与“重试 3D 预览”按钮；重试不会新增 canvas。
 
@@ -42,7 +42,7 @@
 | textures | 1 |
 | device pixel ratio | 1 |
 | 生产 CSS | 6.16 kB raw / 2.04 kB gzip |
-| 生产 JavaScript | 693.33 kB raw / 180.88 kB gzip |
+| 生产 JavaScript | 693.49 kB raw / 180.94 kB gzip |
 | 生产 HTML | 0.47 kB raw / 0.35 kB gzip |
 
 回归浏览器测试会先让一次完整替换序列稳定，再执行 20 轮四资产切换（80 次选择），并断言：仅 1 个 canvas、仅 1 个场景根、仅 1 个叠加根、纹理数不增长、几何数不增长、RAF 帧计数继续前进、console/page error 均为 0。Three.js 的 `renderer.info.memory` 会在后续帧清理已释放几何体，因此该断言以“不会增长”而不是一次性临时计数的完全相等来判断资源没有累计泄漏。

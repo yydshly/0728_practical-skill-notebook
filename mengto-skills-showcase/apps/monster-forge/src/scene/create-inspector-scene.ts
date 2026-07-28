@@ -29,7 +29,10 @@ export interface InspectorSceneDiagnostics {
   readonly rootCount: number;
   readonly selectedMonsterId: string | null;
   readonly target: Readonly<{ x: number; y: number; z: number }>;
+  readonly camera: Readonly<{ yaw: number; pitch: number }>;
   readonly radius: number;
+  readonly activePointerCount: number;
+  readonly pinchDistance: number;
   readonly lastError: string | null;
   readonly action: InspectorActionStatus | null;
   readonly overlayNodeCount: number;
@@ -151,7 +154,10 @@ export function createInspectorScene(
       rootCount: orbit.children.length,
       selectedMonsterId,
       target: Object.freeze({ x: target.x, y: target.y, z: target.z }),
+      camera: Object.freeze({ yaw, pitch }),
       radius,
+      activePointerCount: activePointers.size,
+      pinchDistance: previousPinchDistance,
       lastError,
       action: current
         ? Object.freeze({ ...current.getActionState(), paused: currentPaused })
@@ -375,7 +381,10 @@ function createUnavailableScene(error: unknown): InspectorScene {
         rootCount: 0,
         selectedMonsterId: null,
         target: Object.freeze({ x: 0, y: 0, z: 0 }),
+        camera: Object.freeze({ yaw: 0, pitch: 0 }),
         radius: 0,
+        activePointerCount: 0,
+        pinchDistance: 0,
         lastError,
         action: null,
         overlayNodeCount: 0,
