@@ -89,3 +89,43 @@ test('renders all recommended templates and dismisses the cookie banner', async 
   expect(screen.queryByText('We use cookies')).toBeNull();
   expect(window.localStorage.getItem('fabrica-cookie-accepted')).toBe('true');
 });
+
+test('starts with a cookie banner and keeps acceptance after a fresh mount', () => {
+  const firstMount = render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+  firstMount.unmount();
+
+  render(<App />);
+  expect(screen.queryByText('We use cookies')).toBeNull();
+});
+
+test('wires representative content links, footer, and local image metadata', () => {
+  render(<App />);
+
+  const deformoCard = screen.getByRole('heading', { name: 'Deformo' }).closest('article');
+  expect(within(deformoCard).getByRole('link', { name: 'View Deformo template' })).toHaveAttribute(
+    'href',
+    '/templates/framer/deformo',
+  );
+  expect(within(deformoCard).getByRole('link', { name: 'Visit' })).toHaveAttribute(
+    'href',
+    'https://www.framer.com/marketplace/templates/deformo/',
+  );
+  expect(within(deformoCard).getByRole('img', { name: 'Deformo template preview' })).toHaveAttribute(
+    'src',
+    '/assets/templates/deformo-1440x810.webp',
+  );
+
+  const blogTitle = '20 Best Framer Portfolio Templates 2026 (Scored by Designers)';
+  expect(screen.getByRole('heading', { level: 3, name: blogTitle }).closest('a')).toHaveAttribute(
+    'href',
+    '/blog/20-best-framer-portfolio-templates-2026-scored-by-designers',
+  );
+  expect(screen.getByRole('img', { name: blogTitle })).toHaveAttribute(
+    'src',
+    '/assets/blogs/30-best-free-paid-framer-website-templates-2026-1.webp',
+  );
+  expect(screen.getByRole('heading', { level: 2, name: 'Explore' })).toBeVisible();
+  expect(screen.getByRole('link', { name: 'Scoring Methodology' })).toHaveAttribute('href', '/methodology');
+});
