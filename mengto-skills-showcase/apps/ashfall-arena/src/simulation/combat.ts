@@ -148,16 +148,27 @@ export function cancelActiveAttack(
     return { state: nextState, events: [] };
   }
 
+  const terminalEvent: GameEvent =
+    attack.weaponId === "oathblade" &&
+      attack.hitTargetIds.length > 0
+      ? {
+          type: "attack-resolved",
+          actorId: attack.ownerId,
+          actionId: attack.actionId,
+          attackId: attack.id,
+          result: "hit",
+        }
+      : {
+          type: "attack-resolved",
+          actorId: attack.ownerId,
+          actionId: attack.actionId,
+          attackId: attack.id,
+          result: "interrupted",
+          reason,
+        };
   return {
     state: nextState,
-    events: [{
-      type: "attack-resolved",
-      actorId: attack.ownerId,
-      actionId: attack.actionId,
-      attackId: attack.id,
-      result: "interrupted",
-      reason,
-    }],
+    events: [terminalEvent],
   };
 }
 

@@ -22,6 +22,8 @@ type LifecycleDiagnostics = {
       type: string;
       attackId?: string;
       moveId?: string;
+      actionId?: string;
+      targetId?: string;
       result?: string;
       reason?: string;
     };
@@ -90,6 +92,69 @@ for (const reducedMotion of [false, true]) {
     ).toHaveLength(1);
   });
 }
+
+test("recovery dodge after melee contact presents hit without an interrupted cue", async ({
+  page,
+}) => {
+  await page.goto(
+    "/?fixture=wave-one&reviewControls=1&manualEnemyAi=1",
+  );
+  const canvas = page.locator("[data-game-canvas]");
+  await canvas.click({ position: { x: 80, y: 80 } });
+  await expect.poll(async () => (await diagnostics(page)).audio.unlocked)
+    .toBe(true);
+
+  let attackId: string | null = null;
+  await expect.poll(async () => {
+    const started = (await diagnostics(page)).recentEvents.find(
+      ({ event }) =>
+        event.type === "action-started" &&
+        event.actionId === "oathblade-light-1",
+    );
+    attackId = started?.event.attackId ?? null;
+    return attackId;
+  }).not.toBeNull();
+  await expect.poll(async () =>
+    (await diagnostics(page)).recentEvents.some(
+      ({ event }) =>
+        event.type === "contact" &&
+        event.attackId === attackId &&
+        event.targetId === "wave-one-crawler-a",
+    ),
+  { intervals: [10], timeout: 2_000 }).toBe(true);
+  await expect.poll(async () =>
+    page.evaluate(() =>
+      window.__ashfallDiagnostics!.snapshot().activeAttackId,
+    ),
+  ).toBe(attackId);
+
+  const before = (await diagnostics(page)).audio.cueCounts;
+  await page.keyboard.press("Space");
+  await expect.poll(async () =>
+    (await diagnostics(page)).recentEvents.filter(
+      ({ event }) =>
+        event.type === "attack-resolved" &&
+        event.attackId === attackId,
+    ),
+  ).toEqual([
+    expect.objectContaining({
+      event: expect.objectContaining({
+        type: "attack-resolved",
+        attackId,
+        result: "hit",
+      }),
+    }),
+  ]);
+  await expect(page.locator("[data-feedback-caption]")).toContainText(
+    "命中",
+  );
+  await expect.poll(async () =>
+    (await diagnostics(page)).audio.cueCounts.playerHit,
+  ).toBe((before.playerHit ?? 0) + 1);
+  expect(
+    (await diagnostics(page)).audio.cueCounts.playerInterrupted ?? 0,
+  ).toBe(before.playerInterrupted ?? 0);
+});
 
 test("rejected audio resumes recover on one context and hit interruption stays readable", async ({
   page,

@@ -51,4 +51,10 @@ describe("Chinese HUD presentation labels", () => {
       formatters.formatAttackResolutionCaption?.("interrupted"),
     ).toBe("攻击被打断");
   });
+
+  it("keeps a preserved contact presented as a hit", () => {
+    expect(
+      formatters.formatAttackResolutionCaption?.("hit"),
+    ).toBe("命中：攻击已结算");
+  });
 });

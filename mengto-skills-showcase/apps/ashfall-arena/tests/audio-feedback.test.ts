@@ -154,6 +154,23 @@ describe("recoverable browser audio feedback", () => {
         type: "attack-resolved",
         actorId: "player",
         actionId: "oathblade-light-1",
+        attackId: "player:hit-before-cancel",
+        result: "hit",
+      },
+    ], createInitialState(1));
+    expect(audio.getDiagnostics()).toMatchObject({
+      lastCue: "playerHit",
+      cueCounts: {
+        playerHit: 1,
+        playerInterrupted: 0,
+      },
+    });
+
+    audio.consume([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "oathblade-light-1",
         attackId: "player:0:0",
         result: "interrupted",
         reason: "damage",
@@ -161,7 +178,10 @@ describe("recoverable browser audio feedback", () => {
     ], createInitialState(1));
     expect(audio.getDiagnostics()).toMatchObject({
       lastCue: "playerInterrupted",
-      cueCounts: { playerInterrupted: 1 },
+      cueCounts: {
+        playerHit: 1,
+        playerInterrupted: 1,
+      },
     });
 
     audio.dispose();

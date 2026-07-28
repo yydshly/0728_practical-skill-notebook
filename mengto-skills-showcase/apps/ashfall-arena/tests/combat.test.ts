@@ -688,6 +688,72 @@ describe("authoritative oathblade combat", () => {
       },
     ]);
   });
+
+  it("preserves a nonfatal melee hit when recovery is cancelled by dodge", () => {
+    const initial = withEnemy(createInitialState(308), {
+      ...enemyAhead(),
+      health: 100,
+      maxHealth: 100,
+    });
+    const result = runTicks(
+      initial,
+      new Map([
+        [0, { attackPressed: true }],
+        [22, { dodgePressed: true }],
+      ]),
+      24,
+    );
+
+    expect(
+      result.events.filter(({ type }) => type === "damage"),
+    ).toHaveLength(1);
+    expect(eventsNamed(result.events, "attack-resolved")).toEqual([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "oathblade-light-1",
+        attackId: "player:0:0",
+        result: "hit",
+      },
+    ]);
+  });
+
+  it("resolves one hit after a multi-target contact even when recovery is cancelled", () => {
+    const initial = createInitialState(309);
+    initial.enemies = {
+      "enemy-a": {
+        ...enemyAhead("enemy-a", { x: -0.3, y: -7.7 }),
+        health: 100,
+        maxHealth: 100,
+      },
+      "enemy-b": {
+        ...enemyAhead("enemy-b", { x: 0.3, y: -7.7 }),
+        health: 100,
+        maxHealth: 100,
+      },
+    };
+    const result = runTicks(
+      initial,
+      new Map([
+        [0, { attackPressed: true }],
+        [22, { dodgePressed: true }],
+      ]),
+      24,
+    );
+
+    expect(
+      result.events.filter(({ type }) => type === "damage"),
+    ).toHaveLength(2);
+    expect(eventsNamed(result.events, "attack-resolved")).toEqual([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "oathblade-light-1",
+        attackId: "player:0:0",
+        result: "hit",
+      },
+    ]);
+  });
 });
 
 describe("authoritative ember bow projectile", () => {
@@ -1508,6 +1574,43 @@ describe("incoming damage, guard, dodge, and death", () => {
     ]);
   });
 
+  it.each([
+    ["damage", 100, "playing"],
+    ["defeated", 1, "defeated"],
+  ] as const)(
+    "preserves an earlier melee hit when the player is later %s",
+    (_case, playerHealth, expectedStatus) => {
+      const contacted = runTicks(
+        withEnemy(createInitialState(13), {
+          ...enemyAhead(),
+          health: 100,
+          maxHealth: 100,
+        }),
+        new Map([[0, { attackPressed: true }]]),
+        15,
+      ).state;
+      contacted.player.health = playerHealth;
+
+      const result = applyIncomingDamage(
+        contacted,
+        incomingHit({ damage: 20 }),
+        false,
+        arenaContent,
+      );
+
+      expect(result.state.status).toBe(expectedStatus);
+      expect(eventsNamed(result.events, "attack-resolved")).toEqual([
+        {
+          type: "attack-resolved",
+          actorId: "player",
+          actionId: "oathblade-light-1",
+          attackId: "player:0:0",
+          result: "hit",
+        },
+      ]);
+    },
+  );
+
   it("keeps an invulnerable dodge and every frozen game status unchanged", () => {
     const dodging = createInitialState(1);
     dodging.player.action = "dodge";
@@ -2012,6 +2115,83 @@ describe("combat state integration", () => {
     },
   );
 
+  it("keeps the fatal last-enemy contact as hit when it opens the phase boundary", () => {
+    const initial = createInitialState(83);
+    initial.encounter = {
+      ...initial.encounter,
+      phase: "wave-one",
+      completedIds: [
+        "wave-one-crawler-a",
+        "wave-one-crawler-b",
+      ],
+    };
+    initial.enemies = {
+      "wave-one-warden": {
+        ...enemyAhead("wave-one-warden"),
+        health: 18,
+        maxHealth: 18,
+      },
+    };
+
+    const result = runTicks(
+      initial,
+      new Map([[0, { attackPressed: true }]]),
+      20,
+    );
+
+    expect(result.state.status).toBe("upgrade");
+    expect(result.state.combat.activeAttack).toBeNull();
+    expect(eventsNamed(result.events, "attack-resolved")).toEqual([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "oathblade-light-1",
+        attackId: "player:0:0",
+        result: "hit",
+      },
+    ]);
+  });
+
+  it("preserves an earlier melee hit when a later phase reset clears recovery", () => {
+    const contacted = runTicks(
+      withEnemy(createInitialState(84), {
+        ...enemyAhead(),
+        health: 100,
+        maxHealth: 100,
+      }),
+      new Map([[0, { attackPressed: true }]]),
+      15,
+    ).state;
+    const boundary = {
+      ...contacted,
+      encounter: {
+        ...contacted.encounter,
+        phase: "wave-one" as const,
+        completedIds: [
+          "wave-one-crawler-a",
+          "wave-one-crawler-b",
+          "wave-one-warden",
+        ],
+      },
+    };
+
+    const result = settleAuthoritativeResult({
+      state: boundary,
+      events: [],
+    });
+
+    expect(result.state.status).toBe("upgrade");
+    expect(eventsNamed(result.events, "attack-resolved")).toEqual([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "oathblade-light-1",
+        attackId: "player:0:0",
+        result: "hit",
+      },
+    ]);
+  });
+
   it.each([
     ["wave-one", "upgrade"],
     ["boss", "complete"],
@@ -2143,6 +2323,34 @@ describe("combat state integration", () => {
       ["attack-resolved", "player:0:0", "interrupted"],
       ["action-started", "player:40:1", "oathblade-light-1"],
       ["attack-resolved", "player:40:1", "miss"],
+    ]);
+  });
+
+  it("replays the same hit-preserving recovery cancellation", () => {
+    const run = () =>
+      runTicks(
+        withEnemy(createInitialState(910), {
+          ...enemyAhead(),
+          health: 100,
+          maxHealth: 100,
+        }),
+        new Map([
+          [0, { attackPressed: true }],
+          [22, { dodgePressed: true }],
+        ]),
+        24,
+      );
+
+    const first = run();
+    expect(first).toEqual(run());
+    expect(eventsNamed(first.events, "attack-resolved")).toEqual([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "oathblade-light-1",
+        attackId: "player:0:0",
+        result: "hit",
+      },
     ]);
   });
 });
