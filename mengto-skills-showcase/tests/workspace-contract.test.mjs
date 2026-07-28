@@ -23,4 +23,22 @@ describe("showcase workspace", () => {
     expect(manifest.name).toBe(name);
     expect(manifest.private).toBe(true);
   });
+
+  it("records exactly the approved skills with unique names and source paths", async () => {
+    const selection = await readJson("../config/selected-skills.json");
+    expect(selection.skills).toHaveLength(16);
+    expect(new Set(selection.skills.map((skill) => skill.name)).size).toBe(16);
+    for (const skill of selection.skills) {
+      expect(skill.sourcePath).toBe(`agent-skills/game-development/${skill.name}`);
+      expect(skill.products.length).toBeGreaterThan(0);
+      expect(skill.phases.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("pins the upstream repository to a full commit SHA", async () => {
+    const lock = await readJson("../config/skill-source-lock.json");
+    expect(lock.repository).toBe("https://github.com/MengTo/Skills.git");
+    expect(lock.branch).toBe("main");
+    expect(lock.commit).toMatch(/^[0-9a-f]{40}$/);
+  });
 });

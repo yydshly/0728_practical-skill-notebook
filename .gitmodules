@@ -1,0 +1,3 @@
+[submodule "mengto-skills-showcase/skills-source/MengTo-Skills"]
+	path = mengto-skills-showcase/skills-source/MengTo-Skills
+	url = https://github.com/MengTo/Skills.git
