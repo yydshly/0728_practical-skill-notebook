@@ -62,6 +62,7 @@ export function createStage({
   root,
   stage,
   reducedMotion = false,
+  onFrame = null,
   requestFrame = window.requestAnimationFrame.bind(window),
   cancelFrame = window.cancelAnimationFrame.bind(window),
 }) {
@@ -100,7 +101,9 @@ export function createStage({
       y: reducedMotion ? 0 : lerp(renderedPointer.y, pointerTarget.y, 0.09),
     };
 
-    writeFrame(root, deriveSceneFrame(renderedProgress, renderedPointer));
+    const frame = deriveSceneFrame(renderedProgress, renderedPointer);
+    writeFrame(root, frame);
+    onFrame?.(frame);
 
     const progressDelta = Math.abs(targetProgress - renderedProgress);
     const pointerDelta = Math.max(

@@ -146,6 +146,18 @@ button { color: inherit; }
 .world { filter: saturate(calc(1 - var(--focus) * 0.08)); }
 .world img { filter: blur(calc(var(--focus) * 2px)); }
 
+#signal-veil {
+  position: absolute;
+  z-index: 12;
+  top: 12%;
+  right: clamp(0.75rem, 2vw, 2rem);
+  width: min(42vw, 34rem);
+  height: min(62vh, 38rem);
+  opacity: 0;
+  filter: drop-shadow(0 0 9px rgb(255 218 142 / 0.35));
+  transition: opacity 180ms ease;
+}
+
 .narrative-copy, .narrative-panel, .route-archive { position: absolute; z-index: 24; }
 
 .intro-copy { top: 50%; left: var(--edge); max-width: min(32rem, calc(100vw - 2 * var(--edge))); transform: translateY(-44%); opacity: var(--intro-opacity); }
@@ -206,6 +218,7 @@ h2 { font-size: clamp(2.2rem, 5.6vw, 5.5rem); }
   .archive-controls { grid-column: 1; }
   [data-layer="foreground-left"] { transform: translate3d(calc(var(--fg-left-x) * 0.45), 0, 0) scale(calc(var(--world-scale) * 1.07)); }
   [data-layer="foreground-right"] { transform: translate3d(calc(var(--fg-right-x) * 0.45), 0, 0) scale(calc(var(--world-scale) * 1.07)); }
+  #signal-veil { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -219,4 +232,5 @@ h2 { font-size: clamp(2.2rem, 5.6vw, 5.5rem); }
   .narrative-panel { border-left: 0; }
   .route-archive { display: block; }
   .archive-controls { display: flex; margin-top: 1rem; opacity: 1; }
+  #signal-veil { display: none; }
 }

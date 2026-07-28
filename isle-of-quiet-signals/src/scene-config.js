@@ -12,6 +12,22 @@ export const SCENE = Object.freeze({
   }),
 });
 
+export const SIGNAL_VEIL = Object.freeze({
+  start: 0.5,
+  peakStart: 0.54,
+  peakEnd: 0.64,
+  end: 0.69,
+  lines: Object.freeze([
+    "... --- ...",
+    "N 31 DEG",
+    "1912",
+    "TIDAL GARDEN",
+    "ECHO BAY",
+    "KEEPER LOG",
+    "NORTH WIND",
+  ]),
+});
+
 export const NAV_POINTS = Object.freeze([
   { id: "lighthouse", label: "灯塔", progress: 0 },
   { id: "signal", label: "信号", progress: 0.5 },

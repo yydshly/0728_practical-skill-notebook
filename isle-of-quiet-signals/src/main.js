@@ -1,8 +1,9 @@
-import { NAV_POINTS, ROUTES, SCENE } from "./scene-config.js";
+import { NAV_POINTS, ROUTES, SCENE, SIGNAL_VEIL } from "./scene-config.js";
 import { waitForCriticalImages } from "./assets.js";
 import { createStage } from "./stage.js";
 import { createRouteArchive } from "./route-archive.js";
 import { createTimelineNavigation } from "./navigation.js";
+import { createSignalVeil } from "./signal-veil.js";
 
 export async function initApp(documentRef = document) {
   documentRef.documentElement.style.setProperty("--scroll-length", `${SCENE.scrollLength}px`);
@@ -12,13 +13,29 @@ export async function initApp(documentRef = document) {
   const motionQuery = window.matchMedia?.("(prefers-reduced-motion: reduce)");
   let stageController = null;
   let navigationController = null;
+  let signalVeil = null;
   const archiveRoot = documentRef.querySelector("#route-archive");
   const archiveController = archiveRoot ? createRouteArchive({ root: archiveRoot, routes: ROUTES }) : null;
+  const signalVeilCanvas = documentRef.querySelector("#signal-veil");
 
   function createControllers(reducedMotion) {
     stageController?.destroy();
     navigationController?.destroy();
-    stageController = createStage({ root, stage, reducedMotion });
+    signalVeil?.destroy();
+    signalVeil = signalVeilCanvas
+      ? createSignalVeil({
+        canvas: signalVeilCanvas,
+        lines: SIGNAL_VEIL.lines,
+        range: SIGNAL_VEIL,
+        reducedMotion,
+      })
+      : null;
+    stageController = createStage({
+      root,
+      stage,
+      reducedMotion,
+      onFrame: (frame) => signalVeil?.setProgress(frame.p),
+    });
     stageController.start();
     navigationController = createTimelineNavigation({
       nav: documentRef.querySelector("#site-nav"),
@@ -50,6 +67,7 @@ export async function initApp(documentRef = document) {
     destroy: () => {
       stageController?.destroy();
       navigationController?.destroy();
+      signalVeil?.destroy();
       archiveController?.destroy();
       motionQuery?.removeEventListener?.("change", onMotionChange);
     },
