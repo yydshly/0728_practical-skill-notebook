@@ -8,6 +8,9 @@ import { getCharacterProfile, getGaitPose } from '../src/character-motion.js';
 import { createHumanoid, createMutant, createResident } from '../src/characters.js';
 import { createPlayer } from '../src/player.js';
 import { createPursuer } from '../src/pursuer.js';
+import { createVillage } from '../src/level.js';
+import { resolveCircleMove } from '../src/collision.js';
+import { nearestInteraction } from '../src/interactions.js';
 
 test('third-person pose starts above ground and behind its target', () => {
   const pose = computeThirdPersonPose({
@@ -137,4 +140,97 @@ test('mutant pose clears hide transforms before applying asymmetry', () => {
   assert.equal(rig.root.getObjectByName('rightElbow').rotation.x, 0);
   assert.equal(rig.root.getObjectByName('leftShoulder').rotation.z, 0.28);
   assert.equal(rig.root.getObjectByName('rightShoulder').rotation.z, -0.08);
+});
+
+test('circle movement stops outside a house collider', () => {
+  const next = resolveCircleMove(
+    { x: 0, z: 0 },
+    { x: 1.3, z: 0 },
+    0.4,
+    { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+    [{ x: 2, z: 0, halfX: 0.5, halfZ: 2 }],
+  );
+  assert.equal(next.x, 0);
+  assert.equal(next.z, 0);
+});
+
+test('interaction selects only a nearby candidate', () => {
+  const candidates = [
+    { id: 'radio', position: { x: 1, z: 1 } },
+    { id: 'flashlight', position: { x: 8, z: 8 } },
+  ];
+  assert.equal(nearestInteraction({ x: 0, z: 0 }, candidates, 2)?.id, 'radio');
+  assert.equal(nearestInteraction({ x: -6, z: -6 }, candidates, 2), null);
+});
+
+test('player movement uses village colliders', () => {
+  const player = createPlayer(
+    new THREE.Scene(),
+    new THREE.Vector3(),
+    [{ x: 2, z: 0, halfX: 0.5, halfZ: 2 }],
+  );
+  player.moveDirect(
+    1.3,
+    0,
+    { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+  );
+  assert.equal(player.position.x, 0);
+  assert.equal(player.position.z, 0);
+});
+
+test('village interaction anchors expose stable flat metadata', () => {
+  const village = createVillage(new THREE.Scene());
+  assert.equal(Array.isArray(village.interactionAnchors), true);
+  assert.deepEqual(
+    village.interactionAnchors.map(({ id }) => id),
+    ['radio', 'neighbour', 'flashlight'],
+  );
+  for (const anchor of village.interactionAnchors) {
+    assert.equal(anchor.kind, anchor.id);
+    assert.equal(typeof anchor.label, 'string');
+    assert.ok(anchor.label.length > 0);
+    assert.ok(anchor.position instanceof THREE.Vector3);
+    assert.equal(anchor.position.y, 0);
+  }
+});
+
+test('critical village route anchors have player-radius collider clearance', () => {
+  const village = createVillage(new THREE.Scene());
+  const routeAnchors = [
+    { id: 'player_home', position: village.anchors.player_home },
+    ...village.interactionAnchors,
+  ];
+
+  for (const anchor of routeAnchors) {
+    const blocked = village.colliders.some((box) => {
+      const closestX = Math.max(
+        box.x - box.halfX,
+        Math.min(anchor.position.x, box.x + box.halfX),
+      );
+      const closestZ = Math.max(
+        box.z - box.halfZ,
+        Math.min(anchor.position.z, box.z + box.halfZ),
+      );
+      return (anchor.position.x - closestX) ** 2
+        + (anchor.position.z - closestZ) ** 2 < 0.42 ** 2;
+    });
+    assert.equal(blocked, false, `${anchor.id} must remain reachable`);
+  }
+});
+
+test('critical building walls retain solid village collision', () => {
+  const village = createVillage(new THREE.Scene());
+  for (const id of ['home_body', 'courtyard_body', 'barn_body']) {
+    assert.ok(village.colliders.some((collider) => collider.id === id), `missing ${id}`);
+  }
+
+  const home = village.colliders.find((collider) => collider.id === 'home_body');
+  const startX = home.x + home.halfX + 0.5;
+  const player = createPlayer(
+    new THREE.Scene(),
+    new THREE.Vector3(startX, 0, home.z),
+    village.colliders,
+  );
+  player.moveDirect(-0.2, 0, village.bounds);
+  assert.equal(player.position.x, startX);
 });

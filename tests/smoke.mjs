@@ -44,6 +44,17 @@ try {
     throw new Error('Expected debug player movement to change position');
   }
 
+  const wallMove = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    game.setPlayerForTest(-6.3, 28);
+    const before = game.player.position.toArray();
+    game.moveForTest(-0.2, 0);
+    return { before, after: game.player.position.toArray() };
+  });
+  if (Math.abs(wallMove.after[0] - wallMove.before[0]) > 0.001) {
+    throw new Error('Expected protagonist home wall to block player movement');
+  }
+
   await page.evaluate(() => window.__RURAL_ESCAPE__.setCameraMode('first-person'));
   const cameraMode = await page.evaluate(() => window.__RURAL_ESCAPE__.camera.mode);
   if (cameraMode !== 'first-person') throw new Error(`Expected first-person camera, got ${cameraMode}`);
@@ -61,10 +72,26 @@ try {
   if (hudState.titleHidden !== 'true') throw new Error('Expected chapter title to leave the main view');
   if (!hudState.interactionHidden) throw new Error('Expected interaction prompt to start hidden');
 
-  const objectiveAfterRadio = await page.evaluate(() => {
-    window.__RURAL_ESCAPE__.interactForTest('radio');
-    return window.__RURAL_ESCAPE__.story.objective;
-  });
+  await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(10.4, 24.4));
+  const farPromptHidden = await page.evaluate(() => document.querySelector('#interaction').hidden);
+  if (!farPromptHidden) throw new Error('Expected wrong-objective interaction prompt to stay hidden');
+
+  await page.keyboard.press('KeyE');
+  const objectiveAfterFarKey = await page.evaluate(() => window.__RURAL_ESCAPE__.story.objective);
+  if (objectiveAfterFarKey !== 'leave_home') {
+    throw new Error(`Expected distant KeyE to leave objective unchanged, got ${objectiveAfterFarKey}`);
+  }
+
+  await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-8.99, 32.8));
+  const outsideRadiusHidden = await page.evaluate(() => document.querySelector('#interaction').hidden);
+  if (!outsideRadiusHidden) throw new Error('Expected interaction prompt beyond radius 2.2 to stay hidden');
+
+  await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-9, 32.8));
+  const nearPromptVisible = await page.evaluate(() => !document.querySelector('#interaction').hidden);
+  if (!nearPromptVisible) throw new Error('Expected interaction prompt at radius 2.2 from the radio');
+
+  await page.keyboard.press('KeyE');
+  const objectiveAfterRadio = await page.evaluate(() => window.__RURAL_ESCAPE__.story.objective);
   if (objectiveAfterRadio !== 'visit_courtyard') {
     throw new Error(`Expected radio to advance objective to visit_courtyard, got ${objectiveAfterRadio}`);
   }
@@ -76,10 +103,25 @@ try {
   });
   if (pursuerState !== 'chase') throw new Error(`Expected pursuer chase state, got ${pursuerState}`);
 
+  await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-11.2, 32.8));
+  const oldObjectivePromptHidden = await page.evaluate(() => document.querySelector('#interaction').hidden);
+  if (!oldObjectivePromptHidden) throw new Error('Expected completed radio prompt to stay hidden');
+
+  await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(10.4, 24.4));
+  const neighbourPromptVisible = await page.evaluate(() => !document.querySelector('#interaction').hidden);
+  if (!neighbourPromptVisible) throw new Error('Expected neighbour interaction prompt');
+  await page.keyboard.press('KeyE');
+  const objectiveAfterNeighbour = await page.evaluate(() => window.__RURAL_ESCAPE__.story.objective);
+  if (objectiveAfterNeighbour !== 'reach_granary') {
+    throw new Error(`Expected neighbour to advance objective to reach_granary, got ${objectiveAfterNeighbour}`);
+  }
+
+  await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(13.2, -4.6));
+  const flashlightPromptVisible = await page.evaluate(() => !document.querySelector('#interaction').hidden);
+  if (!flashlightPromptVisible) throw new Error('Expected flashlight interaction prompt');
+  await page.keyboard.press('KeyE');
+
   const flashlightSubtitle = await page.evaluate(() => {
-    const game = window.__RURAL_ESCAPE__;
-    game.interactForTest('neighbour');
-    game.interactForTest('flashlight');
     return document.querySelector('#subtitle').textContent;
   });
   const expectedFlashlightSubtitle = '手电亮起的一刻，主路尽头传来了一声不像人类的喘息。';

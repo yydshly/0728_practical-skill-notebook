@@ -8,6 +8,7 @@ import { createStoryDirector } from './story.js';
 import { createPursuer } from './pursuer.js';
 import { createAtmosphere } from './atmosphere.js';
 import { createGameUi } from './ui.js';
+import { nearestInteraction } from './interactions.js';
 
 const canvas = document.querySelector('#game');
 const shell = document.querySelector('.game-shell');
@@ -25,9 +26,9 @@ const atmosphere = createAtmosphere(scene, renderer);
 
 const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 120);
 const village = createVillage(scene);
-const player = createPlayer(scene, village.anchors.player_home);
+const player = createPlayer(scene, village.anchors.player_home, village.colliders);
 const cameraController = createCameraController(camera, player, { occluders: village.cameraOccluders, groundY: 0 });
-createResident(scene, village.anchors.courtyard.clone().add(new THREE.Vector3(1.3, 0, 1.8)), 'neighbour');
+createResident(scene, village.anchors.neighbour, 'neighbour');
 createResident(scene, village.anchors.granary.clone().add(new THREE.Vector3(-1.5, 0, 1.4)), 'barn_resident');
 const ui = createGameUi({ shell, title, objective, subtitle, interaction });
 const storyDirector = createStoryDirector({ ui });
@@ -41,6 +42,23 @@ const state = {
   chapter: 'home',
   cameraMode: 'third-person',
 };
+
+const allowedKinds = {
+  leave_home: ['radio'],
+  visit_courtyard: ['neighbour'],
+  reach_granary: ['flashlight'],
+};
+let nearbyInteraction = null;
+
+function updateInteraction() {
+  const allowed = new Set(allowedKinds[storyDirector.story.objective] ?? []);
+  nearbyInteraction = nearestInteraction(
+    player.position,
+    village.interactionAnchors.filter((candidate) => allowed.has(candidate.kind)),
+    2.2,
+  );
+  ui.showInteraction(nearbyInteraction?.label ?? null);
+}
 
 function setCameraMode(mode) {
   cameraController.setMode(mode);
@@ -74,11 +92,9 @@ function setKey(event, pressed) {
 addEventListener('keydown', (event) => {
   setKey(event, true);
   if (event.code === 'KeyC' && !event.repeat) setCameraMode(cameraController.mode === 'third-person' ? 'first-person' : 'third-person');
-  if (event.code === 'KeyE' && !event.repeat) {
-    const interaction = storyDirector.story.objective === 'leave_home' ? 'radio'
-      : storyDirector.story.objective === 'visit_courtyard' ? 'neighbour'
-        : 'flashlight';
-    storyDirector.interact(interaction);
+  if (event.code === 'KeyE' && !event.repeat && nearbyInteraction) {
+    storyDirector.interact(nearbyInteraction.kind);
+    updateInteraction();
   }
 });
 addEventListener('keyup', (event) => setKey(event, false));
@@ -92,6 +108,7 @@ function frame(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
   player.update(dt, input, village.bounds, cameraController.yaw);
+  updateInteraction();
   pursuer.update(dt, player);
   storyDirector.update(player, village.zones.south_gate_exit);
   cameraController.update(dt);
@@ -123,6 +140,7 @@ window.__RURAL_ESCAPE__ = {
   setPlayerForTest(x, z) {
     player.position.set(x, 0, z);
     cameraController.update();
+    updateInteraction();
   },
   updatePursuerForTest(dt) { pursuer.update(dt, player); },
   updateStoryForTest() { storyDirector.update(player, village.zones.south_gate_exit); },

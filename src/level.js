@@ -4,6 +4,13 @@ import { createMaterials } from './world/materials.js';
 import { buildStructure } from './world/buildings.js';
 import { addLantern, addPropCluster } from './world/props.js';
 
+const ROUTE_ANCHOR_POSITIONS = {
+  player_home: [-8, 0, 33],
+  radio: [-11.2, 0, 32.8],
+  neighbour: [10.4, 0, 24.4],
+  flashlight: [13.2, 0, -4.6],
+};
+
 function flatPolygon(points, material, y = 0.012) {
   const shape = new THREE.Shape();
   shape.moveTo(points[0][0], points[0][1]);
@@ -57,6 +64,9 @@ export function createVillage(scene) {
   }
 
   const anchors = runtimeAnchors(VILLAGE_LAYOUT.anchors);
+  for (const [id, position] of Object.entries(ROUTE_ANCHOR_POSITIONS)) {
+    anchors[id].set(...position);
+  }
   const colliders = [
     ...VILLAGE_LAYOUT.colliders.map((collider) => ({ ...collider })),
     { id: 'home_fence', x: -7, z: 29, halfX: 2.6, halfZ: 0.18 },
@@ -72,10 +82,25 @@ export function createVillage(scene) {
     colliders,
     navNodes: VILLAGE_LAYOUT.navNodes.map((position) => new THREE.Vector3(...position)),
     cameraOccluders,
-    interactionAnchors: {
-      radio: anchors.radio,
-      neighbour: anchors.neighbour,
-      flashlight: anchors.flashlight,
-    },
+    interactionAnchors: [
+      {
+        id: 'radio',
+        label: '调查收音机',
+        kind: 'radio',
+        position: anchors.radio,
+      },
+      {
+        id: 'neighbour',
+        label: '询问邻居',
+        kind: 'neighbour',
+        position: anchors.neighbour,
+      },
+      {
+        id: 'flashlight',
+        label: '拾取手电筒',
+        kind: 'flashlight',
+        position: anchors.flashlight,
+      },
+    ],
   };
 }

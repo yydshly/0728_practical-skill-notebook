@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { createHumanoid } from './characters.js';
+import { resolveCircleMove } from './collision.js';
 
-export function createPlayer(scene, spawn) {
+export function createPlayer(scene, spawn, colliders = []) {
   const rig = createHumanoid(scene, spawn, { kind: 'player', name: 'player' });
   const object = rig.root;
   const move = new THREE.Vector3();
@@ -12,8 +13,15 @@ export function createPlayer(scene, spawn) {
     object,
     get position() { return object.position; },
     moveDirect(x, z, bounds) {
-      object.position.x = THREE.MathUtils.clamp(object.position.x + x, bounds.minX, bounds.maxX);
-      object.position.z = THREE.MathUtils.clamp(object.position.z + z, bounds.minZ, bounds.maxZ);
+      const next = resolveCircleMove(
+        object.position,
+        { x, z },
+        0.42,
+        bounds,
+        colliders,
+      );
+      object.position.x = next.x;
+      object.position.z = next.z;
       if (Math.abs(x) + Math.abs(z) > 0.001) object.rotation.y = Math.atan2(x, z);
     },
     update(dt, input, bounds, yaw) {
