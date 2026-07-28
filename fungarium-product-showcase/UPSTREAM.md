@@ -1,12 +1,22 @@
-# Upstream provenance
+# 上游来源与使用边界
 
-This application records [nesdesignco/fungarium](https://github.com/nesdesignco/fungarium)
-at commit `a139bd08fc64cf0be76bd1dae447da6848d89899` as provenance only. It is
-not an npm dependency and is not included as a submodule or nested repository.
+本项目记录的上游来源是
+[nesdesignco/fungarium](https://github.com/nesdesignco/fungarium)，固定参考提交为
+`a139bd08fc64cf0be76bd1dae447da6848d89899`。
 
-The upstream project's MIT license applies to its source code. This standalone
-project preserves that notice in [LICENSE](./LICENSE).
+这里借鉴的是它作为完整三维应用所呈现的交互组织方式：展架上的条目选择、被选中条目的
+舞台聚焦、镜头视角切换，以及 WebGPU 优先、WebGL 兼容的渲染思路。当前目录不是其 npm
+依赖、Git 子模块或嵌入式副本；展厅的 React 代码、能力配置和程序化几何均在本目录中为本仓库
+案例重新编写。
 
-Do not copy or redistribute third-party GLB/3D model assets or PBR texture
-assets bundled by the upstream project. Those assets remain outside this
-project and retain their own licenses.
+上游源代码采用 MIT 许可，原始 MIT 许可文本已不作改动地保留在
+[LICENSE](./LICENSE) 中。
+
+## 模型与材质
+
+上游仓库中随附的第三方模型和 PBR 材质仍各自受其许可证约束。**third-party GLB/PBR assets are not copied**：
+本项目没有复制、打包或再分发上游的第三方 GLB、3D 模型或 PBR 纹理，也不应将本项目的程序化
+展品误认为这些资产的替代许可。
+
+因此，这个展厅可以作为“如何把现有能力组织成客户可操作说明”的探索样例；它不表示与上游作者
+存在商业合作，也不构成对任何客户项目、资产授权或交付效果的声明。
