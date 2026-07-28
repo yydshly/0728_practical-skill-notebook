@@ -795,7 +795,7 @@ describe("bounded enemy decisions", () => {
 });
 
 describe("authoritative enemy combat", () => {
-  it("announces the Boss summon only when its telegraph commits to active", () => {
+  it("announces the Boss summon on its first active tick and only once", () => {
     const base = createEncounterFixture(64, "boss");
     const requested = requestEnemyMove(
       {
@@ -829,22 +829,141 @@ describe("authoritative enemy combat", () => {
       movePhase: "active",
       moveElapsedTicks: 0,
     });
-    expect(committed.events).toEqual([{
+    expect(committed.events).toEqual([]);
+
+    const next = stepEnemyCombat(
+      committed.state,
+      neutralIntent,
+      [],
+      arenaContent,
+    );
+    expect(next.events).toEqual([{
       type: "enemy-move-active",
       enemyId: requested.id,
       moveId: "sovereign-summon",
       attackId: "boss-sovereign:sovereign-summon:1",
     }]);
-
-    const next = stepEnemyCombat(
-      committed.state,
+    const later = stepEnemyCombat(
+      next.state,
       neutralIntent,
-      committed.events,
+      [],
       arenaContent,
     );
-    expect(next.events.filter(
+    expect(later.events.filter(
       (event) => event.type === "enemy-move-active",
-    )).toHaveLength(1);
+    )).toEqual([]);
+  });
+
+  it.each([
+    ["glass-crawler", "crawler-lunge"],
+    ["ash-warden", "warden-bolt"],
+    ["bell-elite", "elite-sweep"],
+    ["bell-sovereign", "sovereign-sweep"],
+    ["bell-sovereign", "sovereign-shockwave"],
+    ["bell-sovereign", "sovereign-summon"],
+  ] as const)(
+    "publishes %s move %s exactly once on the first serialized active tick",
+    (kind, moveId) => {
+      const requested = requestEnemyMove(
+        createEncounterEnemy("presented-enemy", kind, { x: 0, y: 6 }, {
+          aiEnabled: false,
+        }),
+        moveId,
+        9,
+      );
+      const active = {
+        ...requested,
+        intent: "attack" as const,
+        action: "attack" as const,
+        movePhase: "active" as const,
+        moveElapsedTicks: 0,
+      };
+      const state = createInitialForEnemy(active, { x: 0, y: -9 });
+      const snapshot = structuredClone(state);
+
+      const first = stepEnemyCombat(
+        state,
+        neutralIntent,
+        [],
+        arenaContent,
+      );
+      const replay = stepEnemyCombat(
+        structuredClone(snapshot),
+        neutralIntent,
+        [],
+        arenaContent,
+      );
+      const later = stepEnemyCombat(
+        JSON.parse(JSON.stringify(first.state)) as GameState,
+        neutralIntent,
+        [],
+        arenaContent,
+      );
+
+      expect(state).toEqual(snapshot);
+      expect(first).toEqual(replay);
+      expect(
+        first.events.filter(
+          (event) => event.type === "enemy-move-active",
+        ),
+      ).toEqual([{
+        type: "enemy-move-active",
+        enemyId: active.id,
+        moveId,
+        attackId: `${active.id}:${moveId}:1`,
+      }]);
+      expect(
+        later.events.filter(
+          (event) => event.type === "enemy-move-active",
+        ),
+      ).toEqual([]);
+    },
+  );
+
+  it("pause and recovery do not repeat an already presented active move", () => {
+    const active = {
+      ...requestEnemyMove(
+        createEncounterEnemy(
+          "boss",
+          "bell-sovereign",
+          { x: 0, y: 6 },
+          { aiEnabled: false },
+        ),
+        "sovereign-shockwave",
+        3,
+      ),
+      intent: "attack" as const,
+      action: "attack" as const,
+      movePhase: "active" as const,
+      moveElapsedTicks: 0,
+    };
+    const state = createInitialForEnemy(active, { x: 0, y: -9 });
+    const presented = stepGame(
+      state,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    );
+    const paused = stepGame(
+      presented.state,
+      { ...neutralIntent, pausePressed: true },
+      1 / 60,
+      arenaContent,
+    );
+    const frozen = stepGame(
+      paused.state,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    );
+
+    expect(
+      presented.events.filter(
+        (event) => event.type === "enemy-move-active",
+      ),
+    ).toHaveLength(1);
+    expect(paused.events).toEqual([]);
+    expect(frozen.events).toEqual([]);
   });
 
   it("telegraphs before applying one stable contact and cannot spam during recovery", () => {
@@ -1064,6 +1183,12 @@ describe("authoritative enemy combat", () => {
       expect(result.state.status).toBe("playing");
       expect(result.events).toEqual([
         {
+          type: "enemy-move-active",
+          enemyId: "training-crawler",
+          moveId: "crawler-lunge",
+          attackId: "training-crawler:crawler-lunge:1",
+        },
+        {
           type: "contact",
           attackerId: "training-crawler",
           targetId: "player",
@@ -1140,6 +1265,12 @@ describe("authoritative enemy combat", () => {
 
     expect(spawned.state.player.health).toBe(state.player.health);
     expect(spawned.events).toEqual([
+      {
+        type: "enemy-move-active",
+        enemyId: "warden-a",
+        moveId: "warden-bolt",
+        attackId: "warden-a:warden-bolt:1",
+      },
       {
         type: "enemy-projectile-spawned",
         projectileId: "warden-a:warden-bolt:1:projectile",
@@ -1227,7 +1358,9 @@ describe("authoritative enemy combat", () => {
       const first = stepEnemyCombat(state, neutralIntent, [], arenaContent);
       const replay = stepEnemyCombat(state, neutralIntent, [], arenaContent);
       const projectile = first.state.combat.enemyProjectiles[0]!;
-      const event = first.events[0] as unknown as {
+      const event = first.events.find(
+        ({ type }) => type === "enemy-projectile-spawned",
+      ) as unknown as {
         type: string;
         projectileId: string;
         position: { x: number; y: number };

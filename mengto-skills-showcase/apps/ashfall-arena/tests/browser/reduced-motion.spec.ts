@@ -244,6 +244,19 @@ test("audio unlocks only after a gesture and mute preserves visual feedback", as
   await expect
     .poll(async () => (await diagnostics(page)).audio.playedCueCount)
     .toBeGreaterThan(cuesBeforeAction);
+  await expect
+    .poll(async () =>
+      page.evaluate(() =>
+        (
+          window as unknown as {
+            __review: {
+              getSerializableState(): { player: { action: string } };
+            };
+          }
+        ).__review.getSerializableState().player.action,
+      ),
+    )
+    .toBe("idle");
 
   await page.getByRole("checkbox", { name: "静音所有声音" }).check();
   await triggerHit(page);

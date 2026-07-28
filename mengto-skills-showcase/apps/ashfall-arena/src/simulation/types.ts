@@ -43,6 +43,13 @@ export type AttackActionId =
   | "oathblade-light-2"
   | "ember-bow-shot";
 export type PlayerActionEventId = AttackActionId | "dodge";
+export type AttackInterruptionReason =
+  | "dodge"
+  | "damage"
+  | "defeated"
+  | "phase-reset"
+  | "terminal-reset"
+  | "action-reset";
 export type AttackPhase = "startup" | "active" | "recovery" | "complete";
 export type EnemyIntent =
   | "observe"
@@ -236,6 +243,19 @@ export interface GameState {
   combat: CombatState;
 }
 
+export type AttackResolvedEvent = {
+  type: "attack-resolved";
+  actorId: string;
+  actionId: AttackActionId;
+  attackId: string;
+} & (
+  | { result: "hit" | "miss" }
+  | {
+      result: "interrupted";
+      reason: AttackInterruptionReason;
+    }
+);
+
 export type GameEvent =
   | {
       type: "action-started";
@@ -244,13 +264,7 @@ export type GameEvent =
       attackId: string;
       tick: number;
     }
-  | {
-      type: "attack-resolved";
-      actorId: string;
-      actionId: AttackActionId;
-      attackId: string;
-      result: "hit" | "miss";
-    }
+  | AttackResolvedEvent
   | {
       type: "contact";
       attackerId: string;

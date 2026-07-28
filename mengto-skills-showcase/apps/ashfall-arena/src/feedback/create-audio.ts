@@ -47,6 +47,10 @@ export const AUDIO_CUES = Object.freeze({
     priority: 3,
     visualEquivalent: "“落空”字幕",
   }),
+  playerInterrupted: Object.freeze({
+    priority: 1,
+    visualEquivalent: "“攻击被打断”字幕与动作中止",
+  }),
   playerHeal: Object.freeze({
     priority: 2,
     visualEquivalent: "生命数值增加与“治疗”字幕",
@@ -72,6 +76,8 @@ export interface AudioDiagnostics {
   readonly blocked: boolean;
   readonly unlocked: boolean;
   readonly contextState: AudioContextState | "not-created" | "unavailable";
+  readonly contextCreateCount: number;
+  readonly closeCount: number;
   readonly voiceCount: number;
   readonly voiceCap: number;
   readonly playedCueCount: number;
@@ -165,6 +171,7 @@ export function createAudioFeedback(options: {
   storage: AudioSettingsStorage | null;
   gestureTarget?: Window;
   visibilityDocument?: Document;
+  contextFactory?: () => AudioContext;
 }): AudioFeedback {
   const gestureTarget =
     options.gestureTarget ??
@@ -173,12 +180,17 @@ export function createAudioFeedback(options: {
     options.visibilityDocument ??
     (typeof document === "undefined" ? null : document);
   const Context = audioContextConstructor();
-  let supported = Context !== null;
+  const createContext =
+    options.contextFactory ??
+    (Context === null ? null : () => new Context());
+  let supported = createContext !== null;
   let blocked = false;
   let unlocked = false;
   let paused = false;
   let disposed = false;
   let playedCueCount = 0;
+  let contextCreateCount = 0;
+  let closeCount = 0;
   let lastCue: AudioCueName | null = null;
   const cueCounts: Record<AudioCueName, number> = {
     playerDamage: 0,
@@ -187,6 +199,7 @@ export function createAudioFeedback(options: {
     playerDodgeStart: 0,
     playerHit: 0,
     playerMiss: 0,
+    playerInterrupted: 0,
     playerHeal: 0,
     enemyTelegraph: 0,
     bossPhase: 0,
@@ -197,6 +210,7 @@ export function createAudioFeedback(options: {
   let masterGain: GainNode | null = null;
   let effectsGain: GainNode | null = null;
   let ambienceGain: GainNode | null = null;
+  let resumePromise: Promise<void> | null = null;
   const voices: Voice[] = [];
 
   const applyGainSettings = () => {
@@ -245,6 +259,22 @@ export function createAudioFeedback(options: {
     });
   };
 
+  const requestResume = () => {
+    if (!context || resumePromise || context.state === "closed") return;
+    const target = context;
+    resumePromise = target.resume().then(() => {
+      if (disposed || context !== target) return;
+      unlocked = true;
+      blocked = false;
+    }).catch(() => {
+      if (disposed || context !== target) return;
+      unlocked = false;
+      blocked = true;
+    }).finally(() => {
+      resumePromise = null;
+    });
+  };
+
   const resumeIfAllowed = () => {
     if (
       !context ||
@@ -255,35 +285,31 @@ export function createAudioFeedback(options: {
     ) {
       return;
     }
-    void context.resume().catch(() => {
-      blocked = true;
-    });
+    requestResume();
   };
 
   const unlockFromGesture = (event: Event) => {
     if (
       disposed ||
-      unlocked ||
       !event.isTrusted ||
-      Context === null
+      createContext === null ||
+      (unlocked && context?.state === "running")
     ) {
       return;
     }
     try {
-      context = new Context();
-      masterGain = context.createGain();
-      effectsGain = context.createGain();
-      ambienceGain = context.createGain();
-      effectsGain.connect(masterGain);
-      ambienceGain.connect(masterGain);
-      masterGain.connect(context.destination);
-      applyGainSettings();
-      void context.resume().then(() => {
-        if (disposed) return;
-        unlocked = true;
-      }).catch(() => {
-        blocked = true;
-      });
+      if (context === null) {
+        context = createContext();
+        contextCreateCount += 1;
+        masterGain = context.createGain();
+        effectsGain = context.createGain();
+        ambienceGain = context.createGain();
+        effectsGain.connect(masterGain);
+        ambienceGain.connect(masterGain);
+        masterGain.connect(context.destination);
+        applyGainSettings();
+      }
+      requestResume();
     } catch {
       supported = false;
       blocked = true;
@@ -402,10 +428,26 @@ export function createAudioFeedback(options: {
         event.actorId === state.player.id
       ) {
         playCue(
-          event.result === "hit" ? "playerHit" : "playerMiss",
-          event.result === "hit" ? 340 : 145,
-          event.result === "hit" ? 0.1 : 0.16,
-          event.result === "hit" ? 0.09 : 0.06,
+          event.result === "hit"
+            ? "playerHit"
+            : event.result === "interrupted"
+              ? "playerInterrupted"
+              : "playerMiss",
+          event.result === "hit"
+            ? 340
+            : event.result === "interrupted"
+              ? 92
+              : 145,
+          event.result === "hit"
+            ? 0.1
+            : event.result === "interrupted"
+              ? 0.2
+              : 0.16,
+          event.result === "hit"
+            ? 0.09
+            : event.result === "interrupted"
+              ? 0.11
+              : 0.06,
         );
       } else if (
         event.type === "healed" &&
@@ -459,6 +501,8 @@ export function createAudioFeedback(options: {
       blocked,
       unlocked,
       contextState: context?.state ?? (supported ? "not-created" : "unavailable"),
+      contextCreateCount,
+      closeCount,
       voiceCount: voices.length,
       voiceCap: MAX_VOICES,
       playedCueCount,
@@ -481,6 +525,7 @@ export function createAudioFeedback(options: {
       visibilityDocument?.removeEventListener("visibilitychange", onVisibility);
       stopAllVoices();
       if (context) {
+        closeCount += 1;
         void context.close().catch(() => {
           blocked = true;
         });

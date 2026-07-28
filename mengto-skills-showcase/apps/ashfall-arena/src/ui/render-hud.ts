@@ -1,6 +1,7 @@
 import type { AudioSettings } from "../feedback/create-audio";
 import type { InputDeviceMode } from "../input/create-input-adapter";
 import type {
+  AttackResolvedEvent,
   EnemyKind,
   EnemyMoveId,
   GameEvent,
@@ -50,6 +51,15 @@ export const formatEnemyLabel = (kind: string): string =>
 
 export const formatMoveLabel = (moveId: string): string =>
   (MOVE_LABELS as Record<string, string>)[moveId] ?? "未知招式";
+
+export const formatAttackResolutionCaption = (
+  result: AttackResolvedEvent["result"],
+): string =>
+  result === "hit"
+    ? "命中：攻击已结算"
+    : result === "interrupted"
+      ? "攻击被打断"
+      : "落空：未命中目标";
 
 export const formatTelegraphLabel = (
   kind: string,
@@ -279,10 +289,12 @@ export function createHudController(
         event.actorId === state.player.id
       ) {
         setCaption(
+          formatAttackResolutionCaption(event.result),
           event.result === "hit"
-            ? "命中：攻击已结算"
-            : "落空：未命中目标",
-          event.result === "hit" ? 0.8 : 1,
+            ? 0.8
+            : event.result === "interrupted"
+              ? 1.15
+              : 1,
         );
       } else if (
         event.type === "damage" &&

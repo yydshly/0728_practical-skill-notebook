@@ -2,6 +2,7 @@ import { Scene } from "three";
 import { describe, expect, it } from "vitest";
 import { createVfx } from "../src/feedback/create-vfx";
 import { createInitialState } from "../src/simulation/create-initial-state";
+import { createEncounterEnemy } from "../src/simulation/encounters";
 import type { GameEvent } from "../src/simulation/types";
 
 const playerDamage = (index: number): GameEvent => ({
@@ -149,6 +150,70 @@ describe("bounded combat feedback", () => {
       } as unknown as GameEvent,
     ], state);
     expect(vfx.getDiagnostics().pools.dodgeTrails.active).toBe(3);
+    vfx.dispose();
+  });
+
+  it.each([false, true])(
+    "keeps the sovereign active ring bounded and readable when reducedMotion=%s",
+    (reducedMotion) => {
+      const scene = new Scene();
+      const vfx = createVfx(scene, {
+        reducedMotion,
+        quality: "high",
+      });
+      const state = createInitialState(6);
+      state.enemies["boss-sovereign"] = createEncounterEnemy(
+        "boss-sovereign",
+        "bell-sovereign",
+        { x: 0, y: 8 },
+      );
+      vfx.consume(
+        Array.from({ length: 10 }, (_, index) => ({
+          type: "enemy-move-active" as const,
+          enemyId: "boss-sovereign",
+          moveId: "sovereign-shockwave" as const,
+          attackId: `boss-sovereign:sovereign-shockwave:${index}`,
+        })),
+        state,
+      );
+
+      expect(vfx.getDiagnostics()).toMatchObject({
+        reducedMotion,
+        particleDisplacement: !reducedMotion,
+        pools: {
+          bossShockwaves: {
+            active: 4,
+            capacity: 4,
+          },
+        },
+      });
+
+      vfx.sync({
+        ...state,
+        encounter: { ...state.encounter, phase: "boss" },
+      });
+      expect(vfx.getDiagnostics().pools.bossShockwaves.active).toBe(0);
+      vfx.dispose();
+    },
+  );
+
+  it("does not leave a visual effect when an attack is interrupted", () => {
+    const scene = new Scene();
+    const vfx = createVfx(scene, { reducedMotion: false, quality: "high" });
+    const state = createInitialState(7);
+
+    vfx.consume([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "oathblade-light-1",
+        attackId: "player:0:0",
+        result: "interrupted",
+        reason: "damage",
+      },
+    ], state);
+
+    expect(vfx.getDiagnostics().totalActive).toBe(0);
     vfx.dispose();
   });
 });

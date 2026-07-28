@@ -6,6 +6,9 @@ const formatters = hudModule as unknown as {
   formatEnemyLabel?(kind: string): string;
   formatMoveLabel?(moveId: string): string;
   formatTelegraphLabel?(kind: string, moveId: string): string;
+  formatAttackResolutionCaption?(
+    result: "hit" | "miss" | "interrupted",
+  ): string;
 };
 
 describe("Chinese HUD presentation labels", () => {
@@ -41,5 +44,11 @@ describe("Chinese HUD presentation labels", () => {
         "internal-move-id",
       ),
     ).toBe("未知敌人 · 未知招式");
+  });
+
+  it("presents an interrupted attack in direct Chinese", () => {
+    expect(
+      formatters.formatAttackResolutionCaption?.("interrupted"),
+    ).toBe("攻击被打断");
   });
 });

@@ -5,7 +5,11 @@ import type {
   GameState,
   Vec2,
 } from "./types";
-import { stepCombat } from "./combat";
+import {
+  cancelActiveAttack,
+  resolveOutstandingPlayerProjectilesAsMisses,
+  stepCombat,
+} from "./combat";
 import { stepEnemyAi } from "./enemy-ai";
 import { stepEncounter } from "./encounters";
 import {
@@ -224,11 +228,30 @@ export function settleAuthoritativeResult(
   const state = crossedRewardBoundary
     ? settlePendingDrops(encounter.state)
     : encounter.state;
+  const crossedAttackResetBoundary = encounter.events.some(
+    (event) =>
+      event.type === "upgrade-offered" ||
+      event.type === "encounter-complete" ||
+      event.type === "encounter-phase",
+  );
+  const cancellation = crossedAttackResetBoundary
+    ? cancelActiveAttack(
+        state,
+        state.status === "complete" || state.status === "defeated"
+          ? "terminal-reset"
+          : "phase-reset",
+      )
+    : { state, events: [] };
+  const projectileSettlement = crossedAttackResetBoundary
+    ? resolveOutstandingPlayerProjectilesAsMisses(cancellation.state)
+    : { state: cancellation.state, events: [] };
   return {
-    state,
+    state: projectileSettlement.state,
     events: [
       ...result.events,
       ...rewards.events,
+      ...cancellation.events,
+      ...projectileSettlement.events,
       ...encounter.events,
     ],
   };

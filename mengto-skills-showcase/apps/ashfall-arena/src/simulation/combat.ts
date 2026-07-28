@@ -4,6 +4,7 @@ import type {
   ActorState,
   AttackActionId,
   AttackInstance,
+  AttackInterruptionReason,
   AttackPhase,
   CombatActionContent,
   EnemyProjectileState,
@@ -126,6 +127,71 @@ export interface IncomingDamageResult {
   defeated: boolean;
 }
 
+export function cancelActiveAttack(
+  state: GameState,
+  reason: AttackInterruptionReason,
+): StepGameResult {
+  const attack = state.combat.activeAttack;
+  if (!attack) return { state, events: [] };
+
+  const nextState: GameState = {
+    ...state,
+    combat: {
+      ...state.combat,
+      activeAttack: null,
+    },
+  };
+  if (
+    attack.actionId === "ember-bow-shot" &&
+    attack.projectileSpawned
+  ) {
+    return { state: nextState, events: [] };
+  }
+
+  return {
+    state: nextState,
+    events: [{
+      type: "attack-resolved",
+      actorId: attack.ownerId,
+      actionId: attack.actionId,
+      attackId: attack.id,
+      result: "interrupted",
+      reason,
+    }],
+  };
+}
+
+export function resolveOutstandingPlayerProjectilesAsMisses(
+  state: GameState,
+): StepGameResult {
+  if (state.combat.projectiles.length === 0) {
+    return { state, events: [] };
+  }
+  const attackIds = new Set<string>();
+  const events: GameEvent[] = [];
+  for (const projectile of state.combat.projectiles) {
+    if (attackIds.has(projectile.attackId)) continue;
+    attackIds.add(projectile.attackId);
+    events.push({
+      type: "attack-resolved",
+      actorId: projectile.ownerId,
+      actionId: "ember-bow-shot",
+      attackId: projectile.attackId,
+      result: "miss",
+    });
+  }
+  return {
+    state: {
+      ...state,
+      combat: {
+        ...state.combat,
+        projectiles: [],
+      },
+    },
+    events,
+  };
+}
+
 export function resolveIncomingDamage(
   actor: Readonly<ActorState>,
   hit: Readonly<IncomingHit>,
@@ -227,18 +293,12 @@ export function applyIncomingDamage(
       ...(resolution.guardBroken ? { guardBroken: true as const } : {}),
     },
   ];
-  if (resolution.defeated) {
-    events.push({ type: "defeated", actorId: state.player.id });
-  }
-
-  return {
-    state: {
+  const damagedState: GameState = {
       ...state,
       status: resolution.defeated ? "defeated" : state.status,
       player,
       combat: {
         ...state.combat,
-        activeAttack: null,
         receivedAttackIds: [
           ...state.combat.receivedAttackIds,
           hit.attackId,
@@ -246,7 +306,26 @@ export function applyIncomingDamage(
         guardReleaseTicks: 0,
         playerHitRecoveryTicks: 0,
       },
-    },
+  };
+  const interruption = cancelActiveAttack(
+    damagedState,
+    resolution.defeated ? "defeated" : "damage",
+  );
+  const projectileSettlement = resolution.defeated
+    ? resolveOutstandingPlayerProjectilesAsMisses(interruption.state)
+    : { state: interruption.state, events: [] };
+  if (resolution.defeated) {
+    events.push(
+      ...interruption.events,
+      ...projectileSettlement.events,
+      { type: "defeated", actorId: state.player.id },
+    );
+  } else {
+    events.push(...interruption.events);
+  }
+
+  return {
+    state: projectileSettlement.state,
     events,
   };
 }
@@ -1210,14 +1289,6 @@ export function stepEnemyCombat(
       const elapsed = enemy.moveElapsedTicks + 1;
       const complete =
         elapsed >= ticksFor(move.telegraphSeconds, content);
-      if (complete && move.contactKind === "summon") {
-        produced.push({
-          type: "enemy-move-active",
-          enemyId,
-          moveId: enemy.currentMoveId,
-          attackId,
-        });
-      }
       enemy = {
         ...enemy,
         intent: complete ? "attack" : "telegraph",
@@ -1240,6 +1311,14 @@ export function stepEnemyCombat(
     }
 
     if (enemy.movePhase === "active") {
+      if (enemy.moveElapsedTicks === 0) {
+        produced.push({
+          type: "enemy-move-active",
+          enemyId,
+          moveId: enemy.currentMoveId,
+          attackId,
+        });
+      }
       if (
         enemy.currentMoveId === "warden-bolt" &&
         !working.combat.spawnedEnemyAttackIds.includes(attackId)
@@ -1390,7 +1469,7 @@ export function stepCombat(
     const finished =
       recoveryTicks >=
       ticksFor(content.combat.playerHitRecoverySeconds, content);
-    working = {
+    const recoveredState: GameState = {
       ...working,
       player: {
         ...working.player,
@@ -1401,10 +1480,12 @@ export function stepCombat(
       },
       combat: {
         ...working.combat,
-        activeAttack: null,
         playerHitRecoveryTicks: finished ? 0 : recoveryTicks,
       },
     };
+    const interruption = cancelActiveAttack(recoveredState, "damage");
+    working = interruption.state;
+    produced.push(...interruption.events);
     const projectileResult = stepProjectiles(working, content);
     const enemyProjectileResult = stepEnemyProjectiles(
       projectileResult.state,
@@ -1425,13 +1506,15 @@ export function stepCombat(
     working.combat.activeAttack &&
     working.player.action !== "attack"
   ) {
-    working = {
-      ...working,
-      combat: {
-        ...working.combat,
-        activeAttack: null,
-      },
-    };
+    const reason: AttackInterruptionReason =
+      working.player.action === "dodge"
+        ? "dodge"
+        : working.player.action === "dead"
+          ? "defeated"
+          : "action-reset";
+    const interruption = cancelActiveAttack(working, reason);
+    working = interruption.state;
+    produced.push(...interruption.events);
   }
 
   if (working.combat.activeAttack) {

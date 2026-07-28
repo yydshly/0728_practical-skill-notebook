@@ -9,7 +9,10 @@ import {
   sweptCircleContact,
 } from "../src/simulation/combat";
 import { createInitialState } from "../src/simulation/create-initial-state";
-import { stepGame } from "../src/simulation/step-game";
+import {
+  settleAuthoritativeResult,
+  stepGame,
+} from "../src/simulation/step-game";
 import type {
   GameEvent,
   GameContent,
@@ -591,24 +594,99 @@ describe("authoritative oathblade combat", () => {
     );
   });
 
-  it("dodge interrupts an attack and clears its combo state", () => {
-    const attacking = runTicks(
-      createInitialState(1),
-      new Map([[0, { attackPressed: true }]]),
-      5,
-    ).state;
-    const dodging = stepGame(
-      attacking,
-      { ...neutralIntent, dodgePressed: true },
-      1 / 60,
-      arenaContent,
-    ).state;
+  it.each([
+    ["startup", 5],
+    ["active", 13],
+    ["recovery", 22],
+  ] as const)(
+    "dodge interrupts an oathblade attack during %s and terminates it once",
+    (_phase, dodgeTick) => {
+      const result = runTicks(
+        createInitialState(1),
+        new Map([
+          [0, { attackPressed: true }],
+          [dodgeTick, { dodgePressed: true }],
+        ]),
+        dodgeTick + 2,
+      );
+      const lifecycle = result.events.filter(
+        (event) =>
+          (event.type === "action-started" ||
+            event.type === "attack-resolved") &&
+          event.attackId === "player:0:0",
+      );
 
-    expect(dodging.player).toMatchObject({
-      action: "dodge",
-      stamina: 64,
-    });
-    expect(dodging.combat.activeAttack).toBeNull();
+      expect(result.state.player).toMatchObject({
+        action: "dodge",
+        stamina: 64,
+      });
+      expect(result.state.combat.activeAttack).toBeNull();
+      expect(lifecycle).toEqual([
+        {
+          type: "action-started",
+          actorId: "player",
+          actionId: "oathblade-light-1",
+          attackId: "player:0:0",
+          tick: 0,
+        },
+        {
+          type: "attack-resolved",
+          actorId: "player",
+          actionId: "oathblade-light-1",
+          attackId: "player:0:0",
+          result: "interrupted",
+          reason: "dodge",
+        },
+      ]);
+    },
+  );
+
+  it("terminates one combo action before starting the next action", () => {
+    const result = runTicks(
+      createInitialState(1),
+      new Map([
+        [0, { attackPressed: true }],
+        [22, { attackPressed: true }],
+      ]),
+      80,
+    );
+
+    expect(
+      result.events.filter(
+        (event) =>
+          event.type === "action-started" ||
+          event.type === "attack-resolved",
+      ),
+    ).toEqual([
+      {
+        type: "action-started",
+        actorId: "player",
+        actionId: "oathblade-light-1",
+        attackId: "player:0:0",
+        tick: 0,
+      },
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "oathblade-light-1",
+        attackId: "player:0:0",
+        result: "miss",
+      },
+      {
+        type: "action-started",
+        actorId: "player",
+        actionId: "oathblade-light-2",
+        attackId: "player:33:1",
+        tick: 33,
+      },
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "oathblade-light-2",
+        attackId: "player:33:1",
+        result: "miss",
+      },
+    ]);
   });
 });
 
@@ -747,6 +825,63 @@ describe("authoritative ember bow projectile", () => {
         actorId: "player",
         actionId: "ember-bow-shot",
         attackId: "manual-shot",
+        result: "miss",
+      },
+    ]);
+  });
+
+  it("keeps a spawned bow shot as the terminal owner after its player dodges", () => {
+    const bowAtEdge = equipBow(createInitialState(4));
+    bowAtEdge.player.position = { x: 0, y: 11.5 };
+    bowAtEdge.player.facingRadians = 0;
+    const result = runTicks(
+      bowAtEdge,
+      new Map([
+        [0, { attackPressed: true }],
+        [18, { dodgePressed: true }],
+      ]),
+      30,
+    );
+
+    expect(
+      eventsNamed(result.events, "attack-resolved").filter(
+        (event) => event.attackId === "player:2:0",
+      ),
+    ).toEqual([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "ember-bow-shot",
+        attackId: "player:2:0",
+        result: "miss",
+      },
+    ]);
+  });
+
+  it("resolves a spawned bow shot as a miss instead of interrupting it on death", () => {
+    const armed = runTicks(
+      equipBow(createInitialState(5)),
+      new Map([[0, { attackPressed: true }]]),
+      18,
+    ).state;
+    armed.player.health = 15;
+
+    const result = applyIncomingDamage(
+      armed,
+      incomingHit({ damage: 20 }),
+      false,
+      arenaContent,
+    );
+
+    expect(result.state.status).toBe("defeated");
+    expect(result.state.combat.activeAttack).toBeNull();
+    expect(result.state.combat.projectiles).toEqual([]);
+    expect(eventsNamed(result.events, "attack-resolved")).toEqual([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "ember-bow-shot",
+        attackId: "player:2:0",
         result: "miss",
       },
     ]);
@@ -1286,6 +1421,14 @@ describe("incoming damage, guard, dodge, and death", () => {
         amount: 20,
         guarded: false,
       },
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "oathblade-light-1",
+        attackId: "player:0:0",
+        result: "interrupted",
+        reason: "defeated",
+      },
       { type: "defeated", actorId: "player" },
     ]);
 
@@ -1324,6 +1467,45 @@ describe("incoming damage, guard, dodge, and death", () => {
       amount: 20,
       guarded: false,
     });
+    expect(result.events[2]).toEqual({
+      type: "attack-resolved",
+      actorId: "player",
+      actionId: "oathblade-light-1",
+      attackId: "player:0:0",
+      result: "interrupted",
+      reason: "damage",
+    });
+  });
+
+  it("leaves the old attack state untouched while publishing one damage interruption", () => {
+    const attacking = runTicks(
+      createInitialState(12),
+      new Map([[0, { attackPressed: true }]]),
+      13,
+    ).state;
+    const snapshot = structuredClone(attacking);
+
+    const result = applyIncomingDamage(
+      attacking,
+      incomingHit(),
+      false,
+      arenaContent,
+    );
+
+    expect(attacking).toEqual(snapshot);
+    expect(result.state.combat.activeAttack).toBeNull();
+    expect(
+      eventsNamed(result.events, "attack-resolved"),
+    ).toEqual([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "oathblade-light-1",
+        attackId: "player:0:0",
+        result: "interrupted",
+        reason: "damage",
+      },
+    ]);
   });
 
   it("keeps an invulnerable dodge and every frozen game status unchanged", () => {
@@ -1776,6 +1958,119 @@ describe("combat state integration", () => {
     expect(upgradeResult.state.combat.activeAttack?.elapsedTicks).toBe(5);
   });
 
+  it.each([
+    ["phase-reset", "wave-one", "upgrade"],
+    ["terminal-reset", "boss", "complete"],
+  ] as const)(
+    "terminates an active attack once at a %s boundary",
+    (reason, phase, status) => {
+      const attacking = runTicks(
+        createInitialState(81),
+        new Map([[0, { attackPressed: true }]]),
+        5,
+      ).state;
+      const boundary =
+        phase === "wave-one"
+          ? {
+              ...attacking,
+              encounter: {
+                ...attacking.encounter,
+                phase,
+                completedIds: [
+                  "wave-one-crawler-a",
+                  "wave-one-crawler-b",
+                  "wave-one-warden",
+                ],
+              },
+            }
+          : {
+              ...attacking,
+              encounter: {
+                ...attacking.encounter,
+                phase,
+                completedIds: ["boss-sovereign"],
+              },
+            };
+
+      const result = settleAuthoritativeResult({
+        state: boundary,
+        events: [],
+      });
+
+      expect(result.state.status).toBe(status);
+      expect(result.state.combat.activeAttack).toBeNull();
+      expect(eventsNamed(result.events, "attack-resolved")).toEqual([
+        {
+          type: "attack-resolved",
+          actorId: "player",
+          actionId: "oathblade-light-1",
+          attackId: "player:0:0",
+          result: "interrupted",
+          reason,
+        },
+      ]);
+    },
+  );
+
+  it.each([
+    ["wave-one", "upgrade"],
+    ["boss", "complete"],
+  ] as const)(
+    "settles an in-flight bow projectile as one miss at the %s reset",
+    (phase, status) => {
+      let armed = runTicks(
+        createInitialState(82),
+        new Map([[0, { switchWeaponPressed: true }]]),
+        2,
+      ).state;
+      armed = runTicks(
+        armed,
+        new Map([[0, { attackPressed: true }]]),
+        18,
+      ).state;
+      const boundary =
+        phase === "wave-one"
+          ? {
+              ...armed,
+              encounter: {
+                ...armed.encounter,
+                phase,
+                completedIds: [
+                  "wave-one-crawler-a",
+                  "wave-one-crawler-b",
+                  "wave-one-warden",
+                ],
+              },
+            }
+          : {
+              ...armed,
+              encounter: {
+                ...armed.encounter,
+                phase,
+                completedIds: ["boss-sovereign"],
+              },
+            };
+
+      const result = settleAuthoritativeResult({
+        state: boundary,
+        events: [],
+      });
+
+      expect(result.state.status).toBe(status);
+      expect(result.state.combat.activeAttack).toBeNull();
+      expect(result.state.combat.projectiles).toEqual([]);
+      expect(eventsNamed(result.events, "attack-resolved")).toEqual([
+        {
+          type: "attack-resolved",
+          actorId: "player",
+          actionId: "ember-bow-shot",
+          attackId: "player:2:0",
+          result: "miss",
+        },
+      ]);
+    },
+  );
+
   it("round-trips every active combat record through JSON", () => {
     let state = runTicks(
       createInitialState(1),
@@ -1809,5 +2104,45 @@ describe("combat state integration", () => {
     };
 
     expect(run()).toEqual(run());
+  });
+
+  it("replays the same ordered interruption lifecycle", () => {
+    const run = () =>
+      runTicks(
+        createInitialState(909),
+        new Map([
+          [0, { attackPressed: true }],
+          [13, { dodgePressed: true }],
+          [40, { attackPressed: true }],
+        ]),
+        90,
+      );
+
+    const first = run();
+    const second = run();
+    expect(first).toEqual(second);
+    expect(
+      first.events
+        .filter(
+          (
+            event,
+          ): event is
+            | Extract<GameEvent, { type: "action-started" }>
+            | Extract<GameEvent, { type: "attack-resolved" }> =>
+            (event.type === "action-started" &&
+              event.actionId !== "dodge") ||
+            event.type === "attack-resolved",
+        )
+        .map((event) => [
+          event.type,
+          event.attackId,
+          "result" in event ? event.result : event.actionId,
+        ]),
+    ).toEqual([
+      ["action-started", "player:0:0", "oathblade-light-1"],
+      ["attack-resolved", "player:0:0", "interrupted"],
+      ["action-started", "player:40:1", "oathblade-light-1"],
+      ["attack-resolved", "player:40:1", "miss"],
+    ]);
   });
 });
