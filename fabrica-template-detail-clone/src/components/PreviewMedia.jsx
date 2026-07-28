@@ -8,11 +8,13 @@ export default function PreviewMedia({ videoSrc, posterSrc, alt }) {
     const video = videoRef.current;
     if (!video) return;
 
-    if (video.paused) {
+    if (isPaused) {
       const playback = video.play();
+      setIsPaused(false);
       if (playback) playback.catch(() => setIsPaused(true));
     } else {
       video.pause();
+      setIsPaused(true);
     }
   };
 
