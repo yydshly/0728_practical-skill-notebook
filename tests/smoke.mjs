@@ -1,15 +1,54 @@
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const port = 4174;
+
+function reservePort(requestedPort) {
+  return new Promise((resolvePort, rejectPort) => {
+    const probe = createServer();
+    probe.once('error', rejectPort);
+    probe.listen(requestedPort, '127.0.0.1', () => {
+      const address = probe.address();
+      probe.close(() => resolvePort(address.port));
+    });
+  });
+}
+
+async function selectTestPort() {
+  try {
+    return await reservePort(4174);
+  } catch {
+    return reservePort(0);
+  }
+}
+
+const port = await selectTestPort();
 const vite = resolve(root, 'node_modules', 'vite', 'bin', 'vite.js');
 const server = spawn(process.execPath, [vite, '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
   cwd: root,
   stdio: 'ignore',
 });
+let browser;
+let testError;
+let cleanupError;
+
+function waitForChildExit(child, timeoutMs = 3000) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+  return new Promise((resolveExit) => {
+    function onExit() {
+      clearTimeout(timeout);
+      resolveExit(true);
+    }
+    const timeout = setTimeout(() => {
+      child.off('exit', onExit);
+      resolveExit(false);
+    }, timeoutMs);
+    child.once('exit', onExit);
+  });
+}
 
 async function waitForServer() {
   for (let attempt = 0; attempt < 50; attempt += 1) {
@@ -26,7 +65,7 @@ async function waitForServer() {
 
 try {
   await waitForServer();
-  const browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({
     viewport: { width: 1280, height: 720 },
     deviceScaleFactor: 2,
@@ -382,6 +421,9 @@ try {
     {
       id: 'sighting',
       position: [0, 8],
+      pursuerPosition: [-1, 3],
+      pursuerYaw: Math.atan2(1, 5),
+      freezePursuer: true,
       objective: 'escape_south_gate',
       flags: { radio: true, neighbour: true, flashlight: true },
       objectiveText: '沿主路逃往南侧村口。',
@@ -456,6 +498,50 @@ try {
       throw new Error(`Expected ${evidenceCase.id} evidence fixture to dismiss the intro`);
     }
 
+    if (evidenceCase.freezePursuer) {
+      await page.waitForTimeout(600);
+      const stablePursuer = await page.evaluate(() => {
+        const game = window.__RURAL_ESCAPE__;
+        return {
+          position: [game.pursuer.object.position.x, game.pursuer.object.position.z],
+          rotationY: game.pursuer.object.rotation.y,
+          state: game.pursuer.state,
+          playerDistance: game.pursuer.object.position.distanceTo(game.player.position),
+        };
+      });
+      if (
+        Math.hypot(
+          stablePursuer.position[0] - evidenceCase.pursuerPosition[0],
+          stablePursuer.position[1] - evidenceCase.pursuerPosition[1],
+        ) > 0.001
+      ) {
+        throw new Error(
+          `Expected ${evidenceCase.id} pursuer to remain at `
+          + `${evidenceCase.pursuerPosition}, got ${stablePursuer.position}`,
+        );
+      }
+      if (
+        !Number.isFinite(stablePursuer.rotationY)
+        || Math.abs(stablePursuer.rotationY - evidenceCase.pursuerYaw) > 0.001
+      ) {
+        throw new Error(
+          `Expected ${evidenceCase.id} finite authored pursuer yaw, got `
+          + `${stablePursuer.rotationY}`,
+        );
+      }
+      if (stablePursuer.state !== 'patrol') {
+        throw new Error(
+          `Expected ${evidenceCase.id} frozen pursuer state, got ${stablePursuer.state}`,
+        );
+      }
+      if (!Number.isFinite(stablePursuer.playerDistance) || stablePursuer.playerDistance < 4) {
+        throw new Error(
+          `Expected ${evidenceCase.id} readable pursuer spacing, got `
+          + `${stablePursuer.playerDistance}`,
+        );
+      }
+    }
+
     await page.waitForFunction(() => {
       const { renderCalls, renderTriangles } = document.querySelector('.game-shell').dataset;
       const calls = Number(renderCalls);
@@ -477,8 +563,31 @@ try {
     }
   }
 
-  await browser.close();
   console.log('Smoke test passed: visual hooks, evidence URLs, traversal, story, and camera.');
+} catch (error) {
+  testError = error;
 } finally {
-  server.kill();
+  try {
+    await browser?.close();
+  } catch (error) {
+    cleanupError = error;
+  }
+  try {
+    if (server.exitCode === null && server.signalCode === null) server.kill();
+    const exited = await waitForChildExit(server);
+    if (!exited && server.exitCode === null && server.signalCode === null) {
+      server.kill('SIGKILL');
+      if (!(await waitForChildExit(server))) {
+        throw new Error(`Vite test server did not exit after forced teardown on port ${port}`);
+      }
+    }
+  } catch (error) {
+    cleanupError ??= error;
+  }
 }
+
+if (testError) {
+  if (cleanupError) console.error('Smoke cleanup also failed:', cleanupError);
+  throw testError;
+}
+if (cleanupError) throw cleanupError;

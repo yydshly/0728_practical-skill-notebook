@@ -59,6 +59,11 @@ const evidenceFixtures = {
   },
   sighting: {
     position: new THREE.Vector3(0, 0, 8),
+    pursuer: {
+      position: new THREE.Vector3(-1, 0, 3),
+      yaw: Math.atan2(1, 5),
+      frozen: true,
+    },
     flags: { radio: true, neighbour: true, flashlight: true },
     objective: 'escape_south_gate',
   },
@@ -68,6 +73,7 @@ const evidenceFixtures = {
     objective: 'complete',
   },
 };
+const evidenceFixture = evidenceFixtures[evidenceState] ?? null;
 let nearbyInteraction = null;
 
 function updateInteraction() {
@@ -93,10 +99,15 @@ function setCameraMode(mode) {
 function applyEvidenceFixture() {
   if (!hasEvidenceParam) return;
   shell.dataset.evidenceState = evidenceState;
-  const fixture = evidenceFixtures[evidenceState];
+  const fixture = evidenceFixture;
   if (!fixture) return;
 
   player.position.copy(fixture.position);
+  if (fixture.pursuer) {
+    pursuer.reset();
+    pursuer.object.position.copy(fixture.pursuer.position);
+    pursuer.object.rotation.y = fixture.pursuer.yaw;
+  }
   cameraController.setMode('third-person');
   state.cameraMode = cameraController.mode;
   Object.assign(storyDirector.story.flags, fixture.flags);
@@ -146,7 +157,7 @@ function frame(now) {
   lastTime = now;
   player.update(dt, input, village.bounds, cameraController.yaw);
   updateInteraction();
-  pursuer.update(dt, player);
+  if (!evidenceFixture?.pursuer?.frozen) pursuer.update(dt, player);
   storyDirector.update(player, village.zones.south_gate_exit);
   cameraController.update(dt);
   atmosphere.update((now - startTime) / 1000);

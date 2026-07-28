@@ -11,6 +11,8 @@ import { createPursuer } from '../src/pursuer.js';
 import { createVillage } from '../src/level.js';
 import { resolveCircleMove } from '../src/collision.js';
 import { nearestInteraction } from '../src/interactions.js';
+import { buildVillageGate } from '../src/world/buildings.js';
+import { addPropCluster } from '../src/world/props.js';
 
 const { computeThirdPersonPose } = cameraMath;
 
@@ -129,6 +131,23 @@ test('pursuer movement drives the mutant rig and settles while idle', () => {
   pursuer.reset();
   pursuer.update(0.25, { position: new THREE.Vector3(0, 0, 30) });
   assert.equal(Math.abs(pursuer.object.getObjectByName('leftShoulder').rotation.x), 0);
+});
+
+test('pursuer reset restores the authored mutant pose and spawn orientation', () => {
+  const scene = new THREE.Scene();
+  const spawn = new THREE.Vector3(-1, 0, 3);
+  const pursuer = createPursuer(scene, { navNodes: [spawn.clone()], spawn });
+
+  pursuer.update(0.25, { position: new THREE.Vector3(4, 0, 8) });
+  assert.notEqual(pursuer.object.rotation.y, 0);
+  pursuer.reset();
+
+  assert.deepEqual(pursuer.object.position.toArray(), spawn.toArray());
+  assert.equal(pursuer.object.rotation.y, 0);
+  assert.equal(
+    pursuer.object.getObjectByName('torso').rotation.x,
+    getCharacterProfile('mutant').lean,
+  );
 });
 
 test('stand pose clears every transform controlled by hide', () => {
@@ -291,5 +310,58 @@ test('blocking prop visuals and colliders derive from one canonical cluster', ()
       ],
       `${cluster.id} collider must use canonical metadata`,
     );
+  }
+});
+
+test('south gate factory builds an open village gate instead of a generic house', () => {
+  const scene = new THREE.Scene();
+  const materials = createMaterials();
+  const definition = VILLAGE_LAYOUT.buildings.find(({ id }) => id === 'south_gate');
+  const { root, occluders } = buildVillageGate(scene, definition, materials);
+
+  for (const name of [
+    'gate_left_pillar',
+    'gate_right_pillar',
+    'gate_beam',
+    'gate_roof_left',
+    'gate_roof_right',
+    'gate_roof_ridge',
+    'gate_left_door',
+    'gate_right_door',
+  ]) {
+    assert.ok(root.getObjectByName(name), `south gate must include ${name}`);
+  }
+  assert.equal(root.getObjectByName('structure_solid_wall'), undefined);
+  assert.equal(root.getObjectByName('structure_window_left'), undefined);
+  assert.equal(root.getObjectByName('structure_window_right'), undefined);
+  assert.ok(occluders.length >= 5);
+  assert.ok(occluders.every((mesh) => root.getObjectById(mesh.id)));
+
+  const villageScene = new THREE.Scene();
+  createVillage(villageScene);
+  const worldGate = villageScene.getObjectByName('south_gate');
+  assert.ok(worldGate?.getObjectByName('gate_beam'));
+  assert.equal(worldGate?.getObjectByName('structure_solid_wall'), undefined);
+});
+
+test('gate blockade reads as an abandoned three-wheeler without changing its canonical root', () => {
+  const scene = new THREE.Scene();
+  const materials = createMaterials();
+  const cluster = VILLAGE_LAYOUT.propClusters.find(({ id }) => id === 'gate_blockade');
+  const children = addPropCluster(scene, cluster, materials);
+  const root = scene.getObjectByName('gate_blockade');
+
+  assert.equal(root.position.x, cluster.x);
+  assert.equal(root.position.z, cluster.z);
+  assert.equal(children.filter(({ name }) => name.includes('tricycle_')).length >= 7, true);
+  for (const name of [
+    'tricycle_front_wheel',
+    'tricycle_left_rear_wheel',
+    'tricycle_right_rear_wheel',
+    'tricycle_cargo_bed',
+    'tricycle_frame',
+    'tricycle_handlebar',
+  ]) {
+    assert.ok(root.getObjectByName(name), `gate blockade must include ${name}`);
   }
 });

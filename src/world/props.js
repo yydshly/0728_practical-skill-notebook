@@ -47,7 +47,55 @@ function addBlockade(group, materials, collider) {
   box(group, [beamLength, 0.25, 0.35], [0, 0.55, 0], materials.wood);
   box(group, [0.25, 1.4, 0.25], [-postOffset, 0.7, 0], materials.wood);
   box(group, [0.25, 1.4, 0.25], [postOffset, 0.7, 0], materials.wood);
-  box(group, [2.2, 0.65, 1.2], [2.6, 0.34, -0.8], materials.metal);
+
+  const cargoBed = box(
+    group,
+    [1.75, 0.64, 1.18],
+    [2.12, 0.66, -0.8],
+    materials.metal,
+  );
+  cargoBed.name = 'tricycle_cargo_bed';
+
+  const frame = box(group, [2.35, 0.12, 0.18], [2.72, 0.48, -0.8], materials.metal);
+  frame.name = 'tricycle_frame';
+  frame.rotation.z = -0.08;
+
+  const handleStem = box(
+    group,
+    [0.12, 1.05, 0.12],
+    [3.63, 0.92, -0.8],
+    materials.metal,
+  );
+  handleStem.name = 'tricycle_handle_stem';
+  handleStem.rotation.z = -0.24;
+
+  const handlebar = box(
+    group,
+    [0.16, 0.12, 0.95],
+    [3.74, 1.38, -0.8],
+    materials.metal,
+  );
+  handlebar.name = 'tricycle_handlebar';
+
+  const seat = box(group, [0.58, 0.16, 0.46], [3.12, 0.92, -0.8], materials.wood);
+  seat.name = 'tricycle_seat';
+
+  for (const [name, position] of [
+    ['tricycle_front_wheel', [3.68, 0.4, -0.8]],
+    ['tricycle_left_rear_wheel', [1.48, 0.4, -0.2]],
+    ['tricycle_right_rear_wheel', [1.48, 0.4, -1.4]],
+  ]) {
+    const wheel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.4, 0.4, 0.12, 12),
+      materials.metal,
+    );
+    wheel.name = name;
+    wheel.position.set(...position);
+    wheel.rotation.x = Math.PI / 2;
+    wheel.castShadow = true;
+    wheel.receiveShadow = true;
+    group.add(wheel);
+  }
 }
 
 export function addPropCluster(scene, cluster, materials) {

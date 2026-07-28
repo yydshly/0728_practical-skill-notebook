@@ -41,6 +41,7 @@ export function createPursuer(scene, { navNodes, spawn }) {
       state = 'patrol';
       nodeIndex = 0;
       elapsed = 0;
+      rig.setPose('mutant');
       rig.setMotion(0, elapsed);
     },
   };
