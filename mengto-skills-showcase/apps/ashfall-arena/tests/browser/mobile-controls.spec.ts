@@ -42,8 +42,18 @@ const assertNoBrowserErrors = (page: Page) => {
 };
 
 for (const viewport of [
-  { label: "portrait", width: 390, height: 844 },
-  { label: "landscape", width: 844, height: 390 },
+  {
+    label: "portrait",
+    width: 390,
+    height: 844,
+    safe: { top: 36, right: 22, bottom: 44, left: 24 },
+  },
+  {
+    label: "landscape",
+    width: 844,
+    height: 390,
+    safe: { top: 18, right: 46, bottom: 20, left: 46 },
+  },
 ] as const) {
   test.describe(viewport.label, () => {
     test.use({
@@ -54,6 +64,14 @@ for (const viewport of [
     test("touch exposes every combat verb without overflow", async ({ page }) => {
       const assertClean = assertNoBrowserErrors(page);
       await page.goto("/?fixture=wave-one&reviewControls=1");
+      await page.addStyleTag({
+        content: `:root {
+          --ashfall-safe-top: ${viewport.safe.top}px;
+          --ashfall-safe-right: ${viewport.safe.right}px;
+          --ashfall-safe-bottom: ${viewport.safe.bottom}px;
+          --ashfall-safe-left: ${viewport.safe.left}px;
+        }`,
+      });
 
       await expect(page.getByLabel("移动摇杆")).toBeVisible();
       for (const name of [
@@ -82,6 +100,41 @@ for (const viewport of [
       expect(canvasBox).not.toBeNull();
       expect(controlsBox).not.toBeNull();
       expect(controlsBox!.height).toBeLessThan(canvasBox!.height * 0.52);
+
+      const touchBounds = await page
+        .getByLabel("触控操作")
+        .locator("button, [aria-label='移动摇杆']")
+        .evaluateAll((elements) =>
+          elements.map((element) => {
+            const rect = element.getBoundingClientRect();
+            return {
+              label: element.getAttribute("aria-label") ?? element.textContent,
+              left: rect.left,
+              right: rect.right,
+              top: rect.top,
+              bottom: rect.bottom,
+            };
+          }),
+        );
+      expect(touchBounds.length).toBeGreaterThan(0);
+      for (const bounds of touchBounds) {
+        expect(bounds.left, `${bounds.label} left safe area`).toBeGreaterThanOrEqual(
+          viewport.safe.left,
+        );
+        expect(bounds.right, `${bounds.label} right safe area`).toBeLessThanOrEqual(
+          viewport.width - viewport.safe.right,
+        );
+        expect(bounds.top, `${bounds.label} top safe area`).toBeGreaterThanOrEqual(
+          viewport.safe.top,
+        );
+        expect(bounds.bottom, `${bounds.label} bottom safe area`).toBeLessThanOrEqual(
+          viewport.height - viewport.safe.bottom,
+        );
+      }
+
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.getByRole("button", { name: "目标锁定" }).tap();
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
       assertClean();
     });
   });

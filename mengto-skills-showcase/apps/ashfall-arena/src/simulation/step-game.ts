@@ -277,6 +277,17 @@ export function stepGame(
       : { state, events: [] };
   const progressionState = progression.state;
   const steppedPlayer = stepPlayer(progressionState, intent, content);
+  const actionEvents =
+    progressionState.player.action !== "dodge" &&
+    steppedPlayer.action === "dodge"
+      ? [{
+          type: "action-started" as const,
+          actorId: steppedPlayer.id,
+          actionId: "dodge" as const,
+          attackId: `${steppedPlayer.id}:dodge:${state.tick}`,
+          tick: state.tick,
+        }]
+      : [];
   const movedState =
     steppedPlayer === progressionState.player
       ? progressionState
@@ -288,7 +299,7 @@ export function stepGame(
   const combat = stepCombat(
     aiState,
     intent,
-    progression.events,
+    [...progression.events, ...actionEvents],
     content,
   );
   const settled = settleAuthoritativeResult(combat);

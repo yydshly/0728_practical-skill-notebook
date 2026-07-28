@@ -573,7 +573,6 @@ const frame = (timestamp: number) => {
   previousTimestamp = timestamp;
   accumulator.advance(frameDelta, step);
   synchronizer.sync(state, frameDelta);
-  audio.sync(state);
   vfx.sync(state);
   const presentationPaused =
     state.paused || state.status === "upgrade";
@@ -587,7 +586,7 @@ const frame = (timestamp: number) => {
   const entityDiagnostics = synchronizer.getDiagnostics();
   hud?.render(state, {
     deviceMode: input.getDeviceMode(),
-    telegraphIds: entityDiagnostics.telegraphIds,
+    telegraphs: entityDiagnostics.telegraphs,
     damageFlashActive: vfx.getDiagnostics().damageFlashActive,
   });
   const cameraDiagnostics = cameraController.getDiagnostics();
@@ -730,7 +729,7 @@ if (reviewControls) {
       }
       const contactDistance =
         moveId === "warden-bolt"
-          ? 4.5
+          ? 7.5
           : moveId === "sovereign-shockwave"
             ? 3.4
             : 1.25;

@@ -25,6 +25,14 @@ const ENEMY_LABELS: Record<EnemyKind, string> = {
   "bell-sovereign": "钟鸣君主",
 };
 
+const PHASE_LABELS = {
+  training: "训练阶段",
+  "wave-one": "第一波",
+  elite: "精英战",
+  boss: "首领战",
+  complete: "挑战完成",
+} as const;
+
 const MOVE_LABELS: Record<EnemyMoveId, string> = {
   "crawler-lunge": "爬兽突进",
   "warden-bolt": "灰烬飞矢",
@@ -33,6 +41,27 @@ const MOVE_LABELS: Record<EnemyMoveId, string> = {
   "sovereign-shockwave": "王庭冲击波",
   "sovereign-summon": "君主召唤",
 };
+
+export const formatPhaseLabel = (phase: string): string =>
+  (PHASE_LABELS as Record<string, string>)[phase] ?? "未知阶段";
+
+export const formatEnemyLabel = (kind: string): string =>
+  (ENEMY_LABELS as Record<string, string>)[kind] ?? "未知敌人";
+
+export const formatMoveLabel = (moveId: string): string =>
+  (MOVE_LABELS as Record<string, string>)[moveId] ?? "未知招式";
+
+export const formatTelegraphLabel = (
+  kind: string,
+  moveId: string,
+): string =>
+  `${formatEnemyLabel(kind)} · ${formatMoveLabel(moveId)}`;
+
+const ATTACK_LABELS = {
+  "oathblade-light-1": "誓约刃一式",
+  "oathblade-light-2": "誓约刃二式",
+  "ember-bow-shot": "余烬箭",
+} as const;
 
 const DEVICE_LABELS: Record<InputDeviceMode, string> = {
   "keyboard-mouse": "键鼠：WASD 移动，鼠标攻击/格挡",
@@ -78,7 +107,10 @@ export interface HudCallbacks {
 
 export interface HudRenderOptions {
   readonly deviceMode: InputDeviceMode;
-  readonly telegraphIds: readonly string[];
+  readonly telegraphs: readonly {
+    readonly enemyKind: string;
+    readonly moveId: string;
+  }[];
   readonly damageFlashActive: boolean;
 }
 
@@ -232,7 +264,30 @@ export function createHudController(
     state: Readonly<GameState>,
   ) => {
     for (const event of events) {
-      if (event.type === "damage" && event.targetId === state.player.id) {
+      if (
+        event.type === "action-started" &&
+        event.actorId === state.player.id
+      ) {
+        setCaption(
+          event.actionId === "dodge"
+            ? "闪避起步"
+            : `攻击起手：${ATTACK_LABELS[event.actionId]}`,
+          0.75,
+        );
+      } else if (
+        event.type === "attack-resolved" &&
+        event.actorId === state.player.id
+      ) {
+        setCaption(
+          event.result === "hit"
+            ? "命中：攻击已结算"
+            : "落空：未命中目标",
+          event.result === "hit" ? 0.8 : 1,
+        );
+      } else if (
+        event.type === "damage" &&
+        event.targetId === state.player.id
+      ) {
         setCaption(
           event.guardBroken
             ? `格挡崩解：承受 ${event.amount} 点伤害`
@@ -240,10 +295,14 @@ export function createHudController(
             ? `格挡成功：承受 ${event.amount} 点伤害`
             : `受击：生命减少 ${event.amount}`,
         );
-      } else if (event.type === "damage") {
-        setCaption(`命中：造成 ${event.amount} 点伤害`, 0.8);
       } else if (event.type === "enemy-telegraph") {
-        setCaption(`敌人预警：${MOVE_LABELS[event.moveId]}`, 1.1);
+        setCaption(
+          `敌人预警：${formatTelegraphLabel(
+            state.enemies[event.enemyId]?.kind ?? "",
+            event.moveId,
+          )}`,
+          1.1,
+        );
       } else if (event.type === "boss-phase") {
         setCaption(`首领进入第 ${event.phase} 阶段`, 1.8);
       } else if (event.type === "drop") {
@@ -321,7 +380,7 @@ export function createHudController(
     setText(objectiveTitle, objectiveLabels[state.encounter.phase]);
     setText(
       arenaStatus,
-      `${state.encounter.phase} · 闸门${
+      `${formatPhaseLabel(state.encounter.phase)} · 闸门${
         state.encounter.gateOpen ? "开启" : "关闭"
       }`,
     );
@@ -332,7 +391,7 @@ export function createHudController(
         : state.enemies[state.player.lockTargetId] ?? null;
     targetPanel.hidden = target === null;
     if (target) {
-      setText(targetName, ENEMY_LABELS[target.kind]);
+      setText(targetName, formatEnemyLabel(target.kind));
       setText(targetHealth, `${target.health} / ${target.maxHealth}`);
       targetMeter.style.width =
         `${100 * target.health / target.maxHealth}%`;
@@ -346,12 +405,16 @@ export function createHudController(
       );
     }
 
-    telegraphBanner.hidden = options.telegraphIds.length === 0;
+    telegraphBanner.hidden = options.telegraphs.length === 0;
     setText(
       telegraphBanner,
-      options.telegraphIds.length === 0
+      options.telegraphs.length === 0
         ? ""
-        : `敌人正在蓄力：${options.telegraphIds.join("、")}`,
+        : `敌人正在蓄力：${options.telegraphs
+            .map(({ enemyKind, moveId }) =>
+              formatTelegraphLabel(enemyKind, moveId)
+            )
+            .join("、")}`,
     );
     setText(devicePrompt, DEVICE_LABELS[options.deviceMode]);
     damageFlash.hidden = !options.damageFlashActive;

@@ -31,6 +31,26 @@ export const AUDIO_CUES = Object.freeze({
     priority: 1,
     visualEquivalent: "蓝色盾环、精力数值和“格挡”字幕",
   }),
+  playerAttackStart: Object.freeze({
+    priority: 3,
+    visualEquivalent: "攻击动作与“攻击起手”字幕",
+  }),
+  playerDodgeStart: Object.freeze({
+    priority: 3,
+    visualEquivalent: "闪避拖尾与“闪避起步”字幕",
+  }),
+  playerHit: Object.freeze({
+    priority: 2,
+    visualEquivalent: "命中特效、伤害数值与“命中”字幕",
+  }),
+  playerMiss: Object.freeze({
+    priority: 3,
+    visualEquivalent: "“落空”字幕",
+  }),
+  playerHeal: Object.freeze({
+    priority: 2,
+    visualEquivalent: "生命数值增加与“治疗”字幕",
+  }),
   enemyTelegraph: Object.freeze({
     priority: 2,
     visualEquivalent: "敌人预警轮廓和攻击名称字幕",
@@ -39,15 +59,13 @@ export const AUDIO_CUES = Object.freeze({
     priority: 2,
     visualEquivalent: "Boss 阶段标题与冲击环",
   }),
-  playerAction: Object.freeze({
-    priority: 3,
-    visualEquivalent: "动作姿态、拖尾或接触星",
-  }),
   ui: Object.freeze({
     priority: 4,
     visualEquivalent: "界面状态与中文提示",
   }),
 } as const);
+
+export type AudioCueName = keyof typeof AUDIO_CUES;
 
 export interface AudioDiagnostics {
   readonly supported: boolean;
@@ -57,6 +75,8 @@ export interface AudioDiagnostics {
   readonly voiceCount: number;
   readonly voiceCap: number;
   readonly playedCueCount: number;
+  readonly lastCue: AudioCueName | null;
+  readonly cueCounts: Readonly<Record<AudioCueName, number>>;
   readonly muted: boolean;
   readonly paused: boolean;
   readonly settings: AudioSettings;
@@ -65,7 +85,6 @@ export interface AudioDiagnostics {
 
 export interface AudioFeedback {
   consume(events: readonly GameEvent[], state: Readonly<GameState>): void;
-  sync(state: Readonly<GameState>): void;
   setPaused(paused: boolean): void;
   setSettings(settings: Partial<AudioSettings>): AudioSettings;
   getSettings(): AudioSettings;
@@ -159,8 +178,20 @@ export function createAudioFeedback(options: {
   let unlocked = false;
   let paused = false;
   let disposed = false;
-  let previousPlayerAction: GameState["player"]["action"] = "idle";
   let playedCueCount = 0;
+  let lastCue: AudioCueName | null = null;
+  const cueCounts: Record<AudioCueName, number> = {
+    playerDamage: 0,
+    guardImpact: 0,
+    playerAttackStart: 0,
+    playerDodgeStart: 0,
+    playerHit: 0,
+    playerMiss: 0,
+    playerHeal: 0,
+    enemyTelegraph: 0,
+    bossPhase: 0,
+    ui: 0,
+  };
   let settings = loadAudioSettings(options.storage);
   let context: AudioContext | null = null;
   let masterGain: GainNode | null = null;
@@ -188,7 +219,14 @@ export function createAudioFeedback(options: {
   const stopVoice = (voice: Voice) => {
     if (voice.ended) return;
     try {
-      voice.oscillator.stop();
+      if (context) {
+        const now = context.currentTime;
+        voice.gain.gain.cancelScheduledValues(now);
+        voice.gain.gain.setValueAtTime(0.0001, now);
+        voice.oscillator.stop(now);
+      } else {
+        voice.oscillator.stop();
+      }
       releaseVoice(voice);
     } catch {
       releaseVoice(voice);
@@ -197,6 +235,14 @@ export function createAudioFeedback(options: {
 
   const stopAllVoices = () => {
     for (const voice of [...voices]) stopVoice(voice);
+  };
+
+  const stopVoicesAndSuspend = () => {
+    stopAllVoices();
+    if (!context || context.state === "closed") return;
+    void context.suspend().catch(() => {
+      blocked = true;
+    });
   };
 
   const resumeIfAllowed = () => {
@@ -257,8 +303,8 @@ export function createAudioFeedback(options: {
 
   const onVisibility = () => {
     if (!context) return;
-    if (visibilityDocument?.visibilityState === "hidden") {
-      void context.suspend();
+    if (visibilityDocument?.visibilityState !== "visible") {
+      stopVoicesAndSuspend();
     } else {
       resumeIfAllowed();
     }
@@ -266,11 +312,12 @@ export function createAudioFeedback(options: {
   visibilityDocument?.addEventListener("visibilitychange", onVisibility);
 
   const playCue = (
-    priority: 1 | 2 | 3 | 4,
+    cue: AudioCueName,
     frequency: number,
     duration: number,
     level: number,
   ) => {
+    const priority = AUDIO_CUES[cue].priority;
     if (
       disposed ||
       !unlocked ||
@@ -320,6 +367,8 @@ export function createAudioFeedback(options: {
     oscillator.onended = () => releaseVoice(voice);
     voices.push(voice);
     playedCueCount += 1;
+    lastCue = cue;
+    cueCounts[cue] += 1;
     oscillator.start(now);
     oscillator.stop(now + duration);
   };
@@ -331,23 +380,48 @@ export function createAudioFeedback(options: {
     for (const event of events) {
       if (event.type === "damage" && event.targetId === state.player.id) {
         playCue(
-          AUDIO_CUES.playerDamage.priority,
+          event.guarded ? "guardImpact" : "playerDamage",
           event.guardBroken ? 72 : event.guarded ? 190 : 115,
           event.guardBroken ? 0.28 : event.guarded ? 0.12 : 0.18,
           event.guardBroken ? 0.16 : event.guarded ? 0.1 : 0.14,
         );
-      } else if (event.type === "damage") {
-        playCue(AUDIO_CUES.playerAction.priority, 340, 0.1, 0.09);
+      } else if (
+        event.type === "action-started" &&
+        event.actorId === state.player.id
+      ) {
+        playCue(
+          event.actionId === "dodge"
+            ? "playerDodgeStart"
+            : "playerAttackStart",
+          event.actionId === "dodge" ? 430 : 285,
+          event.actionId === "dodge" ? 0.09 : 0.12,
+          0.07,
+        );
+      } else if (
+        event.type === "attack-resolved" &&
+        event.actorId === state.player.id
+      ) {
+        playCue(
+          event.result === "hit" ? "playerHit" : "playerMiss",
+          event.result === "hit" ? 340 : 145,
+          event.result === "hit" ? 0.1 : 0.16,
+          event.result === "hit" ? 0.09 : 0.06,
+        );
+      } else if (
+        event.type === "healed" &&
+        event.actorId === state.player.id
+      ) {
+        playCue("playerHeal", 620, 0.2, 0.08);
       } else if (event.type === "enemy-telegraph") {
-        playCue(AUDIO_CUES.enemyTelegraph.priority, 205, 0.22, 0.08);
+        playCue("enemyTelegraph", 205, 0.22, 0.08);
       } else if (event.type === "boss-phase") {
-        playCue(AUDIO_CUES.bossPhase.priority, 78, 0.45, 0.12);
+        playCue("bossPhase", 78, 0.45, 0.12);
       } else if (
         event.type === "drop" ||
         event.type === "upgrade-offered" ||
         event.type === "encounter-complete"
       ) {
-        playCue(AUDIO_CUES.ui.priority, 520, 0.14, 0.06);
+        playCue("ui", 520, 0.14, 0.06);
       }
     }
   };
@@ -359,8 +433,7 @@ export function createAudioFeedback(options: {
     persistAudioSettings(options.storage, settings);
     applyGainSettings();
     if (settings.muted) {
-      stopAllVoices();
-      if (context) void context.suspend();
+      stopVoicesAndSuspend();
     } else {
       resumeIfAllowed();
     }
@@ -369,26 +442,12 @@ export function createAudioFeedback(options: {
 
   return {
     consume,
-    sync(currentState) {
-      const action = currentState.player.action;
-      if (
-        action !== previousPlayerAction &&
-        (action === "attack" || action === "dodge")
-      ) {
-        playCue(
-          AUDIO_CUES.playerAction.priority,
-          action === "attack" ? 285 : 430,
-          action === "attack" ? 0.12 : 0.09,
-          0.07,
-        );
-      }
-      previousPlayerAction = action;
-    },
     setPaused(nextPaused) {
+      if (paused === nextPaused) return;
       paused = nextPaused;
       if (!context) return;
       if (paused) {
-        void context.suspend();
+        stopVoicesAndSuspend();
       } else {
         resumeIfAllowed();
       }
@@ -403,6 +462,8 @@ export function createAudioFeedback(options: {
       voiceCount: voices.length,
       voiceCap: MAX_VOICES,
       playedCueCount,
+      lastCue,
+      cueCounts: { ...cueCounts },
       muted: settings.muted,
       paused,
       settings: { ...settings },
@@ -419,7 +480,11 @@ export function createAudioFeedback(options: {
       });
       visibilityDocument?.removeEventListener("visibilitychange", onVisibility);
       stopAllVoices();
-      if (context) void context.close();
+      if (context) {
+        void context.close().catch(() => {
+          blocked = true;
+        });
+      }
       context = null;
       masterGain = null;
       effectsGain = null;

@@ -42,6 +42,7 @@ export type AttackActionId =
   | "oathblade-light-1"
   | "oathblade-light-2"
   | "ember-bow-shot";
+export type PlayerActionEventId = AttackActionId | "dodge";
 export type AttackPhase = "startup" | "active" | "recovery" | "complete";
 export type EnemyIntent =
   | "observe"
@@ -237,6 +238,20 @@ export interface GameState {
 
 export type GameEvent =
   | {
+      type: "action-started";
+      actorId: string;
+      actionId: PlayerActionEventId;
+      attackId: string;
+      tick: number;
+    }
+  | {
+      type: "attack-resolved";
+      actorId: string;
+      actionId: AttackActionId;
+      attackId: string;
+      result: "hit" | "miss";
+    }
+  | {
       type: "contact";
       attackerId: string;
       targetId: string;
@@ -266,6 +281,14 @@ export type GameEvent =
       enemyId: string;
       moveId: EnemyMoveId;
       attackId: string;
+    }
+  | {
+      type: "enemy-projectile-spawned";
+      projectileId: string;
+      attackId: string;
+      ownerId: string;
+      position: Vec2;
+      velocity: Vec2;
     }
   | {
       type: "boss-phase";

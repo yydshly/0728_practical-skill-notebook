@@ -18,13 +18,23 @@ import {
   type Scene,
 } from "three";
 import { enemyDefinitions } from "../content/enemy-definitions";
-import type { EnemyState, GameState } from "../simulation/types";
+import type {
+  EnemyKind,
+  EnemyMoveId,
+  EnemyState,
+  GameState,
+} from "../simulation/types";
 
 export interface EntitySynchronizerDiagnostics {
   readonly modelRootCount: number;
   readonly fallbackRootCount: number;
   readonly enemyIds: readonly string[];
   readonly telegraphIds: readonly string[];
+  readonly telegraphs: readonly {
+    readonly enemyId: string;
+    readonly enemyKind: EnemyKind;
+    readonly moveId: EnemyMoveId;
+  }[];
   readonly enemyProjectileTraceCount: number;
   readonly enemyProjectileIds: readonly string[];
 }
@@ -270,11 +280,13 @@ export function createEntitySynchronizer(
   const entities = new Map<string, ManagedEnemy>();
   const enemyProjectiles = new Map<string, ManagedEnemyProjectile>();
   const factory = options.createMonster ?? createProceduralMonster;
+  let latestState: Readonly<GameState> | null = null;
   let disposed = false;
 
   return {
     sync(state, deltaSeconds = 0) {
       if (disposed) throw new Error("Entity synchronizer is disposed");
+      latestState = state;
       syncEntities(knight, state);
       if (!scene) return;
 
@@ -337,6 +349,20 @@ export function createEntitySynchronizer(
     },
     getDiagnostics() {
       const managed = [...entities.values()];
+      const telegraphs = latestState
+        ? Object.values(latestState.enemies)
+            .filter(
+              (enemy) =>
+                enemy.movePhase === "telegraph" &&
+                enemy.currentMoveId !== null,
+            )
+            .sort((left, right) => left.id.localeCompare(right.id))
+            .map((enemy) => ({
+              enemyId: enemy.id,
+              enemyKind: enemy.kind,
+              moveId: enemy.currentMoveId!,
+            }))
+        : [];
       return {
         modelRootCount: managed.filter(({ monster }) => monster !== null).length,
         fallbackRootCount: managed.filter(({ monster }) => monster === null)
@@ -346,6 +372,7 @@ export function createEntitySynchronizer(
           .filter(({ telegraph }) => telegraph.visible)
           .map(({ id }) => id)
           .sort(),
+        telegraphs,
         enemyProjectileTraceCount: enemyProjectiles.size,
         enemyProjectileIds: [...enemyProjectiles.keys()].sort(),
       };
@@ -355,6 +382,7 @@ export function createEntitySynchronizer(
       disposed = true;
       for (const managed of entities.values()) disposeManaged(managed);
       entities.clear();
+      latestState = null;
       for (const managed of enemyProjectiles.values()) {
         disposeProjectile(managed);
       }

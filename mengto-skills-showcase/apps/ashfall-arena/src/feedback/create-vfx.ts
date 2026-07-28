@@ -41,15 +41,15 @@ export const VFX_EFFECT_DEFINITIONS = Object.freeze({
     capacity: 8,
   }),
   dodgeTrails: Object.freeze({
-    trigger: "player dodge state edge",
+    trigger: "player dodge action-started event",
     duration: 0.28,
     meaning: "确认闪避输入已进入权威动作状态",
     reducedEquivalent: "角色脚下短环，不产生长拖尾",
     capacity: 6,
   }),
   projectileTraces: Object.freeze({
-    trigger: "warden projectile active event",
-    duration: 0.3,
+    trigger: "enemy projectile spawned event",
+    duration: 0.6,
     meaning: "标示已进入 active 的投射攻击方向",
     reducedEquivalent: "固定短线，不沿轨迹移动",
     capacity: 12,
@@ -72,6 +72,7 @@ interface EffectSlot {
   velocityX: number;
   velocityY: number;
   velocityZ: number;
+  sourceId: string | null;
 }
 
 interface EffectPool {
@@ -88,6 +89,12 @@ export interface VfxDiagnostics {
   readonly particleDisplacement: boolean;
   readonly damageFlashActive: boolean;
   readonly totalActive: number;
+  readonly projectileTraces: readonly {
+    readonly projectileId: string;
+    readonly position: { readonly x: number; readonly z: number };
+    readonly velocity: { readonly x: number; readonly z: number };
+    readonly rotationY: number;
+  }[];
   readonly pools: Record<
     VfxPoolName,
     { readonly active: number; readonly capacity: number }
@@ -139,6 +146,7 @@ const createPool = (
       velocityX: 0,
       velocityY: 0,
       velocityZ: 0,
+      sourceId: null,
     });
   }
   return { name, root, slots, cursor: 0 };
@@ -151,6 +159,7 @@ const deactivate = (slot: EffectSlot) => {
   slot.velocityX = 0;
   slot.velocityY = 0;
   slot.velocityZ = 0;
+  slot.sourceId = null;
   slot.mesh.visible = false;
 };
 
@@ -232,7 +241,6 @@ export function createVfx(
   let reducedMotion = options.reducedMotion;
   const quality = options.quality;
   let damageFlashRemaining = 0;
-  let previousAction: GameState["player"]["action"] = "idle";
   let previousPhase: EncounterPhase | null = null;
   let previousStatus: GameStatus | null = null;
   let disposed = false;
@@ -246,6 +254,7 @@ export function createVfx(
     velocityX: number,
     velocityY: number,
     velocityZ: number,
+    sourceId: string | null = null,
   ) => {
     const slot = acquire(pool);
     slot.active = true;
@@ -254,7 +263,9 @@ export function createVfx(
     slot.velocityX = reducedMotion ? 0 : velocityX;
     slot.velocityY = reducedMotion ? 0 : velocityY;
     slot.velocityZ = reducedMotion ? 0 : velocityZ;
+    slot.sourceId = sourceId;
     slot.mesh.position.set(x, y, z);
+    slot.mesh.rotation.set(0, 0, 0);
     slot.mesh.scale.setScalar(1);
     slot.material.opacity = 1;
     slot.mesh.visible = true;
@@ -278,23 +289,6 @@ export function createVfx(
     ) {
       reset();
     }
-    if (state.player.action === "dodge" && previousAction !== "dodge") {
-      const count = reducedMotion || quality === "low" ? 1 : 3;
-      for (let index = 0; index < count; index += 1) {
-        const direction = index % 2 === 0 ? -1 : 1;
-        spawn(
-          pools.dodgeTrails,
-          state.player.position.x,
-          0.055,
-          state.player.position.y,
-          VFX_EFFECT_DEFINITIONS.dodgeTrails.duration,
-          direction * 0.15,
-          0,
-          -0.55,
-        );
-      }
-    }
-    previousAction = state.player.action;
     previousPhase = state.encounter.phase;
     previousStatus = state.status;
   };
@@ -306,7 +300,26 @@ export function createVfx(
     if (disposed) return;
     sync(state);
     for (const event of events) {
-      if (event.type === "damage") {
+      if (
+        event.type === "action-started" &&
+        event.actorId === state.player.id &&
+        event.actionId === "dodge"
+      ) {
+        const count = reducedMotion || quality === "low" ? 1 : 3;
+        for (let index = 0; index < count; index += 1) {
+          const direction = index % 2 === 0 ? -1 : 1;
+          spawn(
+            pools.dodgeTrails,
+            state.player.position.x,
+            0.055,
+            state.player.position.y,
+            VFX_EFFECT_DEFINITIONS.dodgeTrails.duration,
+            direction * 0.15,
+            0,
+            -0.55,
+          );
+        }
+      } else if (event.type === "damage") {
         const position = actorPosition(state, event.targetId);
         if (event.targetId === state.player.id) {
           damageFlashRemaining = Math.max(
@@ -341,21 +354,26 @@ export function createVfx(
             Math.sin(angle) * 1.4,
           );
         }
-      } else if (
-        event.type === "enemy-move-active" &&
-        event.moveId === "warden-bolt"
-      ) {
-        const position = actorPosition(state, event.enemyId);
-        spawn(
-          pools.projectileTraces,
-          position.x,
-          0.9,
-          position.y,
-          VFX_EFFECT_DEFINITIONS.projectileTraces.duration,
+      } else if (event.type === "enemy-projectile-spawned") {
+        const velocityX = event.velocity.x;
+        const velocityZ = event.velocity.y;
+        const slot = acquire(pools.projectileTraces);
+        slot.active = true;
+        slot.remaining = VFX_EFFECT_DEFINITIONS.projectileTraces.duration;
+        slot.duration = VFX_EFFECT_DEFINITIONS.projectileTraces.duration;
+        slot.velocityX = reducedMotion ? 0 : velocityX;
+        slot.velocityY = 0;
+        slot.velocityZ = reducedMotion ? 0 : velocityZ;
+        slot.sourceId = event.projectileId;
+        slot.mesh.position.set(event.position.x, 0.9, event.position.y);
+        slot.mesh.rotation.set(
+          -Math.PI / 2,
+          -Math.atan2(velocityZ, velocityX),
           0,
-          0,
-          1.4,
         );
+        slot.mesh.scale.setScalar(1);
+        slot.material.opacity = 1;
+        slot.mesh.visible = true;
       } else if (
         event.type === "enemy-move-active" &&
         event.moveId === "sovereign-shockwave"
@@ -369,6 +387,7 @@ export function createVfx(
         slot.velocityX = 0;
         slot.velocityY = 0;
         slot.velocityZ = 0;
+        slot.sourceId = null;
         slot.mesh.position.set(position.x, 0.04, position.y);
         slot.mesh.scale.setScalar(reducedMotion ? 1.8 : 0.65);
         slot.material.opacity = 1;
@@ -426,6 +445,20 @@ export function createVfx(
       particleDisplacement: !reducedMotion,
       damageFlashActive: damageFlashRemaining > 0,
       totalActive,
+      projectileTraces: pools.projectileTraces.slots
+        .filter((slot) => slot.active && slot.sourceId !== null)
+        .map((slot) => ({
+          projectileId: slot.sourceId!,
+          position: {
+            x: slot.mesh.position.x,
+            z: slot.mesh.position.z,
+          },
+          velocity: {
+            x: slot.velocityX,
+            z: slot.velocityZ,
+          },
+          rotationY: slot.mesh.rotation.y,
+        })),
       pools: poolDiagnostics,
     };
   };

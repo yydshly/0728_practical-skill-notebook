@@ -71,4 +71,84 @@ describe("bounded combat feedback", () => {
       totalActive: 0,
     });
   });
+
+  it.each([
+    ["+X", { x: 8, y: 0 }],
+    ["-X", { x: -8, y: 0 }],
+    ["+Z", { x: 0, y: 8 }],
+    ["-Z", { x: 0, y: -8 }],
+    ["diagonal", { x: 4, y: -4 }],
+  ])(
+    "orients and moves a %s trace from authoritative projectile velocity",
+    (_label, velocity) => {
+      const scene = new Scene();
+      const vfx = createVfx(scene, {
+        reducedMotion: false,
+        quality: "high",
+      });
+      const state = createInitialState(4);
+      const event = {
+        type: "enemy-projectile-spawned",
+        projectileId: `projectile-${_label}`,
+        attackId: `attack-${_label}`,
+        ownerId: "warden-a",
+        position: { x: 2, y: -3 },
+        velocity,
+      } as unknown as GameEvent;
+
+      vfx.consume([event], state);
+      const before = vfx.getDiagnostics() as unknown as {
+        projectileTraces: Array<{
+          projectileId: string;
+          position: { x: number; z: number };
+          velocity: { x: number; z: number };
+          rotationY: number;
+        }>;
+      };
+      expect(before.projectileTraces).toHaveLength(1);
+      expect(before.projectileTraces[0]).toMatchObject({
+        projectileId: `projectile-${_label}`,
+        position: { x: 2, z: -3 },
+        velocity: { x: velocity.x, z: velocity.y },
+      });
+      expect(before.projectileTraces[0]!.rotationY).toBeCloseTo(
+        -Math.atan2(velocity.y, velocity.x),
+        10,
+      );
+
+      vfx.update(0.1, false);
+      const after = vfx.getDiagnostics() as unknown as typeof before;
+      expect(after.projectileTraces[0]!.position.x).toBeCloseTo(
+        2 + velocity.x * 0.1,
+        10,
+      );
+      expect(after.projectileTraces[0]!.position.z).toBeCloseTo(
+        -3 + velocity.y * 0.1,
+        10,
+      );
+      vfx.dispose();
+    },
+  );
+
+  it("creates dodge feedback only from the fixed-step action event", () => {
+    const scene = new Scene();
+    const vfx = createVfx(scene, { reducedMotion: false, quality: "high" });
+    const state = createInitialState(5);
+    state.player.action = "dodge";
+
+    vfx.sync(state);
+    expect(vfx.getDiagnostics().pools.dodgeTrails.active).toBe(0);
+
+    vfx.consume([
+      {
+        type: "action-started",
+        actorId: "player",
+        actionId: "dodge",
+        attackId: "player:dodge:0",
+        tick: 0,
+      } as unknown as GameEvent,
+    ], state);
+    expect(vfx.getDiagnostics().pools.dodgeTrails.active).toBe(3);
+    vfx.dispose();
+  });
 });

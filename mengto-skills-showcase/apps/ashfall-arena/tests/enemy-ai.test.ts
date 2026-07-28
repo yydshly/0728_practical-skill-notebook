@@ -1139,7 +1139,16 @@ describe("authoritative enemy combat", () => {
     );
 
     expect(spawned.state.player.health).toBe(state.player.health);
-    expect(spawned.events).toEqual([]);
+    expect(spawned.events).toEqual([
+      {
+        type: "enemy-projectile-spawned",
+        projectileId: "warden-a:warden-bolt:1:projectile",
+        attackId: "warden-a:warden-bolt:1",
+        ownerId: "warden-a",
+        position: { x: 0, y: -3.88 },
+        velocity: { x: 0, y: 8 },
+      },
+    ]);
     expect(spawned.state.combat.enemyProjectiles).toEqual([
       expect.objectContaining({
         id: "warden-a:warden-bolt:1:projectile",
@@ -1178,6 +1187,72 @@ describe("authoritative enemy combat", () => {
     expect(flight.player.health).toBe(state.player.health - 16);
     expect(flight.combat.enemyProjectiles).toEqual([]);
   });
+
+  it.each([
+    ["+X", Math.PI / 2, { x: 8, y: 0 }],
+    ["-X", -Math.PI / 2, { x: -8, y: 0 }],
+    ["+Z", 0, { x: 0, y: 8 }],
+    ["-Z", Math.PI, { x: 0, y: -8 }],
+    [
+      "diagonal",
+      Math.PI / 4,
+      { x: 5.65685424949238, y: 5.656854249492381 },
+    ],
+  ])(
+    "emits %s projectile velocity from the same serialized projectile truth",
+    (_label, facingRadians, expectedVelocity) => {
+      const requested = requestEnemyMove(
+        createEncounterEnemy(
+          "direction-warden",
+          "ash-warden",
+          { x: 1, y: -2 },
+          {
+            aiEnabled: false,
+            facingRadians,
+            lockedFacingRadians: facingRadians,
+          },
+        ),
+        "warden-bolt",
+        10,
+      );
+      const warden = {
+        ...requested,
+        intent: "attack" as const,
+        movePhase: "active" as const,
+        moveElapsedTicks: 0,
+      };
+      const state = createInitialForEnemy(warden, { x: 0, y: 0 });
+      const before = JSON.parse(JSON.stringify(state));
+
+      const first = stepEnemyCombat(state, neutralIntent, [], arenaContent);
+      const replay = stepEnemyCombat(state, neutralIntent, [], arenaContent);
+      const projectile = first.state.combat.enemyProjectiles[0]!;
+      const event = first.events[0] as unknown as {
+        type: string;
+        projectileId: string;
+        position: { x: number; y: number };
+        velocity: { x: number; y: number };
+      };
+
+      expect(event).toMatchObject({
+        type: "enemy-projectile-spawned",
+        projectileId: projectile.id,
+        position: projectile.position,
+      });
+      expect(event.velocity.x).toBeCloseTo(expectedVelocity.x, 10);
+      expect(event.velocity.y).toBeCloseTo(expectedVelocity.y, 10);
+      expect(event.velocity.x).toBeCloseTo(
+        projectile.direction.x * projectile.speed,
+        10,
+      );
+      expect(event.velocity.y).toBeCloseTo(
+        projectile.direction.y * projectile.speed,
+        10,
+      );
+      expect(first).toEqual(replay);
+      expect(state).toEqual(before);
+    },
+  );
 
   it("lets blockers absorb a Warden bolt and never tracks after launch", () => {
     const gateWarden = requestEnemyMove(

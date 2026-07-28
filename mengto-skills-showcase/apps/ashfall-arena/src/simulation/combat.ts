@@ -476,9 +476,11 @@ const startAttack = (
   state: GameState,
   actionId: AttackActionId,
   content: GameContent,
-): GameState => {
+): StepGameResult => {
   const action = actionContent(actionId, content);
-  if (state.player.stamina + TIME_EPSILON < action.stamina) return state;
+  if (state.player.stamina + TIME_EPSILON < action.stamina) {
+    return { state, events: [] };
+  }
 
   const attack: AttackInstance = {
     id: `${state.player.id}:${state.tick}:${state.combat.attackSequence}`,
@@ -492,19 +494,30 @@ const startAttack = (
     projectileSpawned: false,
   };
   return {
-    ...state,
-    player: {
-      ...state.player,
-      stamina: state.player.stamina - action.stamina,
-      action: "attack",
-      actionTime: 1 / content.combat.fixedHz,
+    state: {
+      ...state,
+      player: {
+        ...state.player,
+        stamina: state.player.stamina - action.stamina,
+        action: "attack",
+        actionTime: 1 / content.combat.fixedHz,
+      },
+      combat: {
+        ...state.combat,
+        attackSequence: state.combat.attackSequence + 1,
+        activeAttack: attack,
+        guardReleaseTicks: 0,
+      },
     },
-    combat: {
-      ...state.combat,
-      attackSequence: state.combat.attackSequence + 1,
-      activeAttack: attack,
-      guardReleaseTicks: 0,
-    },
+    events: [
+      {
+        type: "action-started",
+        actorId: state.player.id,
+        actionId,
+        attackId: attack.id,
+        tick: state.tick,
+      },
+    ],
   };
 };
 
@@ -649,6 +662,16 @@ const stepActiveAttack = (
 
   if (phase !== "complete") return { state: working, events };
 
+  if (nextAttack.weaponId === "oathblade") {
+    events.push({
+      type: "attack-resolved",
+      actorId: nextAttack.ownerId,
+      actionId: nextAttack.actionId,
+      attackId: nextAttack.id,
+      result: nextAttack.hitTargetIds.length > 0 ? "hit" : "miss",
+    });
+  }
+
   if (
     nextAttack.comboQueued &&
     nextAttack.actionId === "oathblade-light-1" &&
@@ -667,13 +690,14 @@ const stepActiveAttack = (
         activeAttack: null,
       },
     };
+    const chained = startAttack(
+      withoutAttack,
+      "oathblade-light-2",
+      content,
+    );
     return {
-      state: startAttack(
-        withoutAttack,
-        "oathblade-light-2",
-        content,
-      ),
-      events,
+      state: chained.state,
+      events: [...events, ...chained.events],
     };
   }
 
@@ -810,13 +834,37 @@ const stepProjectiles = (
       );
       working = result.state;
       events.push(...result.events);
+      events.push({
+        type: "attack-resolved",
+        actorId: projectile.ownerId,
+        actionId: "ember-bow-shot",
+        attackId: projectile.attackId,
+        result: "hit",
+      });
       continue;
     }
 
-    if (firstContact?.kind === "world") continue;
+    if (firstContact?.kind === "world") {
+      events.push({
+        type: "attack-resolved",
+        actorId: projectile.ownerId,
+        actionId: "ember-bow-shot",
+        attackId: projectile.attackId,
+        result: "miss",
+      });
+      continue;
+    }
 
     if (nextProjectile.ageTicks < nextProjectile.lifetimeTicks) {
       survivors.push(nextProjectile);
+    } else {
+      events.push({
+        type: "attack-resolved",
+        actorId: projectile.ownerId,
+        actionId: "ember-bow-shot",
+        attackId: projectile.attackId,
+        result: "miss",
+      });
     }
   }
 
@@ -1196,13 +1244,14 @@ export function stepEnemyCombat(
         enemy.currentMoveId === "warden-bolt" &&
         !working.combat.spawnedEnemyAttackIds.includes(attackId)
       ) {
+        const projectile = spawnEnemyProjectile(enemy, attackId, content);
         working = {
           ...working,
           combat: {
             ...working.combat,
             enemyProjectiles: [
               ...working.combat.enemyProjectiles,
-              spawnEnemyProjectile(enemy, attackId, content),
+              projectile,
             ],
             spawnedEnemyAttackIds: [
               ...working.combat.spawnedEnemyAttackIds,
@@ -1210,6 +1259,17 @@ export function stepEnemyCombat(
             ],
           },
         };
+        produced.push({
+          type: "enemy-projectile-spawned",
+          projectileId: projectile.id,
+          attackId: projectile.attackId,
+          ownerId: projectile.ownerId,
+          position: { ...projectile.position },
+          velocity: {
+            x: projectile.direction.x * projectile.speed,
+            y: projectile.direction.y * projectile.speed,
+          },
+        });
       }
       if (
         !enemy.hitTargetIds.includes(state.player.id) &&
@@ -1403,13 +1463,15 @@ export function stepCombat(
       (working.player.action === "idle" ||
         working.player.action === "move")
     ) {
-      working = startAttack(
+      const started = startAttack(
         working,
         working.player.weaponId === "oathblade"
           ? "oathblade-light-1"
           : "ember-bow-shot",
         content,
       );
+      working = started.state;
+      produced.push(...started.events);
     }
   }
 

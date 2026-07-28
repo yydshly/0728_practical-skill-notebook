@@ -50,6 +50,14 @@ const combatEvents = (events: readonly GameEvent[]) =>
     type === "contact" || type === "damage" || type === "defeated"
   );
 
+const eventsNamed = (
+  events: readonly GameEvent[],
+  type: "action-started" | "attack-resolved",
+) =>
+  events.filter(
+    (event) => (event as { type: string }).type === type,
+  ) as unknown as Array<Record<string, unknown>>;
+
 const permutations = <T>(items: readonly T[]): T[][] => {
   if (items.length === 0) return [[]];
   return items.flatMap((item, index) =>
@@ -98,6 +106,152 @@ const withManualProjectile = (
 });
 
 describe("authoritative oathblade combat", () => {
+  it("emits one replay-stable action start only when an attack is accepted", () => {
+    const initial = createInitialState(301);
+    const snapshot = JSON.parse(JSON.stringify(initial));
+    const first = stepGame(
+      initial,
+      { ...neutralIntent, attackPressed: true },
+      1 / 60,
+      arenaContent,
+    );
+    const replay = stepGame(
+      initial,
+      { ...neutralIntent, attackPressed: true },
+      1 / 60,
+      arenaContent,
+    );
+    const held = stepGame(
+      first.state,
+      { ...neutralIntent, attackPressed: true },
+      1 / 60,
+      arenaContent,
+    );
+    const exhausted = createInitialState(302);
+    exhausted.player.stamina = 0;
+    const rejected = stepGame(
+      exhausted,
+      { ...neutralIntent, attackPressed: true },
+      1 / 60,
+      arenaContent,
+    );
+
+    expect(eventsNamed(first.events, "action-started")).toEqual([
+      {
+        type: "action-started",
+        actorId: "player",
+        actionId: "oathblade-light-1",
+        attackId: "player:0:0",
+        tick: 0,
+      },
+    ]);
+    expect(eventsNamed(held.events, "action-started")).toEqual([]);
+    expect(eventsNamed(rejected.events, "action-started")).toEqual([]);
+    expect(replay).toEqual(first);
+    expect(initial).toEqual(snapshot);
+  });
+
+  it("emits one dodge start and suppresses action events while frozen or already dodging", () => {
+    const initial = createInitialState(303);
+    const dodged = stepGame(
+      initial,
+      { ...neutralIntent, dodgePressed: true },
+      1 / 60,
+      arenaContent,
+    );
+    const continued = stepGame(
+      dodged.state,
+      { ...neutralIntent, dodgePressed: true },
+      1 / 60,
+      arenaContent,
+    );
+    const paused = {
+      ...createInitialState(304),
+      paused: true,
+    };
+    const complete = {
+      ...createInitialState(305),
+      status: "complete" as const,
+    };
+
+    expect(eventsNamed(dodged.events, "action-started")).toEqual([
+      {
+        type: "action-started",
+        actorId: "player",
+        actionId: "dodge",
+        attackId: "player:dodge:0",
+        tick: 0,
+      },
+    ]);
+    expect(eventsNamed(continued.events, "action-started")).toEqual([]);
+    expect(
+      eventsNamed(
+        stepGame(
+          paused,
+          { ...neutralIntent, dodgePressed: true },
+          1 / 60,
+          arenaContent,
+        ).events,
+        "action-started",
+      ),
+    ).toEqual([]);
+    expect(
+      eventsNamed(
+        stepGame(
+          complete,
+          { ...neutralIntent, attackPressed: true },
+          1 / 60,
+          arenaContent,
+        ).events,
+        "action-started",
+      ),
+    ).toEqual([]);
+  });
+
+  it("resolves a melee miss at recovery completion exactly once", () => {
+    const result = runTicks(
+      createInitialState(306),
+      new Map([[0, { attackPressed: true }]]),
+      80,
+    );
+
+    expect(eventsNamed(result.events, "attack-resolved")).toEqual([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "oathblade-light-1",
+        attackId: "player:0:0",
+        result: "miss",
+      },
+    ]);
+  });
+
+  it("resolves one hit after a multi-target melee active window", () => {
+    const initial = createInitialState(307);
+    initial.enemies = {
+      "enemy-a": enemyAhead("enemy-a", { x: -0.3, y: -7.7 }),
+      "enemy-b": enemyAhead("enemy-b", { x: 0.3, y: -7.7 }),
+    };
+    const result = runTicks(
+      initial,
+      new Map([[0, { attackPressed: true }]]),
+      80,
+    );
+
+    expect(
+      combatEvents(result.events).filter(({ type }) => type === "damage"),
+    ).toHaveLength(2);
+    expect(eventsNamed(result.events, "attack-resolved")).toEqual([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "oathblade-light-1",
+        attackId: "player:0:0",
+        result: "hit",
+      },
+    ]);
+  });
+
   it("applies light-one damage once to an in-range target during the active window", () => {
     const result = runTicks(
       withEnemy(createInitialState(1)),
@@ -513,6 +667,15 @@ describe("authoritative ember bow projectile", () => {
     ]);
     expect(result.state.enemies["enemy-1"]!.health).toBe(21);
     expect(result.state.combat.projectiles).toEqual([]);
+    expect(eventsNamed(result.events, "attack-resolved")).toEqual([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "ember-bow-shot",
+        attackId: "player:2:0",
+        result: "hit",
+      },
+    ]);
   });
 
   it("uses the full segment so a discrete projectile step cannot tunnel", () => {
@@ -534,7 +697,7 @@ describe("authoritative ember bow projectile", () => {
     ).toBe(false);
   });
 
-  it("removes projectiles after leaving the authored arena or reaching lifetime", () => {
+  it("resolves bow misses once at world contact and lifetime expiry", () => {
     const bowAtEdge = equipBow(createInitialState(1));
     bowAtEdge.player.position = { x: 0, y: 11.5 };
     bowAtEdge.player.facingRadians = 0;
@@ -542,18 +705,51 @@ describe("authoritative ember bow projectile", () => {
       bowAtEdge,
       new Map([[0, { attackPressed: true }]]),
       25,
-    ).state;
+    );
 
-    const bowForLifetime = equipBow(createInitialState(2));
-    bowForLifetime.player.position = { x: 0, y: 0 };
-    const expired = runTicks(
-      bowForLifetime,
-      new Map([[0, { attackPressed: true }]]),
-      100,
-    ).state;
+    const lifetimeState = withManualProjectile(createInitialState(2), {
+      ageTicks: 74,
+      lifetimeTicks: 75,
+      position: { x: 0, y: 0 },
+      direction: { x: 1, y: 0 },
+      speed: 1,
+    });
+    const lifetimeContent: GameContent = {
+      ...arenaContent,
+      arena: {
+        ...arenaContent.arena,
+        min: { x: -100, y: -100 },
+        max: { x: 100, y: 100 },
+        collisions: [],
+      },
+    };
+    const expired = stepGame(
+      lifetimeState,
+      neutralIntent,
+      1 / 60,
+      lifetimeContent,
+    );
 
-    expect(outOfBounds.combat.projectiles).toEqual([]);
-    expect(expired.combat.projectiles).toEqual([]);
+    expect(outOfBounds.state.combat.projectiles).toEqual([]);
+    expect(expired.state.combat.projectiles).toEqual([]);
+    expect(eventsNamed(outOfBounds.events, "attack-resolved")).toEqual([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "ember-bow-shot",
+        attackId: "player:2:0",
+        result: "miss",
+      },
+    ]);
+    expect(eventsNamed(expired.events, "attack-resolved")).toEqual([
+      {
+        type: "attack-resolved",
+        actorId: "player",
+        actionId: "ember-bow-shot",
+        attackId: "manual-shot",
+        result: "miss",
+      },
+    ]);
   });
 });
 
@@ -670,7 +866,7 @@ describe("projectile world time of impact", () => {
       content,
     );
 
-    expect(result.events).toEqual([]);
+    expect(combatEvents(result.events)).toEqual([]);
     expect(result.state.enemies["a-target"]!.health).toBe(36);
     expect(result.state.combat.projectiles).toEqual([]);
   });
@@ -728,7 +924,7 @@ describe("projectile world time of impact", () => {
       arenaContent,
     );
 
-    expect(result.events).toEqual([]);
+    expect(combatEvents(result.events)).toEqual([]);
     expect(result.state.enemies["enemy-behind-gate"]!.health).toBe(36);
     expect(result.state.combat.projectiles).toEqual([]);
   });
@@ -755,7 +951,7 @@ describe("projectile world time of impact", () => {
       arenaContent,
     );
 
-    expect(result.events).toEqual([
+    expect(combatEvents(result.events)).toEqual([
       {
         type: "contact",
         attackerId: "player",
@@ -794,7 +990,7 @@ describe("projectile world time of impact", () => {
       arenaContent,
     );
 
-    expect(result.events).toEqual([]);
+    expect(combatEvents(result.events)).toEqual([]);
     expect(result.state.enemies["enemy-behind-anvil"]!.health).toBe(36);
     expect(result.state.combat.projectiles).toEqual([]);
   });
@@ -907,7 +1103,7 @@ describe("projectile world time of impact", () => {
       boundaryOnlyContent,
     );
 
-    expect(result.events).toEqual([]);
+    expect(combatEvents(result.events)).toEqual([]);
     expect(result.state.enemies["outside-target"]!.health).toBe(36);
     expect(result.state.combat.projectiles).toEqual([]);
   });

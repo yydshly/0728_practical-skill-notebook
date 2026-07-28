@@ -1,4 +1,8 @@
 :root {
+  --ashfall-safe-top: env(safe-area-inset-top, 0px);
+  --ashfall-safe-right: env(safe-area-inset-right, 0px);
+  --ashfall-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ashfall-safe-left: env(safe-area-inset-left, 0px);
   color: #f7eee2;
   background: #0e0d11;
   font-family:
@@ -100,8 +104,8 @@ button {
 
 .hud {
   position: absolute;
-  top: max(20px, env(safe-area-inset-top));
-  left: max(20px, env(safe-area-inset-left));
+  top: max(20px, var(--ashfall-safe-top));
+  left: max(20px, var(--ashfall-safe-left));
   display: grid;
   width: min(328px, calc(100% - 40px));
   padding: 16px;
@@ -168,8 +172,8 @@ button {
 
 .target-panel {
   position: absolute;
-  top: max(88px, calc(env(safe-area-inset-top) + 72px));
-  right: max(20px, env(safe-area-inset-right));
+  top: max(88px, calc(var(--ashfall-safe-top) + 72px));
+  right: max(20px, var(--ashfall-safe-right));
   z-index: 5;
   display: grid;
   grid-template-columns: 1fr auto;
@@ -204,8 +208,8 @@ button {
 
 .objective-card {
   position: absolute;
-  right: max(20px, env(safe-area-inset-right));
-  bottom: max(24px, calc(env(safe-area-inset-bottom) + 10px));
+  right: max(20px, var(--ashfall-safe-right));
+  bottom: max(24px, calc(var(--ashfall-safe-bottom) + 10px));
   width: min(372px, calc(100% - 40px));
   padding: 18px 20px;
   border: 1px solid rgb(240 163 66 / 25%);
@@ -245,8 +249,8 @@ button {
 
 .device-prompt {
   position: absolute;
-  bottom: max(18px, calc(env(safe-area-inset-bottom) + 8px));
-  left: max(20px, env(safe-area-inset-left));
+  bottom: max(18px, calc(var(--ashfall-safe-bottom) + 8px));
+  left: max(20px, var(--ashfall-safe-left));
   z-index: 5;
   margin: 0;
   padding: 7px 10px;
@@ -334,9 +338,9 @@ button {
 
 .touch-controls {
   position: absolute;
-  right: max(18px, env(safe-area-inset-right));
-  bottom: max(150px, calc(env(safe-area-inset-bottom) + 120px));
-  left: max(18px, env(safe-area-inset-left));
+  right: max(18px, var(--ashfall-safe-right));
+  bottom: max(150px, calc(var(--ashfall-safe-bottom) + 120px));
+  left: max(18px, var(--ashfall-safe-left));
   z-index: 4;
   display: flex;
   align-items: end;
@@ -437,7 +441,7 @@ html[data-input-mode="touch"] .device-prompt {
   }
 
   .hud {
-    top: max(12px, env(safe-area-inset-top));
+    top: max(12px, var(--ashfall-safe-top));
     left: 12px;
     width: calc(100% - 24px);
     padding: 12px 14px;
@@ -458,7 +462,7 @@ html[data-input-mode="touch"] .device-prompt {
 
   .objective-card {
     right: 12px;
-    bottom: max(12px, env(safe-area-inset-bottom));
+    bottom: max(12px, var(--ashfall-safe-bottom));
     width: calc(100% - 24px);
     padding: 13px 15px;
   }
@@ -472,9 +476,9 @@ html[data-input-mode="touch"] .device-prompt {
   }
 
   .touch-controls {
-    right: 14px;
-    bottom: max(144px, calc(env(safe-area-inset-bottom) + 132px));
-    left: 14px;
+    right: max(14px, var(--ashfall-safe-right));
+    bottom: max(144px, calc(var(--ashfall-safe-bottom) + 132px));
+    left: max(14px, var(--ashfall-safe-left));
   }
 
   .touch-stick {
@@ -508,7 +512,7 @@ html[data-input-mode="touch"] .device-prompt {
   }
 
   .device-prompt {
-    bottom: max(266px, calc(env(safe-area-inset-bottom) + 254px));
+    bottom: max(266px, calc(var(--ashfall-safe-bottom) + 254px));
     left: 12px;
     max-width: calc(100% - 24px);
   }
@@ -694,8 +698,8 @@ html[data-input-mode="touch"] .device-prompt {
   }
 
   .hud {
-    top: max(8px, env(safe-area-inset-top));
-    left: max(8px, env(safe-area-inset-left));
+    top: max(8px, var(--ashfall-safe-top));
+    left: max(8px, var(--ashfall-safe-left));
     width: 218px;
     padding: 8px 10px;
     gap: 5px;
@@ -719,13 +723,13 @@ html[data-input-mode="touch"] .device-prompt {
   .target-panel {
     top: 115px;
     right: auto;
-    left: max(8px, env(safe-area-inset-left));
+    left: max(8px, var(--ashfall-safe-left));
     width: 218px;
   }
 
   .objective-card {
     top: 145px;
-    right: max(8px, env(safe-area-inset-right));
+    right: max(8px, var(--ashfall-safe-right));
     bottom: auto;
     width: 224px;
     padding: 8px 10px;
@@ -741,9 +745,9 @@ html[data-input-mode="touch"] .device-prompt {
   }
 
   .touch-controls {
-    right: max(10px, env(safe-area-inset-right));
-    bottom: max(8px, env(safe-area-inset-bottom));
-    left: max(10px, env(safe-area-inset-left));
+    right: max(10px, var(--ashfall-safe-right));
+    bottom: max(8px, var(--ashfall-safe-bottom));
+    left: max(10px, var(--ashfall-safe-left));
   }
 
   .touch-stick {
@@ -762,16 +766,21 @@ html[data-input-mode="touch"] .device-prompt {
     grid-template-columns: repeat(4, 44px);
   }
 
+  .touch-actions button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
   .device-prompt {
     right: 234px;
-    bottom: max(10px, env(safe-area-inset-bottom));
+    bottom: max(10px, var(--ashfall-safe-bottom));
     left: auto;
     max-width: 230px;
   }
 
   .audio-settings {
     top: 8px;
-    right: max(8px, env(safe-area-inset-right));
+    right: max(8px, var(--ashfall-safe-right));
     grid-template-columns: repeat(2, 1fr);
     width: 224px;
     padding: 0.3rem 0.5rem;
@@ -779,7 +788,7 @@ html[data-input-mode="touch"] .device-prompt {
 
   .new-run-button {
     top: 88px;
-    right: max(8px, env(safe-area-inset-right));
+    right: max(8px, var(--ashfall-safe-right));
     min-height: 44px;
   }
 
