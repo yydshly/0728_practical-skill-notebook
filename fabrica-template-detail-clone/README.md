@@ -38,6 +38,29 @@ npm run test:e2e
 - 桌面页脚为白色七栏导航，底部为超大 `WEBSITE TEMPLATES` 字标。
 - 手机端保留横向媒体条、搜索弹层与独立手机导航，避免把桌面布局简单压缩。
 
+## 本次使用的 Skill 与分工
+
+这次不是只靠一个“生成网页”的能力完成，而是将不同 Skill 用在各自擅长的阶段：
+
+| Skill | 在本项目中的作用 |
+| --- | --- |
+| `product-design:url-to-code` | 以线上 URL 为参考，规定先采集桌面/手机页面、DOM、计算样式、资源和交互状态，再创建本地前端。它负责“从网址得到可复刻的页面规则”。 |
+| `interactive-frontend-refinement` | 将复刻后的页面带回真实浏览器持续校准，记录设计契约、覆盖范围、截图证据、相邻视口检查和最终验收。它负责“从可运行页面做到高还原”。 |
+| `browser:control-in-app-browser` | 在本地运行页面中验证搜索、手机菜单、视频播放/暂停、Cookie 等真实状态，而非只验证静态截图。 |
+| `superpowers:systematic-debugging` 与 `superpowers:verification-before-completion` | 在测试异常时定位原因，并在提交前重新运行单元测试、构建和浏览器测试，避免将未验证结果写入项目库。 |
+
+可以把它们理解为一条流水线：
+
+```text
+url-to-code 采集源站
+→ 组件化重建本地页
+→ interactive-frontend-refinement 校准视觉与状态
+→ 浏览器技能验证真实交互
+→ 测试与构建验证后入库
+```
+
+这些 Skill 只提供方法和验收纪律，不会绕过网站条款、授权限制或后端能力；对外发布时仍应替换无权使用的品牌和素材。
+
 ## 目录说明
 
 ```text
