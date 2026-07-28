@@ -2,12 +2,15 @@ import * as THREE from 'three';
 import { createMutant } from './characters.js';
 
 export function createPursuer(scene, { navNodes, spawn }) {
-  const object = createMutant(scene, spawn);
+  const rig = createMutant(scene, spawn);
+  const object = rig.root;
   const direction = new THREE.Vector3();
   let state = 'patrol';
   let nodeIndex = 0;
+  let elapsed = 0;
 
   function update(dt, player) {
+    elapsed += dt;
     const distance = object.position.distanceTo(player.position);
     if (distance < 11) state = 'chase';
     else if (state === 'chase' && distance > 17) state = 'lost';
@@ -22,6 +25,9 @@ export function createPursuer(scene, { navNodes, spawn }) {
       const speed = state === 'chase' ? 3.45 : 1.15;
       object.position.addScaledVector(direction, speed * dt);
       object.rotation.y = Math.atan2(direction.x, direction.z);
+      rig.setMotion(speed, elapsed);
+    } else {
+      rig.setMotion(0, elapsed);
     }
     return state;
   }
@@ -30,6 +36,12 @@ export function createPursuer(scene, { navNodes, spawn }) {
     object,
     get state() { return state; },
     update,
-    reset() { object.position.copy(spawn); state = 'patrol'; nodeIndex = 0; },
+    reset() {
+      object.position.copy(spawn);
+      state = 'patrol';
+      nodeIndex = 0;
+      elapsed = 0;
+      rig.setMotion(0, elapsed);
+    },
   };
 }
