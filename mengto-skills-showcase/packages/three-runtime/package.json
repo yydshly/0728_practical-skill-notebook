@@ -7,6 +7,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "three": "^0.183.1"
+    "three": "^0.185.1"
   }
 }

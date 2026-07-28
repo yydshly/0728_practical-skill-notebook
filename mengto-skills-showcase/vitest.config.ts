@@ -1,3 +1,11 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
-export default defineConfig({ test: { exclude: [...configDefaults.exclude, "apps/*/tests/browser/**"] } });
+export default defineConfig({
+  test: {
+    exclude: [
+      ...configDefaults.exclude,
+      "apps/*/tests/browser/**",
+      "apps/*/tests/production/**",
+    ],
+  },
+});
