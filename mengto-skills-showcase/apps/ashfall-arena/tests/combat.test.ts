@@ -5,6 +5,7 @@ import {
   getAttackPhase,
   isContactAccepted,
   resolveIncomingDamage,
+  selectEarliestProjectileContact,
   sweptCircleContact,
 } from "../src/simulation/combat";
 import { createInitialState } from "../src/simulation/create-initial-state";
@@ -48,6 +49,16 @@ const combatEvents = (events: readonly GameEvent[]) =>
   events.filter(({ type }) =>
     type === "contact" || type === "damage" || type === "defeated"
   );
+
+const permutations = <T>(items: readonly T[]): T[][] => {
+  if (items.length === 0) return [[]];
+  return items.flatMap((item, index) =>
+    permutations([
+      ...items.slice(0, index),
+      ...items.slice(index + 1),
+    ]).map((permutation) => [item, ...permutation])
+  );
+};
 
 const incomingHit = (
   overrides: Partial<IncomingHit> = {},
@@ -543,6 +554,74 @@ describe("authoritative ember bow projectile", () => {
 
     expect(outOfBounds.combat.projectiles).toEqual([]);
     expect(expired.combat.projectiles).toEqual([]);
+  });
+});
+
+describe("projectile contact ordering", () => {
+  it("uses the true global minimum when a chained fuzzy comparison would reach a later world", () => {
+    const candidates = [
+      { id: "z-enemy", kind: "enemy" as const, time: 0 },
+      { id: "a-enemy", kind: "enemy" as const, time: 0.6e-9 },
+      { id: "world", kind: "world" as const, time: 1.2e-9 },
+    ];
+
+    for (const ordering of permutations(candidates)) {
+      expect(selectEarliestProjectileContact(ordering)).toEqual(
+        candidates[0],
+      );
+    }
+  });
+
+  it("prioritizes a world contact inside the global-minimum epsilon for every input permutation", () => {
+    const candidates = [
+      { id: "z-enemy", kind: "enemy" as const, time: 0 },
+      { id: "a-enemy", kind: "enemy" as const, time: 0.6e-9 },
+      { id: "world", kind: "world" as const, time: 0.9e-9 },
+    ];
+
+    for (const ordering of permutations(candidates)) {
+      expect(selectEarliestProjectileContact(ordering)).toEqual(
+        candidates[2],
+      );
+    }
+  });
+
+  it("includes a world contact exactly at the global-minimum epsilon boundary", () => {
+    expect(
+      selectEarliestProjectileContact([
+        { id: "enemy", kind: "enemy", time: 0 },
+        { id: "world", kind: "world", time: 1e-9 },
+      ]),
+    ).toEqual({ id: "world", kind: "world", time: 1e-9 });
+  });
+
+  it("uses stable ID ordering only for exact same-kind time ties", () => {
+    expect(
+      selectEarliestProjectileContact([
+        { id: "z-enemy", kind: "enemy", time: 0 },
+        { id: "a-enemy", kind: "enemy", time: 0 },
+      ]),
+    ).toEqual({ id: "a-enemy", kind: "enemy", time: 0 });
+  });
+
+  it("filters non-finite times explicitly and returns null without a finite candidate", () => {
+    const candidates = [
+      { id: "nan-world", kind: "world" as const, time: Number.NaN },
+      { id: "infinite-world", kind: "world" as const, time: Infinity },
+      {
+        id: "negative-infinite-enemy",
+        kind: "enemy" as const,
+        time: -Infinity,
+      },
+      { id: "finite-enemy", kind: "enemy" as const, time: 0.25 },
+    ];
+
+    expect(selectEarliestProjectileContact(candidates)).toEqual(
+      candidates[3],
+    );
+    expect(
+      selectEarliestProjectileContact(candidates.slice(0, 3)),
+    ).toBeNull();
   });
 });
 

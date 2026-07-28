@@ -18,6 +18,51 @@ import type {
 const TIME_EPSILON = 1e-9;
 const PROJECTILE_TOI_TIE_EPSILON = 1e-9;
 
+export interface ProjectileContactCandidate {
+  readonly id: string;
+  readonly kind: "enemy" | "world";
+  readonly time: number;
+  readonly targetId?: string;
+}
+
+export function selectEarliestProjectileContact(
+  candidates: readonly ProjectileContactCandidate[],
+): ProjectileContactCandidate | null {
+  const finiteCandidates = candidates.filter(({ time }) =>
+    Number.isFinite(time)
+  );
+  if (finiteCandidates.length === 0) return null;
+
+  const minimumTime = Math.min(
+    ...finiteCandidates.map(({ time }) => time),
+  );
+  const nearCandidates = finiteCandidates.filter(
+    ({ time }) =>
+      time <= minimumTime + PROJECTILE_TOI_TIE_EPSILON,
+  );
+  const preferredKind = nearCandidates.some(
+    ({ kind }) => kind === "world",
+  )
+    ? "world"
+    : "enemy";
+
+  let selected: ProjectileContactCandidate | null = null;
+  for (const candidate of nearCandidates) {
+    if (candidate.kind !== preferredKind) continue;
+    if (
+      selected === null ||
+      candidate.time < selected.time ||
+      (
+        candidate.time === selected.time &&
+        candidate.id.localeCompare(selected.id) < 0
+      )
+    ) {
+      selected = candidate;
+    }
+  }
+  return selected;
+}
+
 const ticksFor = (seconds: number, content: GameContent): number =>
   Math.ceil(seconds * content.combat.fixedHz - TIME_EPSILON);
 
@@ -659,12 +704,7 @@ const stepProjectiles = (
       position: to,
       ageTicks: projectile.ageTicks + 1,
     };
-    const candidates: Array<{
-      id: string;
-      kind: "enemy" | "world";
-      time: number;
-      targetId?: string;
-    }> = [];
+    const candidates: ProjectileContactCandidate[] = [];
 
     for (const target of Object.values(working.enemies)) {
       if (
@@ -721,17 +761,7 @@ const stepProjectiles = (
       });
     }
 
-    candidates.sort((left, right) => {
-      const timeDelta = left.time - right.time;
-      if (Math.abs(timeDelta) > PROJECTILE_TOI_TIE_EPSILON) {
-        return timeDelta;
-      }
-      if (left.kind !== right.kind) {
-        return left.kind === "world" ? -1 : 1;
-      }
-      return left.id.localeCompare(right.id);
-    });
-    const firstContact = candidates[0];
+    const firstContact = selectEarliestProjectileContact(candidates);
 
     if (firstContact?.kind === "enemy" && firstContact.targetId) {
       const targetId = firstContact.targetId;
