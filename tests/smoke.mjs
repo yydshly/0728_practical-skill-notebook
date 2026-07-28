@@ -5,11 +5,10 @@ import { dirname, resolve } from 'node:path';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const port = 4174;
-const vite = resolve(root, 'node_modules', '.bin', process.platform === 'win32' ? 'vite.cmd' : 'vite');
-const server = spawn(vite, ['--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+const vite = resolve(root, 'node_modules', 'vite', 'bin', 'vite.js');
+const server = spawn(process.execPath, [vite, '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
   cwd: root,
   stdio: 'ignore',
-  shell: process.platform === 'win32',
 });
 
 async function waitForServer() {
@@ -28,7 +27,10 @@ async function waitForServer() {
 try {
   await waitForServer();
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  const page = await browser.newPage({
+    viewport: { width: 1280, height: 720 },
+    deviceScaleFactor: 2,
+  });
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded' });
 
   const title = await page.title();
@@ -37,11 +39,156 @@ try {
   const gameHandle = await page.evaluate(() => Boolean(window.__RURAL_ESCAPE__));
   if (!gameHandle) throw new Error('Expected window.__RURAL_ESCAPE__ to be available');
 
-  const beforeMove = await page.evaluate(() => window.__RURAL_ESCAPE__.player.position.toArray());
-  await page.evaluate(() => window.__RURAL_ESCAPE__.moveForTest(0, 2));
-  const afterMove = await page.evaluate(() => window.__RURAL_ESCAPE__.player.position.toArray());
-  if (Math.hypot(afterMove[0] - beforeMove[0], afterMove[2] - beforeMove[2]) < 0.5) {
-    throw new Error('Expected debug player movement to change position');
+  const visualHooks = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    const beforeObjective = document.querySelector('#objective').textContent;
+    const hasStorySetter = typeof game.setStoryStateForTest === 'function';
+    if (hasStorySetter) {
+      game.setStoryStateForTest(
+        { radio: true, neighbour: true, flashlight: false },
+        'reach_granary',
+      );
+    }
+    return {
+      hasStorySetter,
+      pixelRatio: game.rendererPixelRatio,
+      objectiveRect: document.querySelector('.mission-hud').getBoundingClientRect().toJSON(),
+      storyObjective: game.story.objective,
+      storyFlags: { ...game.story.flags },
+      beforeObjective,
+      afterObjective: document.querySelector('#objective').textContent,
+    };
+  });
+  if (!visualHooks.hasStorySetter) throw new Error('Expected deterministic story-state hook');
+  if (visualHooks.pixelRatio > 1.5) {
+    throw new Error(`Pixel ratio exceeds cap: ${visualHooks.pixelRatio}`);
+  }
+  if (visualHooks.objectiveRect.right > 640) {
+    throw new Error('Mission HUD is too wide at 1280px');
+  }
+  if (visualHooks.storyObjective !== 'reach_granary') {
+    throw new Error(`Expected deterministic story objective, got ${visualHooks.storyObjective}`);
+  }
+  if (!visualHooks.storyFlags.radio || !visualHooks.storyFlags.neighbour) {
+    throw new Error('Expected deterministic story flags to be applied');
+  }
+  if (!visualHooks.afterObjective || visualHooks.afterObjective === visualHooks.beforeObjective) {
+    throw new Error('Expected deterministic story state to render the mission HUD');
+  }
+  const completeVisualState = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    game.setStoryStateForTest(
+      { radio: true, neighbour: true, flashlight: true },
+      'complete',
+    );
+    return {
+      objective: game.story.objective,
+      objectiveText: document.querySelector('#objective').textContent,
+    };
+  });
+  if (completeVisualState.objective !== 'complete') {
+    throw new Error(`Expected deterministic complete state, got ${completeVisualState.objective}`);
+  }
+  if (
+    !completeVisualState.objectiveText
+    || completeVisualState.objectiveText === visualHooks.afterObjective
+  ) {
+    throw new Error('Expected deterministic complete state to render the completed objective');
+  }
+  await page.evaluate(() => window.__RURAL_ESCAPE__.setStoryStateForTest(
+    { radio: false, neighbour: false, flashlight: false },
+    'leave_home',
+  ));
+
+  const traversal = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    const routeSegments = [
+      {
+        id: 'courtyard',
+        waypoints: [[0, 33], [0, 17], [6.8, 17]],
+        zone: { center: [8, 17], radius: 5 },
+      },
+      {
+        id: 'granary',
+        waypoints: [[6.8, 8], [0, 8], [0, -10], [8.8, -10]],
+        zone: { center: [11, -10], radius: 6 },
+      },
+      {
+        id: 'south_gate',
+        waypoints: [[6, -16], [6, -25], [4, -29], [4, -35], [0, -35]],
+        zone: { center: [0, -35], radius: 4.5 },
+      },
+    ];
+    const start = game.player.position.toArray();
+    const endpoints = [];
+    let maxRequestedStep = 0;
+
+    for (const segment of routeSegments) {
+      for (const [targetX, targetZ] of segment.waypoints) {
+        for (let attempt = 0; attempt < 1000; attempt += 1) {
+          const deltaX = targetX - game.player.position.x;
+          const deltaZ = targetZ - game.player.position.z;
+          const distance = Math.hypot(deltaX, deltaZ);
+          if (distance <= 0.001) break;
+
+          const requestedStep = Math.min(0.25, distance);
+          maxRequestedStep = Math.max(maxRequestedStep, requestedStep);
+          const beforeX = game.player.position.x;
+          const beforeZ = game.player.position.z;
+          game.moveForTest(
+            (deltaX / distance) * requestedStep,
+            (deltaZ / distance) * requestedStep,
+          );
+          const actualStep = Math.hypot(
+            game.player.position.x - beforeX,
+            game.player.position.z - beforeZ,
+          );
+          if (actualStep <= 0.000001) {
+            throw new Error(
+              `Continuous route stuck before ${segment.id} at `
+              + `${game.player.position.x.toFixed(3)},${game.player.position.z.toFixed(3)}`,
+            );
+          }
+        }
+      }
+
+      const endpoint = [game.player.position.x, game.player.position.z];
+      endpoints.push({
+        id: segment.id,
+        endpoint,
+        targetDistance: Math.hypot(
+          endpoint[0] - segment.waypoints.at(-1)[0],
+          endpoint[1] - segment.waypoints.at(-1)[1],
+        ),
+        zoneDistance: Math.hypot(
+          endpoint[0] - segment.zone.center[0],
+          endpoint[1] - segment.zone.center[1],
+        ),
+        zoneRadius: segment.zone.radius,
+      });
+    }
+
+    return { start, endpoints, maxRequestedStep };
+  });
+  if (Math.hypot(traversal.start[0] + 8, traversal.start[2] - 33) > 0.001) {
+    throw new Error(`Expected continuous route to start at canonical player_home, got ${traversal.start}`);
+  }
+  if (traversal.maxRequestedStep > 0.250001) {
+    throw new Error(`Continuous route step exceeded 0.25: ${traversal.maxRequestedStep}`);
+  }
+  for (const endpoint of traversal.endpoints) {
+    if (endpoint.targetDistance > 0.001) {
+      throw new Error(
+        `Expected continuous route to arrive at ${endpoint.id} endpoint; `
+        + `distance ${endpoint.targetDistance}`,
+      );
+    }
+    if (endpoint.zoneDistance > endpoint.zoneRadius) {
+      throw new Error(
+        `Expected continuous route to reach ${endpoint.id}; `
+        + `distance ${endpoint.zoneDistance} exceeds ${endpoint.zoneRadius}`,
+      );
+    }
   }
 
   const wallMove = await page.evaluate(() => {
@@ -151,7 +298,7 @@ try {
   if (escapeState !== 'complete') throw new Error(`Expected village exit to complete chapter, got ${escapeState}`);
 
   await browser.close();
-  console.log('Smoke test passed: title, player movement, and camera modes are available.');
+  console.log('Smoke test passed: visual hooks, viewport safety, traversal, story, and camera.');
 } finally {
   server.kill();
 }

@@ -18,7 +18,7 @@ const subtitle = document.querySelector('#subtitle');
 const interaction = document.querySelector('#interaction');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
@@ -131,7 +131,13 @@ window.__RURAL_ESCAPE__ = {
   camera: cameraController,
   story: storyDirector.story,
   pursuer,
+  rendererPixelRatio: renderer.getPixelRatio(),
   interactForTest: storyDirector.interact,
+  setStoryStateForTest(flags, objectiveName) {
+    Object.assign(storyDirector.story.flags, flags);
+    storyDirector.story.objective = objectiveName;
+    storyDirector.render();
+  },
   completeIntroForTest() {
     ui.completeIntro();
   },

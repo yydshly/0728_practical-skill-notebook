@@ -13,6 +13,11 @@ const copy = {
   },
 };
 
+const completeCopy = {
+  objective: '第一章完成：你穿过了南侧村口。',
+  subtitle: '铁门在身后合拢，雾里仍有人在呼喊你的名字。',
+};
+
 export function createStoryDirector({ ui }) {
   const story = {
     objective: 'leave_home',
@@ -20,7 +25,7 @@ export function createStoryDirector({ ui }) {
   };
 
   function render() {
-    const text = copy[story.objective];
+    const text = story.objective === 'complete' ? completeCopy : copy[story.objective];
     ui.setObjective(text.objective);
     ui.showSubtitle(text.subtitle);
   }
@@ -44,10 +49,9 @@ export function createStoryDirector({ ui }) {
     if (!story.flags.flashlight || story.objective === 'complete') return;
     if (player.position.distanceTo(exitZone.center) > exitZone.radius) return;
     story.objective = 'complete';
-    ui.setObjective('第一章完成：你穿过了南侧村口。');
-    ui.showSubtitle('铁门在身后合拢，雾里仍有人在呼喊你的名字。');
+    render();
   }
 
   render();
-  return { story, interact, update };
+  return { story, interact, update, render };
 }
