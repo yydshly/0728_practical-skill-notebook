@@ -10,6 +10,7 @@ import { createGameCamera } from "../src/scene/create-game-camera";
 import { resolveCameraOcclusion } from "../src/scene/resolve-camera-occlusion";
 import {
   GamepadInputTracker,
+  HeldInputOwnership,
   InputAccumulator,
   mapStandardGamepad,
 } from "../src/input/create-input-adapter";
@@ -116,6 +117,54 @@ describe("game camera", () => {
     expect(blocked.distance).toBeGreaterThan(5.5);
   });
 
+  it("returns a finite pushed-out distance when the camera target starts inside a blocker", () => {
+    const eastTarget = new Vector3(5, 1.05, 2.05);
+    const eastDesired = new Vector3(12.8, 10.45, 11.85);
+    const east = resolveCameraOcclusion(
+      eastTarget,
+      eastDesired,
+      arenaContent.arena.collisions,
+      false,
+    );
+
+    expect(east.occluderId).toBe("collision-east-brazier-bank");
+    expect(Number.isFinite(east.distance)).toBe(true);
+    expect(east.distance).toBeGreaterThan(0);
+    expect(east.distance).toBeLessThan(eastTarget.distanceTo(eastDesired));
+
+    const northTarget = new Vector3(0, 1.05, 11.8);
+    const northDesired = new Vector3(7.8, 10.45, 21.6);
+    const north = resolveCameraOcclusion(
+      northTarget,
+      northDesired,
+      arenaContent.arena.collisions,
+      false,
+    );
+
+    expect(north.occluderId).toBe("collision-north");
+    expect(Number.isFinite(north.distance)).toBe(true);
+    expect(north.distance).toBeGreaterThan(0);
+    expect(north.distance).toBeLessThan(
+      northTarget.distanceTo(northDesired),
+    );
+
+    const cornerTarget = new Vector3(17.9, 1, 11.9);
+    const cornerDesired = new Vector3(25.7, 10.4, 21.7);
+    const corner = resolveCameraOcclusion(
+      cornerTarget,
+      cornerDesired,
+      arenaContent.arena.collisions,
+      false,
+    );
+
+    expect(corner.occluderId).toBe("collision-north");
+    expect(Number.isFinite(corner.distance)).toBe(true);
+    expect(corner.distance).toBeGreaterThan(0);
+    expect(corner.distance).toBeLessThan(
+      cornerTarget.distanceTo(cornerDesired),
+    );
+  });
+
   it("follows with independent smoothing, world bounds, and a safe obstacle distance", () => {
     const camera = new PerspectiveCamera(42, 16 / 9, 0.1, 100);
     const controller = createGameCamera(camera, {
@@ -160,6 +209,32 @@ describe("game camera", () => {
 });
 
 describe("normalized device input", () => {
+  it("keeps held input owned by the last meaningful device", () => {
+    const held = new HeldInputOwnership();
+
+    held.activate("keyboard-mouse");
+    expect(held.setGuard("keyboard-mouse", true)).toBe(true);
+    expect(held.setGuard("gamepad", false)).toBe(true);
+    expect(held.setGuard("gamepad", false)).toBe(true);
+    expect(held.getDeviceMode()).toBe("keyboard-mouse");
+    expect(held.setGuard("keyboard-mouse", false)).toBe(false);
+
+    held.setGuard("touch", true);
+    expect(held.activate("touch")).toBe(true);
+    expect(held.setGuard("gamepad", false)).toBe(true);
+    expect(held.setGuard("touch", false)).toBe(false);
+
+    held.setGuard("gamepad", true);
+    expect(held.activate("gamepad")).toBe(true);
+    expect(held.setGuard("gamepad", false)).toBe(false);
+    expect(held.getDeviceMode()).toBe("gamepad");
+
+    held.setGuard("keyboard-mouse", true);
+    expect(held.activate("keyboard-mouse")).toBe(true);
+    expect(held.setGuard("gamepad", false)).toBe(true);
+    expect(held.getDeviceMode()).toBe("keyboard-mouse");
+  });
+
   it("emits edge actions once and clears all state on interruption", () => {
     const input = new InputAccumulator();
     input.setMove(2, -2);

@@ -17,6 +17,43 @@ test.afterEach(() => {
 const snapshot = (page: import("@playwright/test").Page) =>
   page.evaluate(() => window.__ashfallDiagnostics!.snapshot());
 
+const installDeterministicGamepad = (
+  page: import("@playwright/test").Page,
+) =>
+  page.addInitScript(() => {
+    let active = false;
+    const buttons = Array.from({ length: 16 }, () => ({
+      pressed: false,
+      touched: false,
+      value: 0,
+    }));
+    const gamepad = {
+      axes: [0, 0, 0, 0],
+      buttons,
+      connected: true,
+      id: "Ashfall deterministic standard pad",
+      index: 0,
+      mapping: "standard",
+      timestamp: 1,
+      vibrationActuator: null,
+      hapticActuators: [],
+    };
+    Object.defineProperty(navigator, "getGamepads", {
+      configurable: true,
+      value: () => (active ? [gamepad] : []),
+    });
+    window.__setAshfallTestGamepad = (
+      enabled: boolean,
+      verticalAxis = 0,
+      guardHeld = false,
+    ) => {
+      active = enabled;
+      gamepad.axes[1] = verticalAxis;
+      gamepad.buttons[6]!.pressed = guardHeld;
+      gamepad.buttons[6]!.value = guardHeld ? 1 : 0;
+    };
+  });
+
 test("fresh start renders a live arena and moves authoritative state", async ({
   page,
 }) => {
@@ -108,36 +145,7 @@ test("production defaults keep review diagnostics private and portrait controls 
 test("edge input and interruption paths never leave authoritative movement stuck", async ({
   page,
 }) => {
-  await page.addInitScript(() => {
-    let active = false;
-    const buttons = Array.from({ length: 16 }, () => ({
-      pressed: false,
-      touched: false,
-      value: 0,
-    }));
-    const gamepad = {
-      axes: [0, -1, 0, 0],
-      buttons,
-      connected: true,
-      id: "Ashfall deterministic standard pad",
-      index: 0,
-      mapping: "standard",
-      timestamp: 1,
-      vibrationActuator: null,
-      hapticActuators: [],
-    };
-    Object.defineProperty(navigator, "getGamepads", {
-      configurable: true,
-      value: () => (active ? [gamepad] : []),
-    });
-    window.__setAshfallTestGamepad = (
-      enabled: boolean,
-      verticalAxis = -1,
-    ) => {
-      active = enabled;
-      gamepad.axes[1] = verticalAxis;
-    };
-  });
+  await installDeterministicGamepad(page);
   await page.goto("/?fixture=fresh&reviewControls=1");
 
   await page.keyboard.down("Escape");
@@ -273,6 +281,87 @@ test("edge input and interruption paths never leave authoritative movement stuck
   }
 });
 
+test("an idle connected gamepad never cancels mouse or touch guard ownership", async ({
+  page,
+}) => {
+  await installDeterministicGamepad(page);
+  await page.goto("/?fixture=fresh&reviewControls=1");
+  await page.evaluate(() => window.__setAshfallTestGamepad(true, 0, false));
+  await page.waitForTimeout(100);
+
+  await page.locator("[data-game-canvas]").dispatchEvent("pointerdown", {
+    pointerId: 61,
+    pointerType: "mouse",
+    button: 2,
+  });
+  await page.waitForTimeout(240);
+  expect((await snapshot(page)).input.guardHeld).toBe(true);
+  expect(
+    await page.evaluate(() => document.documentElement.dataset.inputMode),
+  ).toBe("keyboard-mouse");
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerId: 61,
+        pointerType: "mouse",
+        button: 2,
+      }),
+    ),
+  );
+  expect((await snapshot(page)).input.guardHeld).toBe(false);
+
+  const touchGuard = page.locator("[data-touch-held='guardHeld']");
+  await touchGuard.dispatchEvent("pointerdown", {
+    pointerId: 62,
+    pointerType: "touch",
+    button: 0,
+  });
+  await page.waitForTimeout(240);
+  expect((await snapshot(page)).input.guardHeld).toBe(true);
+  expect(
+    await page.evaluate(() => document.documentElement.dataset.inputMode),
+  ).toBe("touch");
+  await touchGuard.dispatchEvent("pointerup", {
+    pointerId: 62,
+    pointerType: "touch",
+    button: 0,
+  });
+  expect((await snapshot(page)).input.guardHeld).toBe(false);
+
+  await page.evaluate(() => window.__setAshfallTestGamepad(true, 0, true));
+  await expect
+    .poll(async () => (await snapshot(page)).input.guardHeld)
+    .toBe(true);
+  expect(
+    await page.evaluate(() => document.documentElement.dataset.inputMode),
+  ).toBe("gamepad");
+  await page.evaluate(() => window.__setAshfallTestGamepad(true, 0, false));
+  await expect
+    .poll(async () => (await snapshot(page)).input.guardHeld)
+    .toBe(false);
+
+  await page.locator("[data-game-canvas]").dispatchEvent("pointerdown", {
+    pointerId: 63,
+    pointerType: "mouse",
+    button: 2,
+  });
+  await page.waitForTimeout(240);
+  expect((await snapshot(page)).input.guardHeld).toBe(true);
+  expect(
+    await page.evaluate(() => document.documentElement.dataset.inputMode),
+  ).toBe("keyboard-mouse");
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerId: 63,
+        pointerType: "mouse",
+        button: 2,
+      }),
+    ),
+  );
+  expect((await snapshot(page)).input.guardHeld).toBe(false);
+});
+
 test("production camera path consumes occlusion, lock, and shake events", async ({
   page,
 }) => {
@@ -311,6 +400,37 @@ test("production camera path consumes occlusion, lock, and shake events", async 
   await expect
     .poll(async () => (await snapshot(page)).camera.shakeAmplitude)
     .toBeGreaterThan(0);
+});
+
+test("production camera reports the blocker containing its offset target", async ({
+  page,
+}) => {
+  await page.goto("/?fixture=fresh&reviewControls=1");
+
+  await page.keyboard.down("d");
+  await expect.poll(
+    async () => (await snapshot(page)).player.x,
+    { intervals: [16], timeout: 5_000 },
+  )
+    .toBeGreaterThan(4.9);
+  await page.keyboard.up("d");
+  await page.keyboard.down("w");
+  await expect.poll(
+    async () => (await snapshot(page)).player.z,
+    { intervals: [16], timeout: 5_000 },
+  )
+    .toBeGreaterThan(1.15);
+  await page.keyboard.up("w");
+
+  await expect
+    .poll(async () => (await snapshot(page)).camera.occluderId)
+    .toBe("collision-east-brazier-bank");
+  const nearBlocker = await snapshot(page);
+  expect(nearBlocker.player.x).toBeLessThan(5.5);
+  expect(nearBlocker.player.z).toBeLessThan(1.8);
+  expect(nearBlocker.camera.resolvedDistance).toBeLessThan(
+    nearBlocker.camera.desiredDistance,
+  );
 });
 
 test("reduced motion suppresses the real review shake event", async ({
@@ -363,7 +483,11 @@ test("pagehide stops the frame loop and releases the runtime once", async ({
 
 declare global {
   interface Window {
-    __setAshfallTestGamepad(enabled: boolean, verticalAxis?: number): void;
+    __setAshfallTestGamepad(
+      enabled: boolean,
+      verticalAxis?: number,
+      guardHeld?: boolean,
+    ): void;
     __ashfallCancelledFrames: number;
   }
 }

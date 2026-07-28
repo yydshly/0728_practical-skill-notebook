@@ -132,6 +132,39 @@ export class GamepadInputTracker {
   }
 }
 
+export class HeldInputOwnership {
+  private deviceMode: InputDeviceMode = "keyboard-mouse";
+  private readonly guardByDevice: Record<InputDeviceMode, boolean> = {
+    "keyboard-mouse": false,
+    touch: false,
+    gamepad: false,
+  };
+
+  activate(device: InputDeviceMode): boolean {
+    this.deviceMode = device;
+    return this.getGuardHeld();
+  }
+
+  setGuard(device: InputDeviceMode, held: boolean): boolean {
+    this.guardByDevice[device] = held;
+    return this.getGuardHeld();
+  }
+
+  getDeviceMode(): InputDeviceMode {
+    return this.deviceMode;
+  }
+
+  getGuardHeld(): boolean {
+    return this.guardByDevice[this.deviceMode];
+  }
+
+  clear(): void {
+    this.guardByDevice["keyboard-mouse"] = false;
+    this.guardByDevice.touch = false;
+    this.guardByDevice.gamepad = false;
+  }
+}
+
 export interface InputAdapter {
   sample(): GameIntent;
   getDeviceMode(): InputDeviceMode;
@@ -145,9 +178,10 @@ export function createInputAdapter(
   touchHost: HTMLElement = document.body,
 ): InputAdapter {
   const accumulator = new InputAccumulator();
+  const heldOwnership = new HeldInputOwnership();
   const keys = new Set<string>();
   let disposed = false;
-  let deviceMode: InputDeviceMode = "keyboard-mouse";
+  let deviceMode = heldOwnership.getDeviceMode();
   let touchMove = { x: 0, y: 0 };
   let activeStickPointer: number | null = null;
   let guardPointerId: number | null = null;
@@ -157,7 +191,16 @@ export function createInputAdapter(
 
   const setMode = (mode: InputDeviceMode) => {
     deviceMode = mode;
+    accumulator.setHeld("guardHeld", heldOwnership.activate(mode));
     document.documentElement.dataset.inputMode = mode;
+  };
+  document.documentElement.dataset.inputMode = deviceMode;
+
+  const setSourceGuard = (source: InputDeviceMode, held: boolean) => {
+    accumulator.setHeld(
+      "guardHeld",
+      heldOwnership.setGuard(source, held),
+    );
   };
 
   const updateKeyboardMove = () => {
@@ -197,13 +240,13 @@ export function createInputAdapter(
     if (event.button === 0) accumulator.press("attackPressed");
     if (event.button === 2) {
       guardPointerId = event.pointerId;
-      accumulator.setHeld("guardHeld", true);
+      setSourceGuard("keyboard-mouse", true);
     }
   };
   const releasePointerGuard = (event: PointerEvent) => {
     if (guardPointerId !== event.pointerId) return;
     guardPointerId = null;
-    accumulator.setHeld("guardHeld", false);
+    setSourceGuard("keyboard-mouse", false);
   };
   const preventCanvasContextMenu = (event: MouseEvent) => {
     event.preventDefault();
@@ -215,6 +258,7 @@ export function createInputAdapter(
     guardPointerId = null;
     touchMove = { x: 0, y: 0 };
     gamepadTracker.disconnect();
+    heldOwnership.clear();
     accumulator.clear();
   };
   const onVisibility = () => {
@@ -224,9 +268,11 @@ export function createInputAdapter(
     sawGamepad = true;
   };
   const onGamepadDisconnected = () => {
+    gamepadTracker.disconnect();
+    if (deviceMode === "gamepad") accumulator.setMove(0, 0);
+    setSourceGuard("gamepad", false);
     sawGamepad = false;
     gamepadNeedsNeutral = false;
-    clear();
   };
 
   window.addEventListener("keydown", onKeyDown);
@@ -313,14 +359,14 @@ export function createInputAdapter(
     const edge = button.dataset.touchAction as EdgeIntent | undefined;
     const held = button.dataset.touchHeld as HeldIntent | undefined;
     if (edge) accumulator.press(edge);
-    if (held) accumulator.setHeld(held, true);
+    if (held) setSourceGuard("touch", true);
     button.dataset.pressed = "true";
     event.preventDefault();
   };
   const onTouchButtonUp = (event: PointerEvent) => {
     const button = event.currentTarget as HTMLButtonElement;
     const held = button.dataset.touchHeld as HeldIntent | undefined;
-    if (held) accumulator.setHeld(held, false);
+    if (held) setSourceGuard("touch", false);
     delete button.dataset.pressed;
   };
   const onTouchButtonCancel = (event: PointerEvent) => {
@@ -344,7 +390,7 @@ export function createInputAdapter(
       if (sawGamepad) {
         gamepadTracker.disconnect();
         if (deviceMode === "gamepad") accumulator.setMove(0, 0);
-        accumulator.setHeld("guardHeld", false);
+        setSourceGuard("gamepad", false);
         sawGamepad = false;
         gamepadNeedsNeutral = false;
       }
@@ -364,17 +410,17 @@ export function createInputAdapter(
       raw.switchWeaponPressed ||
       raw.pausePressed;
     if (gamepadNeedsNeutral) {
-      accumulator.setMove(0, 0);
-      accumulator.setHeld("guardHeld", false);
+      if (deviceMode === "gamepad") accumulator.setMove(0, 0);
+      setSourceGuard("gamepad", false);
       gamepadTracker.disconnect();
       if (!meaningful) gamepadNeedsNeutral = false;
       return;
     }
+    setSourceGuard("gamepad", mapped.guardHeld);
     if (meaningful) setMode("gamepad");
     if (deviceMode === "gamepad") {
       accumulator.setMove(mapped.moveX, mapped.moveY);
     }
-    accumulator.setHeld("guardHeld", mapped.guardHeld);
     const edges: EdgeIntent[] = [
       "attackPressed",
       "dodgePressed",
