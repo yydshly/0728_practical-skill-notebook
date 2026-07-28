@@ -2,5 +2,10 @@
   "name": "@showcase/monster-forge",
   "private": true,
   "type": "module",
-  "scripts": {}
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@showcase/game-assets": "*"
+  }
 }

@@ -25,9 +25,9 @@ export interface AssetManifest {
   previewPath: string;
   modelPath?: string;
   source: { type: SourceType; description: string; license?: string };
-  animations: AnimationClipRef[];
-  sockets: SocketRef[];
-  bounds: MeasuredBounds;
+  readonly animations: readonly AnimationClipRef[];
+  readonly sockets: readonly SocketRef[];
+  readonly bounds: Readonly<MeasuredBounds>;
 }
 
 const assetKinds: readonly AssetKind[] = ["monster", "character", "weapon", "mech", "module"];
