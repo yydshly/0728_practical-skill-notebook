@@ -48,7 +48,7 @@ export const VILLAGE_LAYOUT = {
       kind: 'home',
       x: -7,
       z: 29,
-      collider: { id: 'home_fence', halfX: 2.6, halfZ: 0.18 },
+      collider: { id: 'home_life', halfX: 2.6, halfZ: 0.18 },
     },
     { id: 'courtyard_crops', kind: 'crops', x: 18, z: 12 },
     { id: 'hall_forecourt', kind: 'well', x: -7, z: 8 },

@@ -240,15 +240,20 @@ test('blocking prop visuals and colliders derive from one canonical cluster', ()
   const scene = new THREE.Scene();
   const village = createVillage(scene);
   const blockingClusters = VILLAGE_LAYOUT.propClusters.filter(
-    ({ kind }) => kind === 'home' || kind === 'blockade',
+    ({ collider }) => Boolean(collider),
   );
 
   for (const cluster of blockingClusters) {
     assert.ok(cluster.collider, `${cluster.id} must own collider metadata`);
+    assert.equal(
+      cluster.collider.id,
+      cluster.id,
+      `${cluster.id} collider must share the canonical prop ID`,
+    );
     const visual = scene.getObjectByName(cluster.id);
-    const collider = village.colliders.find(({ id }) => id === cluster.collider.id);
+    const collider = village.colliders.find(({ id }) => id === cluster.id);
     assert.ok(visual, `${cluster.id} visual must exist`);
-    assert.ok(collider, `${cluster.collider.id} collider must exist`);
+    assert.ok(collider, `${cluster.id} collider must exist`);
     assert.deepEqual(
       [visual.position.x, visual.position.z],
       [cluster.x, cluster.z],
