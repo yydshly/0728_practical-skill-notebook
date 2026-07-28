@@ -21,8 +21,11 @@ const createRenderer = async (props) => {
       const { WebGPURenderer } = await import("three/webgpu");
       const renderer = new WebGPURenderer(options);
       await renderer.init();
-      renderer.__showcaseRenderer = "webgpu";
-      return renderer;
+      if (renderer.backend?.isWebGPUBackend === true) {
+        renderer.__showcaseRenderer = "webgpu";
+        return renderer;
+      }
+      renderer.dispose();
     } catch {
       // Fall through to the capture-compatible WebGL renderer.
     }
