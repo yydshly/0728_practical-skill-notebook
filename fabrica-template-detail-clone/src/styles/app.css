@@ -95,6 +95,11 @@ video {
   letter-spacing: -0.03em;
 }
 
+.site-header__brand img {
+  width: 20px;
+  height: 20px;
+}
+
 .site-header__desktop-nav { gap: 30px; font-size: 13px; }
 .site-header__desktop-nav a:hover, .mobile-menu a:hover { text-decoration: underline; }
 
@@ -115,6 +120,7 @@ video {
 .site-header__mobile-search, .site-header__menu-button, .overlay-close { border: 0; background: transparent; cursor: pointer; }
 .site-header__mobile-search { padding: 7px 8px; font-size: 12px; }
 .site-header__menu-button { width: 36px; height: 36px; font-size: 21px; line-height: 1; }
+.site-header__menu-button img { width: 18px; height: 18px; }
 
 .search-overlay,
 .mobile-menu {

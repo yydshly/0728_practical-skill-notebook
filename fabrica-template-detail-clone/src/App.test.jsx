@@ -124,7 +124,7 @@ test('wires representative content links, footer, and local image metadata', () 
   );
   expect(screen.getByRole('img', { name: blogTitle })).toHaveAttribute(
     'src',
-    '/assets/blogs/30-best-free-paid-framer-website-templates-2026-1.webp',
+    '/assets/blogs/20-best-framer-portfolio-templates-2026-scored-by-designers.webp',
   );
   expect(screen.getByRole('heading', { level: 2, name: 'Explore' })).toBeVisible();
   expect(screen.getByRole('link', { name: 'Scoring Methodology' })).toHaveAttribute('href', '/methodology');
