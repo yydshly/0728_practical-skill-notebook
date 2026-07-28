@@ -67,6 +67,7 @@ export const arenaContent: GameContent = {
   combat: {
     fixedHz: 60,
     staminaRegenPerSecond: 18,
+    playerHitRecoverySeconds: 0.3,
     guard: {
       releaseRecovery: 0.12,
       damageReceivedMultiplier: 0.35,

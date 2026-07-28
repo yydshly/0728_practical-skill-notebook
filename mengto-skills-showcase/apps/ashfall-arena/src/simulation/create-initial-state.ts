@@ -44,6 +44,7 @@ export function createInitialState(seed: number): GameState {
       attackInputHeld: false,
       switchInputHeld: false,
       guardReleaseTicks: 0,
+      playerHitRecoveryTicks: 0,
     },
   };
 }

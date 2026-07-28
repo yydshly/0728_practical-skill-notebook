@@ -97,6 +97,7 @@ export interface CombatState {
   attackInputHeld: boolean;
   switchInputHeld: boolean;
   guardReleaseTicks: number;
+  playerHitRecoveryTicks: number;
 }
 
 export interface IncomingHit {
@@ -203,6 +204,7 @@ export interface GameContent {
   combat: {
     fixedHz: 60;
     staminaRegenPerSecond: number;
+    playerHitRecoverySeconds: number;
     guard: {
       releaseRecovery: number;
       damageReceivedMultiplier: number;

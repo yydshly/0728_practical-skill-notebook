@@ -191,6 +191,7 @@ export function applyIncomingDamage(
           hit.attackId,
         ],
         guardReleaseTicks: 0,
+        playerHitRecoveryTicks: 0,
       },
     },
     events,
@@ -203,28 +204,108 @@ export function sweptCircleContact(
   center: Readonly<Vec2>,
   combinedRadius: number,
 ): boolean {
-  const segmentX = to.x - from.x;
-  const segmentY = to.y - from.y;
-  const lengthSquared = segmentX * segmentX + segmentY * segmentY;
-  const projection =
-    lengthSquared === 0
-      ? 0
-      : Math.max(
-          0,
-          Math.min(
-            1,
-            ((center.x - from.x) * segmentX +
-              (center.y - from.y) * segmentY) /
-              lengthSquared,
-          ),
-        );
-  const closestX = from.x + segmentX * projection;
-  const closestY = from.y + segmentY * projection;
   return (
-    Math.hypot(center.x - closestX, center.y - closestY) <=
-    combinedRadius + TIME_EPSILON
+    segmentCircleTimeOfImpact(from, to, center, combinedRadius) !== null
   );
 }
+
+const segmentCircleTimeOfImpact = (
+  from: Readonly<Vec2>,
+  to: Readonly<Vec2>,
+  center: Readonly<Vec2>,
+  combinedRadius: number,
+): number | null => {
+  const segmentX = to.x - from.x;
+  const segmentY = to.y - from.y;
+  const offsetX = from.x - center.x;
+  const offsetY = from.y - center.y;
+  const radiusSquared = combinedRadius * combinedRadius;
+  const c = offsetX * offsetX + offsetY * offsetY - radiusSquared;
+  if (c <= 0) return 0;
+
+  const a = segmentX * segmentX + segmentY * segmentY;
+  if (a <= TIME_EPSILON) return null;
+  const b = 2 * (offsetX * segmentX + offsetY * segmentY);
+  const discriminant = b * b - 4 * a * c;
+  if (discriminant < 0) return null;
+  const first = (-b - Math.sqrt(discriminant)) / (2 * a);
+  return first >= 0 && first <= 1 ? first : null;
+};
+
+const segmentAabbTimeOfImpact = (
+  from: Readonly<Vec2>,
+  to: Readonly<Vec2>,
+  bounds: {
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+  },
+): number | null => {
+  let enter = 0;
+  let exit = 1;
+
+  for (const [start, end, minimum, maximum] of [
+    [from.x, to.x, bounds.minX, bounds.maxX],
+    [from.y, to.y, bounds.minY, bounds.maxY],
+  ] as const) {
+    const delta = end - start;
+    if (Math.abs(delta) <= TIME_EPSILON) {
+      if (start < minimum || start > maximum) return null;
+      continue;
+    }
+    const first = (minimum - start) / delta;
+    const second = (maximum - start) / delta;
+    const near = Math.min(first, second);
+    const far = Math.max(first, second);
+    enter = Math.max(enter, near);
+    exit = Math.min(exit, far);
+    if (enter > exit) return null;
+  }
+
+  return enter >= 0 && enter <= 1 ? enter : null;
+};
+
+const arenaBoundaryTimeOfImpact = (
+  from: Readonly<Vec2>,
+  to: Readonly<Vec2>,
+  projectileRadius: number,
+  content: GameContent,
+): number | null => {
+  const minX = content.arena.min.x + projectileRadius;
+  const maxX = content.arena.max.x - projectileRadius;
+  const minY = content.arena.min.y + projectileRadius;
+  const maxY = content.arena.max.y - projectileRadius;
+  const startsInside =
+    from.x >= minX &&
+    from.x <= maxX &&
+    from.y >= minY &&
+    from.y <= maxY;
+  if (!startsInside) return 0;
+  if (
+    to.x >= minX &&
+    to.x <= maxX &&
+    to.y >= minY &&
+    to.y <= maxY
+  ) {
+    return null;
+  }
+
+  const deltaX = to.x - from.x;
+  const deltaY = to.y - from.y;
+  const candidates: number[] = [];
+  if (deltaX > 0 && to.x > maxX) {
+    candidates.push((maxX - from.x) / deltaX);
+  } else if (deltaX < 0 && to.x < minX) {
+    candidates.push((minX - from.x) / deltaX);
+  }
+  if (deltaY > 0 && to.y > maxY) {
+    candidates.push((maxY - from.y) / deltaY);
+  } else if (deltaY < 0 && to.y < minY) {
+    candidates.push((minY - from.y) / deltaY);
+  }
+  return candidates.length > 0 ? Math.min(...candidates) : null;
+};
 
 const directionFromFacing = (facingRadians: number): Vec2 => ({
   x: Math.sin(facingRadians),
@@ -452,7 +533,14 @@ const stepActiveAttack = (
       actionContent(nextAttack.actionId, content).damage *
         working.player.powerMultiplier,
     );
-    for (const targetId of validMeleeTargets(working, nextAttack, content)) {
+    const targetIds = validMeleeTargets(working, nextAttack, content);
+    if (targetIds.length > 0) {
+      nextAttack.hitTargetIds = [
+        ...current.hitTargetIds,
+        ...targetIds,
+      ];
+    }
+    for (const targetId of targetIds) {
       const result = applyEnemyDamage(
         working,
         targetId,
@@ -461,7 +549,6 @@ const stepActiveAttack = (
       );
       working = result.state;
       events.push(...result.events);
-      nextAttack.hitTargetIds.push(targetId);
     }
     working = {
       ...working,
@@ -571,24 +658,77 @@ const stepProjectiles = (
       position: to,
       ageTicks: projectile.ageTicks + 1,
     };
-    const targetId = Object.values(working.enemies)
-      .filter(
-        (target) =>
-          target.health > 0 &&
-          target.collisionLayer === projectile.targetLayer &&
-          !projectile.hitTargetIds.includes(target.id) &&
-          isContactAccepted(target, content) &&
-          sweptCircleContact(
-            from,
-            to,
-            target.position,
-            projectile.radius + targetRadius,
-          ),
-      )
-      .map(({ id }) => id)
-      .sort()[0];
+    const candidates: Array<{
+      id: string;
+      kind: "enemy" | "world";
+      time: number;
+      targetId?: string;
+    }> = [];
 
-    if (targetId) {
+    for (const target of Object.values(working.enemies)) {
+      if (
+        target.health > 0 &&
+        target.collisionLayer === projectile.targetLayer &&
+        !projectile.hitTargetIds.includes(target.id) &&
+        isContactAccepted(target, content)
+      ) {
+        const time = segmentCircleTimeOfImpact(
+          from,
+          to,
+          target.position,
+          projectile.radius + targetRadius,
+        );
+        if (time !== null) {
+          candidates.push({
+            id: target.id,
+            kind: "enemy",
+            time,
+            targetId: target.id,
+          });
+        }
+      }
+    }
+
+    for (const collision of content.arena.collisions) {
+      if (collision.kind === "gate" && state.encounter.gateOpen) continue;
+      const time = segmentAabbTimeOfImpact(from, to, {
+        minX: collision.x - collision.halfWidth - projectile.radius,
+        maxX: collision.x + collision.halfWidth + projectile.radius,
+        minY: collision.z - collision.halfDepth - projectile.radius,
+        maxY: collision.z + collision.halfDepth + projectile.radius,
+      });
+      if (time !== null) {
+        candidates.push({
+          id: collision.id,
+          kind: "world",
+          time,
+        });
+      }
+    }
+
+    const boundaryTime = arenaBoundaryTimeOfImpact(
+      from,
+      to,
+      projectile.radius,
+      content,
+    );
+    if (boundaryTime !== null) {
+      candidates.push({
+        id: "arena-boundary",
+        kind: "world",
+        time: boundaryTime,
+      });
+    }
+
+    candidates.sort((left, right) => {
+      if (left.time < right.time) return -1;
+      if (left.time > right.time) return 1;
+      return left.id.localeCompare(right.id);
+    });
+    const firstContact = candidates[0];
+
+    if (firstContact?.kind === "enemy" && firstContact.targetId) {
+      const targetId = firstContact.targetId;
       const attack: AttackInstance = {
         id: projectile.attackId,
         ownerId: projectile.ownerId,
@@ -610,15 +750,9 @@ const stepProjectiles = (
       continue;
     }
 
-    const outside =
-      to.x < content.arena.min.x ||
-      to.x > content.arena.max.x ||
-      to.y < content.arena.min.y ||
-      to.y > content.arena.max.y;
-    if (
-      !outside &&
-      nextProjectile.ageTicks < nextProjectile.lifetimeTicks
-    ) {
+    if (firstContact?.kind === "world") continue;
+
+    if (nextProjectile.ageTicks < nextProjectile.lifetimeTicks) {
       survivors.push(nextProjectile);
     }
   }
@@ -709,6 +843,33 @@ export function stepCombat(
           },
         };
   const produced: GameEvent[] = [...events];
+
+  if (working.player.action === "hit") {
+    const recoveryTicks = working.combat.playerHitRecoveryTicks + 1;
+    const finished =
+      recoveryTicks >=
+      ticksFor(content.combat.playerHitRecoverySeconds, content);
+    working = {
+      ...working,
+      player: {
+        ...working.player,
+        action: finished ? "idle" : "hit",
+        actionTime: finished
+          ? 0
+          : recoveryTicks / content.combat.fixedHz,
+      },
+      combat: {
+        ...working.combat,
+        activeAttack: null,
+        playerHitRecoveryTicks: finished ? 0 : recoveryTicks,
+      },
+    };
+    const projectileResult = stepProjectiles(working, content);
+    return {
+      state: projectileResult.state,
+      events: [...produced, ...projectileResult.events],
+    };
+  }
 
   if (
     working.combat.activeAttack &&

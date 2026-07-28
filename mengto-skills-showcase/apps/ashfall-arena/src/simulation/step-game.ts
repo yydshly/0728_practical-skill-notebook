@@ -92,6 +92,13 @@ function stepPlayer(
   intent: GameIntent,
   content: GameContent,
 ): GameState["player"] {
+  if (
+    state.player.action === "hit" ||
+    state.player.action === "dead"
+  ) {
+    return state.player;
+  }
+
   if (state.player.action === "dodge") {
     return stepDodge(state, content);
   }
@@ -122,9 +129,7 @@ function stepPlayer(
 
   if (
     state.player.action === "attack" ||
-    state.player.action === "guard" ||
-    state.player.action === "hit" ||
-    state.player.action === "dead"
+    state.player.action === "guard"
   ) {
     return state.player;
   }

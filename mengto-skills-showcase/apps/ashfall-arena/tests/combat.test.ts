@@ -13,6 +13,7 @@ import type {
   GameEvent,
   GameState,
   IncomingHit,
+  ProjectileState,
 } from "../src/simulation/types";
 import {
   createEnemyState,
@@ -56,6 +57,32 @@ const incomingHit = (
   angleDegrees: 20,
   collisionLayer: "enemy",
   ...overrides,
+});
+
+const withManualProjectile = (
+  state: GameState,
+  overrides: Partial<ProjectileState>,
+): GameState => ({
+  ...state,
+  combat: {
+    ...state.combat,
+    projectiles: [
+      {
+        id: "manual-shot:projectile",
+        attackId: "manual-shot",
+        ownerId: "player",
+        position: { x: 0, y: -5 },
+        direction: { x: 0, y: 1 },
+        speed: 120,
+        radius: 0.16,
+        ageTicks: 0,
+        lifetimeTicks: 75,
+        targetLayer: "enemy",
+        hitTargetIds: [],
+        ...overrides,
+      },
+    ],
+  },
 });
 
 describe("authoritative oathblade combat", () => {
@@ -518,6 +545,262 @@ describe("authoritative ember bow projectile", () => {
   });
 });
 
+describe("projectile world time of impact", () => {
+  it("destroys a shot on the closed boss gate before it can damage an enemy behind it", () => {
+    const initial = createInitialState(1);
+    initial.enemies = {
+      "enemy-behind-gate": enemyAhead(
+        "enemy-behind-gate",
+        { x: 0, y: 8.8 },
+      ),
+    };
+    const state = withManualProjectile(initial, {
+      position: { x: 0, y: 7 },
+      direction: { x: 0, y: 1 },
+      speed: 120,
+    });
+
+    const result = stepGame(
+      state,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    );
+
+    expect(result.events).toEqual([]);
+    expect(result.state.enemies["enemy-behind-gate"]!.health).toBe(36);
+    expect(result.state.combat.projectiles).toEqual([]);
+  });
+
+  it("lets the same shot hit through the open boss gate", () => {
+    const initial = createInitialState(1);
+    initial.encounter.gateOpen = true;
+    initial.enemies = {
+      "enemy-behind-gate": enemyAhead(
+        "enemy-behind-gate",
+        { x: 0, y: 8.8 },
+      ),
+    };
+    const state = withManualProjectile(initial, {
+      position: { x: 0, y: 7 },
+      direction: { x: 0, y: 1 },
+      speed: 120,
+    });
+
+    const result = stepGame(
+      state,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    );
+
+    expect(result.events).toEqual([
+      {
+        type: "contact",
+        attackerId: "player",
+        targetId: "enemy-behind-gate",
+        attackId: "manual-shot",
+      },
+      {
+        type: "damage",
+        targetId: "enemy-behind-gate",
+        amount: 15,
+        guarded: false,
+      },
+    ]);
+    expect(result.state.enemies["enemy-behind-gate"]!.health).toBe(21);
+    expect(result.state.combat.projectiles).toEqual([]);
+  });
+
+  it("uses an active interior AABB as an earlier world contact", () => {
+    const initial = createInitialState(1);
+    initial.enemies = {
+      "enemy-behind-anvil": enemyAhead(
+        "enemy-behind-anvil",
+        { x: -4.2, y: -0.5 },
+      ),
+    };
+    const state = withManualProjectile(initial, {
+      position: { x: -8, y: -0.5 },
+      direction: { x: 1, y: 0 },
+      speed: 240,
+    });
+
+    const result = stepGame(
+      state,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    );
+
+    expect(result.events).toEqual([]);
+    expect(result.state.enemies["enemy-behind-anvil"]!.health).toBe(36);
+    expect(result.state.combat.projectiles).toEqual([]);
+  });
+
+  it("selects the nearer enemy by TOI even when its ID sorts later", () => {
+    const initial = createInitialState(1);
+    initial.enemies = {
+      "a-far": enemyAhead("a-far", { x: 0, y: -3.2 }),
+      "z-near": enemyAhead("z-near", { x: 0, y: -4 }),
+    };
+    const state = withManualProjectile(initial, {});
+
+    const result = stepGame(
+      state,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    );
+
+    expect(
+      result.events.find(({ type }) => type === "contact"),
+    ).toEqual({
+      type: "contact",
+      attackerId: "player",
+      targetId: "z-near",
+      attackId: "manual-shot",
+    });
+    expect(result.state.enemies["z-near"]!.health).toBe(21);
+    expect(result.state.enemies["a-far"]!.health).toBe(36);
+  });
+
+  it("uses stable target ID only for an exact TOI tie", () => {
+    const initial = createInitialState(1);
+    initial.enemies = {
+      "z-target": enemyAhead("z-target", { x: 0, y: -4 }),
+      "a-target": enemyAhead("a-target", { x: 0, y: -4 }),
+    };
+    const state = withManualProjectile(initial, {});
+
+    const result = stepGame(
+      state,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    );
+
+    expect(
+      result.events.find(({ type }) => type === "contact"),
+    ).toEqual({
+      type: "contact",
+      attackerId: "player",
+      targetId: "a-target",
+      attackId: "manual-shot",
+    });
+    expect(result.state.enemies["a-target"]!.health).toBe(21);
+    expect(result.state.enemies["z-target"]!.health).toBe(36);
+  });
+
+  it("cannot tunnel through a circle during one large fixed-step segment", () => {
+    const initial = createInitialState(1);
+    initial.enemies = {
+      "thin-crossing": enemyAhead(
+        "thin-crossing",
+        { x: 0, y: -4 },
+      ),
+    };
+    const state = withManualProjectile(initial, {
+      position: { x: 0, y: -5 },
+      direction: { x: 0, y: 1 },
+      speed: 120,
+      radius: 0.01,
+    });
+
+    const result = stepGame(
+      state,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    );
+
+    expect(result.state.enemies["thin-crossing"]!.health).toBe(21);
+    expect(result.state.combat.projectiles).toEqual([]);
+  });
+
+  it("treats leaving the arena bounds as world contact during the segment", () => {
+    const initial = createInitialState(1);
+    initial.enemies = {
+      "outside-target": enemyAhead(
+        "outside-target",
+        { x: 0, y: 12.5 },
+      ),
+    };
+    const state = withManualProjectile(initial, {
+      position: { x: 0, y: 11.7 },
+      direction: { x: 0, y: 1 },
+      speed: 120,
+    });
+    const boundaryOnlyContent = {
+      ...arenaContent,
+      arena: {
+        ...arenaContent.arena,
+        collisions: [],
+      },
+    };
+
+    const result = stepGame(
+      state,
+      neutralIntent,
+      1 / 60,
+      boundaryOnlyContent,
+    );
+
+    expect(result.events).toEqual([]);
+    expect(result.state.enemies["outside-target"]!.health).toBe(36);
+    expect(result.state.combat.projectiles).toEqual([]);
+  });
+
+  it("keeps the old projectile hit set and state pure while resolving TOI", () => {
+    const initial = createInitialState(1);
+    initial.enemies = {
+      "new-target": enemyAhead("new-target", { x: 0, y: -4 }),
+    };
+    const state = withManualProjectile(initial, {
+      hitTargetIds: ["already-hit"],
+    });
+    const oldProjectile = state.combat.projectiles[0]!;
+    const oldHitTargetIds = oldProjectile.hitTargetIds;
+    const snapshot = structuredClone(state);
+
+    const result = stepGame(
+      state,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    ).state;
+
+    expect(state).toEqual(snapshot);
+    expect(state.combat.projectiles[0]).toBe(oldProjectile);
+    expect(oldProjectile.hitTargetIds).toBe(oldHitTargetIds);
+    expect(oldHitTargetIds).toEqual(["already-hit"]);
+    expect(result.enemies["new-target"]!.health).toBe(21);
+  });
+
+  it("shares an unchanged projectile hit set while only its position advances", () => {
+    const state = withManualProjectile(createInitialState(1), {
+      speed: 12,
+      hitTargetIds: ["already-hit"],
+    });
+    const oldProjectile = state.combat.projectiles[0]!;
+    const oldHitTargetIds = oldProjectile.hitTargetIds;
+
+    const result = stepGame(
+      state,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    ).state;
+
+    expect(result.combat.projectiles).toHaveLength(1);
+    expect(result.combat.projectiles[0]).not.toBe(oldProjectile);
+    expect(result.combat.projectiles[0]?.hitTargetIds).toBe(
+      oldHitTargetIds,
+    );
+    expect(oldHitTargetIds).toEqual(["already-hit"]);
+  });
+});
+
 describe("incoming damage, guard, dodge, and death", () => {
   it("rounds frontal guard damage to 35 percent and spends nine stamina", () => {
     const player = createInitialState(1).player;
@@ -693,6 +976,171 @@ describe("incoming damage, guard, dodge, and death", () => {
     }
   });
 
+  it("recovers a nonfatal hit on tick 18 and accepts movement plus attack only on the following tick", () => {
+    const hit = applyIncomingDamage(
+      createInitialState(1),
+      incomingHit(),
+      false,
+      arenaContent,
+    ).state;
+    const beforeBoundary = runTicks(hit, new Map(), 17).state;
+    const atBoundary = stepGame(
+      beforeBoundary,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    ).state;
+    const afterBoundary = stepGame(
+      atBoundary,
+      {
+        ...neutralIntent,
+        moveY: 1,
+        attackPressed: true,
+      },
+      1 / 60,
+      arenaContent,
+    ).state;
+
+    expect(hit.player).toMatchObject({ action: "hit", actionTime: 0 });
+    expect(hit.combat.playerHitRecoveryTicks).toBe(0);
+    expect(beforeBoundary.player.action).toBe("hit");
+    expect(beforeBoundary.player.actionTime).toBeCloseTo(17 / 60, 10);
+    expect(beforeBoundary.combat.playerHitRecoveryTicks).toBe(17);
+    expect(atBoundary.player).toMatchObject({
+      action: "idle",
+      actionTime: 0,
+    });
+    expect(atBoundary.combat.playerHitRecoveryTicks).toBe(0);
+    expect(afterBoundary.player.action).toBe("attack");
+    expect(afterBoundary.player.position.y).toBeCloseTo(-8.93, 10);
+    expect(afterBoundary.combat.activeAttack?.actionId).toBe(
+      "oathblade-light-1",
+    );
+  });
+
+  it("ignores every player verb during hit recovery, including dodge with enough stamina", () => {
+    const hit = applyIncomingDamage(
+      createInitialState(1),
+      incomingHit(),
+      false,
+      arenaContent,
+    ).state;
+    const result = stepGame(
+      hit,
+      {
+        ...neutralIntent,
+        moveX: 1,
+        moveY: 1,
+        attackPressed: true,
+        guardHeld: true,
+        dodgePressed: true,
+        switchWeaponPressed: true,
+        healPressed: true,
+      },
+      1 / 60,
+      arenaContent,
+    ).state;
+
+    expect(result.player).toMatchObject({
+      action: "hit",
+      actionTime: 1 / 60,
+      position: { x: 0, y: -9 },
+      stamina: 100,
+      weaponId: "oathblade",
+      healingCharges: 3,
+    });
+    expect(result.combat).toMatchObject({
+      activeAttack: null,
+      playerHitRecoveryTicks: 1,
+    });
+  });
+
+  it("resets hit recovery on another accepted nonfatal hit", () => {
+    const first = applyIncomingDamage(
+      createInitialState(1),
+      incomingHit(),
+      false,
+      arenaContent,
+    ).state;
+    const recovering = runTicks(first, new Map(), 10).state;
+    const second = applyIncomingDamage(
+      recovering,
+      incomingHit({ attackId: "enemy-attack-2", damage: 5 }),
+      false,
+      arenaContent,
+    ).state;
+    const beforeBoundary = runTicks(second, new Map(), 17).state;
+    const recovered = stepGame(
+      beforeBoundary,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    ).state;
+
+    expect(recovering.combat.playerHitRecoveryTicks).toBe(10);
+    expect(second.player).toMatchObject({
+      action: "hit",
+      actionTime: 0,
+      health: 80,
+    });
+    expect(second.combat.playerHitRecoveryTicks).toBe(0);
+    expect(beforeBoundary.player.action).toBe("hit");
+    expect(recovered.player.action).toBe("idle");
+  });
+
+  it("freezes hit recovery while paused or in a non-playing status and never recovers dead", () => {
+    const hit = applyIncomingDamage(
+      createInitialState(1),
+      incomingHit(),
+      false,
+      arenaContent,
+    ).state;
+    const paused = stepGame(
+      hit,
+      { ...neutralIntent, pausePressed: true },
+      1 / 60,
+      arenaContent,
+    ).state;
+    const pausedFrame = stepGame(
+      paused,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    );
+    const upgrade = {
+      ...hit,
+      status: "upgrade" as const,
+    };
+    const upgradeFrame = stepGame(
+      upgrade,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    );
+    const lethalState = createInitialState(2);
+    lethalState.player.health = 5;
+    const dead = applyIncomingDamage(
+      lethalState,
+      incomingHit({ damage: 20 }),
+      false,
+      arenaContent,
+    ).state;
+    const deadFrame = stepGame(
+      dead,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    );
+
+    expect(pausedFrame.state).toBe(paused);
+    expect(pausedFrame.state.combat.playerHitRecoveryTicks).toBe(0);
+    expect(upgradeFrame.state).toBe(upgrade);
+    expect(upgradeFrame.state.combat.playerHitRecoveryTicks).toBe(0);
+    expect(dead.player.action).toBe("dead");
+    expect(deadFrame.state).toBe(dead);
+    expect(deadFrame.state.player.action).toBe("dead");
+  });
+
   it("holds guard, observes release recovery, and allows a new action only at its boundary", () => {
     const held = runTicks(
       createInitialState(1),
@@ -726,6 +1174,147 @@ describe("incoming damage, guard, dodge, and death", () => {
 });
 
 describe("combat state integration", () => {
+  it("shares an unchanged hit set across an attack tick with no new contact", () => {
+    const before = runTicks(
+      createInitialState(1),
+      new Map([[0, { attackPressed: true }]]),
+      5,
+    ).state;
+    const oldAttack = before.combat.activeAttack!;
+    const oldHitTargetIds = oldAttack.hitTargetIds;
+
+    const result = stepGame(
+      before,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    ).state;
+
+    expect(result.combat.activeAttack).not.toBe(oldAttack);
+    expect(result.combat.activeAttack?.hitTargetIds).toBe(oldHitTargetIds);
+    expect(oldHitTargetIds).toEqual([]);
+  });
+
+  it("keeps the pre-contact attack and hit set deeply immutable on one melee hit", () => {
+    const beforeContact = runTicks(
+      withEnemy(createInitialState(1)),
+      new Map([[0, { attackPressed: true }]]),
+      9,
+    ).state;
+    const oldAttack = beforeContact.combat.activeAttack!;
+    const oldHitTargetIds = oldAttack.hitTargetIds;
+    const snapshot = structuredClone(beforeContact);
+
+    const result = stepGame(
+      beforeContact,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    ).state;
+
+    expect(beforeContact).toEqual(snapshot);
+    expect(beforeContact.combat.activeAttack).toBe(oldAttack);
+    expect(oldAttack.hitTargetIds).toBe(oldHitTargetIds);
+    expect(oldHitTargetIds).toEqual([]);
+    expect(result.combat.activeAttack).not.toBe(oldAttack);
+    expect(result.combat.activeAttack?.hitTargetIds).toEqual(["enemy-1"]);
+    expect(result.encounter).toBe(beforeContact.encounter);
+    expect(result.drops).toBe(beforeContact.drops);
+  });
+
+  it("copy-on-writes one hit set for same-frame and later melee contacts", () => {
+    const initial = createInitialState(1);
+    initial.enemies = {
+      "enemy-b": enemyAhead("enemy-b", { x: 0.45, y: -7.65 }),
+      "enemy-a": enemyAhead("enemy-a", { x: -0.45, y: -7.65 }),
+    };
+    const beforeFirstContacts = runTicks(
+      initial,
+      new Map([[0, { attackPressed: true }]]),
+      9,
+    ).state;
+    const firstOldAttack = beforeFirstContacts.combat.activeAttack!;
+    const firstOldIds = firstOldAttack.hitTargetIds;
+    const first = stepGame(
+      beforeFirstContacts,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    ).state;
+
+    expect(firstOldIds).toEqual([]);
+    expect(first.combat.activeAttack?.hitTargetIds).toEqual([
+      "enemy-a",
+      "enemy-b",
+    ]);
+
+    const beforeLaterContact: GameState = {
+      ...first,
+      enemies: {
+        ...first.enemies,
+        "enemy-c": enemyAhead("enemy-c", { x: 0, y: -7.5 }),
+      },
+    };
+    const laterOldAttack = beforeLaterContact.combat.activeAttack!;
+    const laterOldIds = laterOldAttack.hitTargetIds;
+    const laterSnapshot = structuredClone(beforeLaterContact);
+    const later = stepGame(
+      beforeLaterContact,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    ).state;
+
+    expect(beforeLaterContact).toEqual(laterSnapshot);
+    expect(laterOldAttack.hitTargetIds).toBe(laterOldIds);
+    expect(laterOldIds).toEqual(["enemy-a", "enemy-b"]);
+    expect(later.combat.activeAttack?.hitTargetIds).toEqual([
+      "enemy-a",
+      "enemy-b",
+      "enemy-c",
+    ]);
+  });
+
+  it("keeps the old projectile, projectile hit set, and enemy snapshot unchanged on contact", () => {
+    let state = runTicks(
+      createInitialState(1),
+      new Map([[0, { switchWeaponPressed: true }]]),
+      2,
+    ).state;
+    state.player.position = { x: 0, y: -9 };
+    state.enemies = {
+      "enemy-1": enemyAhead("enemy-1", { x: 0, y: -7.6 }),
+    };
+    state = runTicks(
+      state,
+      new Map([[0, { attackPressed: true }]]),
+      16,
+    ).state;
+    const beforeContact = stepGame(
+      state,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    ).state;
+    const oldProjectile = beforeContact.combat.projectiles[0]!;
+    const oldHitTargetIds = oldProjectile.hitTargetIds;
+    const snapshot = structuredClone(beforeContact);
+
+    const result = stepGame(
+      beforeContact,
+      neutralIntent,
+      1 / 60,
+      arenaContent,
+    ).state;
+
+    expect(beforeContact).toEqual(snapshot);
+    expect(oldProjectile.hitTargetIds).toBe(oldHitTargetIds);
+    expect(oldHitTargetIds).toEqual([]);
+    expect(beforeContact.enemies["enemy-1"]!.health).toBe(36);
+    expect(result.enemies["enemy-1"]!.health).toBe(21);
+    expect(result.combat.projectiles).toEqual([]);
+  });
+
   it("keeps the old state, intent, and authored content unchanged on a combat tick", () => {
     const state = withEnemy(createInitialState(1));
     const intent = { ...neutralIntent, attackPressed: true };
