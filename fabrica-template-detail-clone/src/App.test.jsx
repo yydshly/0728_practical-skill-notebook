@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import { vi } from 'vitest';
 import App from './App';
 
 test('renders the Fabrica template identity', () => {
@@ -31,4 +32,24 @@ test('opens and closes the mobile navigation panel', () => {
 
   fireEvent.click(within(mobileNavigation).getByRole('button', { name: 'Close navigation' }));
   expect(screen.queryByRole('navigation', { name: 'Mobile navigation' })).toBeNull();
+});
+
+test('switches the preview control from pause to play', () => {
+  const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Pause video' }));
+  expect(screen.getByRole('button', { name: 'Play video' })).toBeVisible();
+  play.mockRestore();
+});
+
+test('renders the complete metadata table', () => {
+  render(<App />);
+
+  expect(screen.getByText('Overall score')).toBeVisible();
+  expect(
+    screen.getByText(
+      'Fabrica works best for portfolio and agency projects that need smooth motion and video backgrounds.',
+    ),
+  ).toBeVisible();
 });

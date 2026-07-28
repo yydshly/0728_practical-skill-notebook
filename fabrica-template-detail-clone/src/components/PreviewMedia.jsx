@@ -1,0 +1,30 @@
+import { useRef, useState } from 'react';
+
+export default function PreviewMedia({ videoSrc, posterSrc, alt }) {
+  const videoRef = useRef(null);
+  const [isPaused, setIsPaused] = useState(false);
+
+  const togglePlayback = () => {
+    if (videoRef.current.paused) videoRef.current.play();
+    else videoRef.current.pause();
+    setIsPaused(videoRef.current.paused);
+  };
+
+  return (
+    <section className="preview-media" aria-label="Template preview">
+      <div className="preview-media__strip">
+        <div className="preview-media__pane preview-media__video-pane">
+          <video ref={videoRef} autoPlay loop muted playsInline poster={posterSrc} aria-label={alt}>
+            <source src={videoSrc} type="video/mp4" />
+          </video>
+          <button type="button" className="preview-media__control" onClick={togglePlayback}>
+            {isPaused ? 'Play video' : 'Pause video'}
+          </button>
+        </div>
+        <div className="preview-media__pane">
+          <img src={posterSrc} alt={alt} />
+        </div>
+      </div>
+    </section>
+  );
+}
