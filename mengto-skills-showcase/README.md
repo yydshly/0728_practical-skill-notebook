@@ -29,22 +29,27 @@ cd mengto-skills-showcase
 npm install
 ```
 
-三个新产品将各自独立启动；在其功能实现前，这些命令只代表约定的入口，不能当作已完成的试玩：
+### 当前基础层可执行命令
+
+以下命令已经在当前基础工作区验证成功：
+
+```powershell
+npm run validate
+npm test
+node scripts/check-selected-skills.mjs
+npm run build
+git diff --check
+```
+
+### 产品实现后启用的预留入口
+
+以下精确命令是三个产品实现后的预留入口，**当前不能执行，也不能作为基础层通过条件**。产品功能、开发服务器和浏览器旅程测试建立后，README 会更新为可执行说明：
 
 ```powershell
 npm run dev:forge
 npm run dev:arena
 npm run dev:atelier
-```
-
-套件级检查命令：
-
-```powershell
-npm test
 npm run test:browser
-npm run validate
-node scripts/check-selected-skills.mjs
-npm run build
 ```
 
 已有演示仍在套件外独立运行：
@@ -54,7 +59,6 @@ cd ../isle-of-quiet-signals
 npm install
 npm run dev
 npm test
-npm run test:browser
 npm run build
 
 cd ../world-cup-letter-flags-demo
@@ -87,24 +91,26 @@ node scripts/check-selected-skills.mjs
 
 以下清单是本项目批准安装的全部 16 项。技术标识符保持英文，以便和真实目录、命令与上游文件一致；中文列解释它们为何会被使用。
 
-| Skill | 上游路径 | 面向产品 | 阶段 |
+| Skill | 上游路径 | 产品 ID | 阶段 ID |
 | --- | --- | --- | --- |
-| `build-isometric-arpg` | `agent-skills/game-development/build-isometric-arpg` | Monster Forge | 基础 |
-| `author-game-levels` | `agent-skills/game-development/author-game-levels` | 三款新产品 | 基础 |
-| `build-game-camera-controls` | `agent-skills/game-development/build-game-camera-controls` | Monster Forge、Ashfall Arena | 基础、移动端 |
-| `design-action-combat` | `agent-skills/game-development/design-action-combat` | 三款新产品 | 战斗 |
-| `build-threejs-enemy-systems` | `agent-skills/game-development/build-threejs-enemy-systems` | Monster Forge、Ashfall Arena | 战斗 |
-| `build-game-monster-system` | `agent-skills/game-development/build-game-monster-system` | Monster Forge | 战斗 |
-| `tune-enemy-ai` | `agent-skills/game-development/tune-enemy-ai` | Monster Forge、Ashfall Arena | 战斗、验证 |
-| `build-game-inventory` | `agent-skills/game-development/build-game-inventory` | Monster Forge | 基础 |
-| `build-hybrid-game-assets` | `agent-skills/game-development/build-hybrid-game-assets` | 三款新产品 | 资产 |
-| `build-vesperfall-review-assets` | `agent-skills/game-development/build-vesperfall-review-assets` | 三款新产品 | 资产、验证 |
-| `create-game-vfx` | `agent-skills/game-development/create-game-vfx` | 三款新产品 | 反馈 |
-| `build-game-audio-feedback` | `agent-skills/game-development/build-game-audio-feedback` | 三款新产品 | 反馈 |
-| `build-mobile-threejs-games` | `agent-skills/game-development/build-mobile-threejs-games` | Monster Forge、Ashfall Arena | 移动端 |
-| `optimize-threejs-games` | `agent-skills/game-development/optimize-threejs-games` | 三款新产品 | 性能 |
-| `test-playable-web-games` | `agent-skills/game-development/test-playable-web-games` | 三款新产品 | 验证 |
-| `ship-web-games` | `agent-skills/game-development/ship-web-games` | 三款新产品 | 发布 |
+| `build-isometric-arpg` | `agent-skills/game-development/build-isometric-arpg` | `ashfall-arena` | `foundation` |
+| `author-game-levels` | `agent-skills/game-development/author-game-levels` | `ashfall-arena` | `foundation` |
+| `build-game-camera-controls` | `agent-skills/game-development/build-game-camera-controls` | `ashfall-arena` | `foundation, mobile` |
+| `design-action-combat` | `agent-skills/game-development/design-action-combat` | `ashfall-arena` | `combat` |
+| `build-threejs-enemy-systems` | `agent-skills/game-development/build-threejs-enemy-systems` | `ashfall-arena` | `combat` |
+| `build-game-monster-system` | `agent-skills/game-development/build-game-monster-system` | `monster-forge` | `assets` |
+| `tune-enemy-ai` | `agent-skills/game-development/tune-enemy-ai` | `ashfall-arena` | `combat, validation` |
+| `build-game-inventory` | `agent-skills/game-development/build-game-inventory` | `ashfall-arena` | `foundation` |
+| `build-hybrid-game-assets` | `agent-skills/game-development/build-hybrid-game-assets` | `monster-forge, ashfall-arena, mech-atelier` | `assets` |
+| `build-vesperfall-review-assets` | `agent-skills/game-development/build-vesperfall-review-assets` | `monster-forge` | `assets, validation` |
+| `create-game-vfx` | `agent-skills/game-development/create-game-vfx` | `ashfall-arena` | `feedback` |
+| `build-game-audio-feedback` | `agent-skills/game-development/build-game-audio-feedback` | `ashfall-arena` | `feedback` |
+| `build-mobile-threejs-games` | `agent-skills/game-development/build-mobile-threejs-games` | `ashfall-arena` | `mobile` |
+| `optimize-threejs-games` | `agent-skills/game-development/optimize-threejs-games` | `monster-forge, ashfall-arena, mech-atelier` | `performance` |
+| `test-playable-web-games` | `agent-skills/game-development/test-playable-web-games` | `monster-forge, ashfall-arena, mech-atelier` | `validation` |
+| `ship-web-games` | `agent-skills/game-development/ship-web-games` | `monster-forge, ashfall-arena, mech-atelier` | `release` |
+
+`monster-forge`、`ashfall-arena` 和 `mech-atelier` 是目录/清单 ID；中文产品名分别是怪物铸造所、灰烬竞技场和机甲定制工坊。`foundation`、`assets`、`combat`、`feedback`、`mobile`、`performance`、`validation`、`release` 是开发阶段 ID，中文含义见下一节。
 
 ## Skill 对项目的影响
 
@@ -115,7 +121,7 @@ node scripts/check-selected-skills.mjs
 | 战斗、敌人与成长 | `design-action-combat`、`build-threejs-enemy-systems`、`tune-enemy-ai`、`build-game-inventory` 分别指导动作反馈、敌人状态、难度与成长，不会被同时强行套用。 |
 | 反馈、移动端与性能 | `create-game-vfx`、`build-game-audio-feedback`、`build-mobile-threejs-games` 与 `optimize-threejs-games` 分别在相应需求出现时介入。 |
 | 验证与发布 | `test-playable-web-games` 负责可复现的试玩旅程；`ship-web-games` 负责发布前的构建、交付和证据。 |
-| Mech Atelier | 复用共享资产规则；任何 web-design Skill 都**未批准安装**，只有在需求获得批准并在清单中记录后，才可按精确任务接入。 |
+| Mech Atelier | 使用 `build-hybrid-game-assets` 处理共享资产，并在性能、验证和发布阶段使用对应通用规则；它不映射关卡、战斗、敌人、AI、背包、游戏 VFX 或游戏音频 Skill。任何 web-design Skill 都**未批准安装**，只有在需求获得批准并在清单中记录后，才可按精确任务接入。 |
 
 准确的目录到 Skill 路由规则在 [AGENTS.md](AGENTS.md)。它要求先读取最窄范围的 `SKILL.md`，再改代码。
 
@@ -141,6 +147,6 @@ npm run build
 git diff --check
 ```
 
-`npm run validate` 检查固定的来源、16 项批准清单、中文 README 的关键承诺和 `AGENTS.md` 路由，不依赖会自然变化的记录时间。`node scripts/check-selected-skills.mjs` 是只读审计：它会逐项显示全局目录是否真的有可读的 `SKILL.md`。
+`npm run validate` 检查固定的来源、16 项批准清单、中文 README 的关键承诺和 `AGENTS.md` 路由，不依赖会自然变化的记录时间。`node scripts/check-selected-skills.mjs` 是只读审计：它会逐项显示全局目录是否真的有可读的 `SKILL.md`。浏览器测试属于“产品实现后启用的预留入口”，目前不作为基础层通过条件。
 
 产品完成后，各自的验证证据会写入上表链接的 `apps/<product>/docs/VALIDATION.md`，并更新此处的“规划中”状态。

@@ -14,24 +14,24 @@
 
 ## 已选 16 项及产品影响
 
-| 技能 | 上游路径 | 面向产品 | 开发阶段 | 对产品的影响 |
+| 技能 | 上游路径 | 产品 ID | 阶段 ID | 对产品的影响 |
 | --- | --- | --- | --- | --- |
-| `build-isometric-arpg` | `agent-skills/game-development/build-isometric-arpg` | Monster Forge | 基础 | 为 Monster Forge 建立等距 ARPG 的可玩循环、角色移动和战斗骨架。 |
-| `author-game-levels` | `agent-skills/game-development/author-game-levels` | 三款产品 | 基础 | 指导关卡布局、目标与节奏，使三个试玩都能有清晰的可玩路径。 |
-| `build-game-camera-controls` | `agent-skills/game-development/build-game-camera-controls` | Monster Forge、Ashfall Arena | 基础、移动端 | 让俯视/第三人称镜头在鼠标、触控和窄屏下保持可控。 |
-| `design-action-combat` | `agent-skills/game-development/design-action-combat` | 三款产品 | 战斗 | 约束攻击、受击、节奏和反馈，让核心交互有动作游戏的手感。 |
-| `build-threejs-enemy-systems` | `agent-skills/game-development/build-threejs-enemy-systems` | Monster Forge、Ashfall Arena | 战斗 | 提供 Three.js 敌人生成、状态和交互的实现思路。 |
-| `build-game-monster-system` | `agent-skills/game-development/build-game-monster-system` | Monster Forge | 战斗 | 支持怪物属性、行为差异和收集/战斗体验。 |
-| `tune-enemy-ai` | `agent-skills/game-development/tune-enemy-ai` | Monster Forge、Ashfall Arena | 战斗、验证 | 帮助调整敌人决策与难度，避免不公平或无聊的遭遇。 |
-| `build-game-inventory` | `agent-skills/game-development/build-game-inventory` | Monster Forge | 基础 | 支持拾取、背包与装备选择，形成成长动机。 |
-| `build-hybrid-game-assets` | `agent-skills/game-development/build-hybrid-game-assets` | 三款产品 | 资产 | 指导占位图、生成素材与手工资产的组合方式。 |
-| `build-vesperfall-review-assets` | `agent-skills/game-development/build-vesperfall-review-assets` | 三款产品 | 资产、验证 | 让评审用的关键视觉资产和证据更容易整理、复查。 |
-| `create-game-vfx` | `agent-skills/game-development/create-game-vfx` | 三款产品 | 反馈 | 为攻击、命中、升级等瞬间增加清晰而克制的视觉反馈。 |
-| `build-game-audio-feedback` | `agent-skills/game-development/build-game-audio-feedback` | 三款产品 | 反馈 | 用音效强化点击、攻击、命中与状态变化的确认感。 |
-| `build-mobile-threejs-games` | `agent-skills/game-development/build-mobile-threejs-games` | Monster Forge、Ashfall Arena | 移动端 | 指导触控输入、性能预算和移动端可玩性。 |
-| `optimize-threejs-games` | `agent-skills/game-development/optimize-threejs-games` | 三款产品 | 性能 | 帮助控制绘制、资源和帧率，保持试玩稳定。 |
-| `test-playable-web-games` | `agent-skills/game-development/test-playable-web-games` | 三款产品 | 验证 | 建立可复现的试玩检查，覆盖加载、输入与关键游戏循环。 |
-| `ship-web-games` | `agent-skills/game-development/ship-web-games` | 三款产品 | 发布 | 约束上线前检查、构建产物和可访问的试玩交付。 |
+| `build-isometric-arpg` | `agent-skills/game-development/build-isometric-arpg` | `ashfall-arena` | `foundation` | 为 Ashfall Arena 建立等距 ARPG 的可玩循环、角色移动和战斗骨架。 |
+| `author-game-levels` | `agent-skills/game-development/author-game-levels` | `ashfall-arena` | `foundation` | 指导 Ashfall Arena 的关卡布局、目标与节奏。 |
+| `build-game-camera-controls` | `agent-skills/game-development/build-game-camera-controls` | `ashfall-arena` | `foundation, mobile` | 让 Ashfall Arena 的镜头在鼠标、触控和窄屏下保持可控。 |
+| `design-action-combat` | `agent-skills/game-development/design-action-combat` | `ashfall-arena` | `combat` | 约束动作战斗的攻击、受击、节奏和反馈。 |
+| `build-threejs-enemy-systems` | `agent-skills/game-development/build-threejs-enemy-systems` | `ashfall-arena` | `combat` | 提供 Ashfall Arena 敌人生成、状态和交互的实现思路。 |
+| `build-game-monster-system` | `agent-skills/game-development/build-game-monster-system` | `monster-forge` | `assets` | 支持怪物资产的属性、行为差异、骨架与动画审阅。 |
+| `tune-enemy-ai` | `agent-skills/game-development/tune-enemy-ai` | `ashfall-arena` | `combat, validation` | 帮助调整 Ashfall Arena 的敌人决策与难度，避免不公平或无聊的遭遇。 |
+| `build-game-inventory` | `agent-skills/game-development/build-game-inventory` | `ashfall-arena` | `foundation` | 支持 Ashfall Arena 的拾取、背包与装备选择，形成成长动机。 |
+| `build-hybrid-game-assets` | `agent-skills/game-development/build-hybrid-game-assets` | `monster-forge, ashfall-arena, mech-atelier` | `assets` | 指导占位图、生成素材与手工资产的组合方式。 |
+| `build-vesperfall-review-assets` | `agent-skills/game-development/build-vesperfall-review-assets` | `monster-forge` | `assets, validation` | 让 Monster Forge 的评审资产和证据更容易整理、复查。 |
+| `create-game-vfx` | `agent-skills/game-development/create-game-vfx` | `ashfall-arena` | `feedback` | 为 Ashfall Arena 的攻击、命中和升级增加清晰而克制的视觉反馈。 |
+| `build-game-audio-feedback` | `agent-skills/game-development/build-game-audio-feedback` | `ashfall-arena` | `feedback` | 用音效强化 Ashfall Arena 的攻击、命中与状态变化的确认感。 |
+| `build-mobile-threejs-games` | `agent-skills/game-development/build-mobile-threejs-games` | `ashfall-arena` | `mobile` | 指导 Ashfall Arena 的触控输入、性能预算和移动端可玩性。 |
+| `optimize-threejs-games` | `agent-skills/game-development/optimize-threejs-games` | `monster-forge, ashfall-arena, mech-atelier` | `performance` | 帮助控制绘制、资源和帧率，保持试玩稳定。 |
+| `test-playable-web-games` | `agent-skills/game-development/test-playable-web-games` | `monster-forge, ashfall-arena, mech-atelier` | `validation` | 建立可复现的试玩检查，覆盖加载、输入与关键游戏循环。 |
+| `ship-web-games` | `agent-skills/game-development/ship-web-games` | `monster-forge, ashfall-arena, mech-atelier` | `release` | 约束上线前检查、构建产物和可访问的试玩交付。 |
 
 ## 安装和只读审计
 

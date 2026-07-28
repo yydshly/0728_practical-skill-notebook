@@ -8,6 +8,24 @@ import { describe, expect, it } from "vitest";
 const readJson = async (path) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8"));
 const auditScript = fileURLToPath(new URL("../scripts/check-selected-skills.mjs", import.meta.url));
 
+const readReadmeSkillRows = (readme) => [...readme.matchAll(
+  /^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|$/gm,
+)].map(([, name, sourcePath, products, phases]) => ({
+  name,
+  sourcePath,
+  products: products.split(", "),
+  phases: phases.split(", "),
+}));
+
+const readInstallationGuideSkillRows = (guide) => [...guide.matchAll(
+  /^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \| [^|]+ \|$/gm,
+)].map(([, name, sourcePath, products, phases]) => ({
+  name,
+  sourcePath,
+  products: products.split(", "),
+  phases: phases.split(", "),
+}));
+
 const createAuditFixture = async () => {
   const userProfile = await mkdtemp(join(tmpdir(), "showcase-skill-audit-"));
   const installRoot = join(userProfile, ".codex", "skills");
@@ -117,6 +135,71 @@ describe("showcase workspace", () => {
     }
   });
 
+  it("让 README 的 Skill 表格与所选清单的产品和阶段映射一致", async () => {
+    const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+    const guide = await readFile(new URL("../docs/skill-installation.md", import.meta.url), "utf8");
+    const selection = await readJson("../config/selected-skills.json");
+    const rows = readReadmeSkillRows(readme);
+    const guideRows = readInstallationGuideSkillRows(guide);
+    const expectedRows = selection.skills.map((skill) => ({
+      name: skill.name,
+      sourcePath: skill.sourcePath,
+      products: skill.products,
+      phases: skill.phases,
+    }));
+
+    expect(rows).toHaveLength(selection.skills.length);
+    expect(rows).toEqual(expectedRows);
+    expect(guideRows).toEqual(expectedRows);
+  });
+
+  it("仅将 build-isometric-arpg 路由到 Ashfall Arena", async () => {
+    const selection = await readJson("../config/selected-skills.json");
+    const arpg = selection.skills.find((skill) => skill.name === "build-isometric-arpg");
+    expect(arpg).toMatchObject({
+      products: ["ashfall-arena"],
+      phases: ["foundation"],
+    });
+  });
+
+  it("将 Monster Forge 的怪物与资产审阅链路标为资产阶段", async () => {
+    const selection = await readJson("../config/selected-skills.json");
+    for (const name of [
+      "build-hybrid-game-assets",
+      "build-game-monster-system",
+      "build-vesperfall-review-assets",
+    ]) {
+      const skill = selection.skills.find((entry) => entry.name === name);
+      expect(skill?.products).toContain("monster-forge");
+      expect(skill?.phases).toContain("assets");
+    }
+  });
+
+  it("划分当前可执行命令与未来产品的预留入口", async () => {
+    const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+    const currentCommands = readme.slice(
+      readme.indexOf("### 当前基础层可执行命令"),
+      readme.indexOf("### 产品实现后启用的预留入口"),
+    );
+    const reservedCommands = readme.slice(
+      readme.indexOf("### 产品实现后启用的预留入口"),
+      readme.indexOf("## Skill 源码与安装目录"),
+    );
+
+    expect(currentCommands).toContain("npm run validate");
+    expect(currentCommands).toContain("npm test");
+    expect(currentCommands).toContain("node scripts/check-selected-skills.mjs");
+    expect(currentCommands).toContain("npm run build");
+    expect(currentCommands).not.toContain("npm run dev:forge");
+    expect(currentCommands).not.toContain("npm run test:browser");
+    expect(reservedCommands).toContain("产品实现后启用的预留入口");
+    expect(reservedCommands).toContain("npm run dev:forge");
+    expect(reservedCommands).toContain("npm run dev:arena");
+    expect(reservedCommands).toContain("npm run dev:atelier");
+    expect(reservedCommands).toContain("npm run test:browser");
+    expect(readme.match(/npm run test:browser/g)).toHaveLength(1);
+  });
+
   it("为每个新产品路由到明确且狭范围的 Skills", async () => {
     const agents = await readFile(new URL("../AGENTS.md", import.meta.url), "utf8");
     expect(agents).toContain("apps/monster-forge");
@@ -132,6 +215,15 @@ describe("showcase workspace", () => {
     expect(agents).toContain("不得修改");
     expect(agents).toContain("skills-source/MengTo-Skills");
     expect(agents).toContain("未批准");
+  });
+
+  it("没有将未批准的 web-design Skill 记录为 Mech Atelier 路由", async () => {
+    const selection = await readJson("../config/selected-skills.json");
+    const agents = await readFile(new URL("../AGENTS.md", import.meta.url), "utf8");
+
+    expect(selection.skills.some((skill) => skill.sourcePath.includes("/web-design/"))).toBe(false);
+    expect(agents).toContain("Mech Atelier 当前没有批准任何 web-design Skill");
+    expect(agents).toContain("未批准的 web-design Skill 不得");
   });
 
   it("runs the selected-skill audit from outside the suite directory", async () => {

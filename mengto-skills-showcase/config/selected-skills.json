@@ -3,49 +3,49 @@
     {
       "name": "build-isometric-arpg",
       "sourcePath": "agent-skills/game-development/build-isometric-arpg",
-      "products": ["monster-forge"],
+      "products": ["ashfall-arena"],
       "phases": ["foundation"]
     },
     {
       "name": "author-game-levels",
       "sourcePath": "agent-skills/game-development/author-game-levels",
-      "products": ["monster-forge", "ashfall-arena", "mech-atelier"],
+      "products": ["ashfall-arena"],
       "phases": ["foundation"]
     },
     {
       "name": "build-game-camera-controls",
       "sourcePath": "agent-skills/game-development/build-game-camera-controls",
-      "products": ["monster-forge", "ashfall-arena"],
+      "products": ["ashfall-arena"],
       "phases": ["foundation", "mobile"]
     },
     {
       "name": "design-action-combat",
       "sourcePath": "agent-skills/game-development/design-action-combat",
-      "products": ["monster-forge", "ashfall-arena", "mech-atelier"],
+      "products": ["ashfall-arena"],
       "phases": ["combat"]
     },
     {
       "name": "build-threejs-enemy-systems",
       "sourcePath": "agent-skills/game-development/build-threejs-enemy-systems",
-      "products": ["monster-forge", "ashfall-arena"],
+      "products": ["ashfall-arena"],
       "phases": ["combat"]
     },
     {
       "name": "build-game-monster-system",
       "sourcePath": "agent-skills/game-development/build-game-monster-system",
       "products": ["monster-forge"],
-      "phases": ["combat"]
+      "phases": ["assets"]
     },
     {
       "name": "tune-enemy-ai",
       "sourcePath": "agent-skills/game-development/tune-enemy-ai",
-      "products": ["monster-forge", "ashfall-arena"],
+      "products": ["ashfall-arena"],
       "phases": ["combat", "validation"]
     },
     {
       "name": "build-game-inventory",
       "sourcePath": "agent-skills/game-development/build-game-inventory",
-      "products": ["monster-forge"],
+      "products": ["ashfall-arena"],
       "phases": ["foundation"]
     },
     {
@@ -57,25 +57,25 @@
     {
       "name": "build-vesperfall-review-assets",
       "sourcePath": "agent-skills/game-development/build-vesperfall-review-assets",
-      "products": ["monster-forge", "ashfall-arena", "mech-atelier"],
+      "products": ["monster-forge"],
       "phases": ["assets", "validation"]
     },
     {
       "name": "create-game-vfx",
       "sourcePath": "agent-skills/game-development/create-game-vfx",
-      "products": ["monster-forge", "ashfall-arena", "mech-atelier"],
+      "products": ["ashfall-arena"],
       "phases": ["feedback"]
     },
     {
       "name": "build-game-audio-feedback",
       "sourcePath": "agent-skills/game-development/build-game-audio-feedback",
-      "products": ["monster-forge", "ashfall-arena", "mech-atelier"],
+      "products": ["ashfall-arena"],
       "phases": ["feedback"]
     },
     {
       "name": "build-mobile-threejs-games",
       "sourcePath": "agent-skills/game-development/build-mobile-threejs-games",
-      "products": ["monster-forge", "ashfall-arena"],
+      "products": ["ashfall-arena"],
       "phases": ["mobile"]
     },
     {

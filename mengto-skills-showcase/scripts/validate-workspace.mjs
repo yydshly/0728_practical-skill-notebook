@@ -1,5 +1,14 @@
 import { access, readFile } from "node:fs/promises";
 
+const toSkillRows = (markdown, pattern) => [...markdown.matchAll(pattern)].map(
+  ([, name, sourcePath, products, phases]) => ({
+    name,
+    sourcePath,
+    products: products.split(", "),
+    phases: phases.split(", "),
+  }),
+);
+
 const required = [
   "README.md",
   "AGENTS.md",
@@ -38,6 +47,20 @@ if (failures.length === 0) {
   const guide = await readFile("docs/skill-installation.md", "utf8");
   const readme = await readFile("README.md", "utf8");
   const agents = await readFile("AGENTS.md", "utf8");
+  const expectedRows = selection.skills.map(({ name, sourcePath, products, phases }) => ({
+    name,
+    sourcePath,
+    products,
+    phases,
+  }));
+  const readmeRows = toSkillRows(
+    readme,
+    /^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|$/gm,
+  );
+  const guideRows = toSkillRows(
+    guide,
+    /^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \| [^|]+ \|$/gm,
+  );
   for (const skill of selection.skills) {
     if (!guide.includes(`\`${skill.name}\``)) {
       failures.push(`docs/skill-installation.md must document ${skill.name}`);
@@ -45,6 +68,21 @@ if (failures.length === 0) {
     if (!readme.includes(`\`${skill.name}\``)) {
       failures.push(`README.md must document ${skill.name}`);
     }
+  }
+
+  if (JSON.stringify(readmeRows) !== JSON.stringify(expectedRows)) {
+    failures.push("README.md skill table must match selected-skills.json product and phase mappings");
+  }
+  if (JSON.stringify(guideRows) !== JSON.stringify(expectedRows)) {
+    failures.push("docs/skill-installation.md skill table must match selected-skills.json product and phase mappings");
+  }
+
+  const arpg = selection.skills.find((skill) => skill.name === "build-isometric-arpg");
+  if (JSON.stringify(arpg?.products) !== JSON.stringify(["ashfall-arena"])) {
+    failures.push("build-isometric-arpg must route only to ashfall-arena");
+  }
+  if (selection.skills.some((skill) => skill.sourcePath.includes("/web-design/"))) {
+    failures.push("Unapproved web-design skills must not be recorded in selected-skills.json");
   }
 
   for (const phrase of ["C:\\Users\\yun68\\.codex\\skills", "开发操作规范", "不是运行时依赖", "所有 Codex 项目"]) {
@@ -88,6 +126,8 @@ if (failures.length === 0) {
     "test-playable-web-games",
     "ship-web-games",
     "skills-source/MengTo-Skills",
+    "Mech Atelier 当前没有批准任何 web-design Skill",
+    "未批准的 web-design Skill 不得",
   ]) {
     if (!agents.includes(phrase)) failures.push(`AGENTS.md must route: ${phrase}`);
   }
