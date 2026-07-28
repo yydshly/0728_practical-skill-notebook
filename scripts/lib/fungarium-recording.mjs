@@ -16,8 +16,12 @@ export const RECORDINGS = [
   { id: "showcase", output: "docs/demos/05-fungarium-product-showcase.gif" },
 ];
 
-function commandName(command) {
-  return process.platform === "win32" && command === "npm" ? "npm.cmd" : command;
+export function commandInvocation(command) {
+  const usesWindowsNpm = process.platform === "win32" && command === "npm";
+  return {
+    command: usesWindowsNpm ? "npm.cmd" : command,
+    shell: usesWindowsNpm,
+  };
 }
 
 function delay(milliseconds) {
@@ -25,10 +29,12 @@ function delay(milliseconds) {
 }
 
 async function run(command, args, { cwd }) {
-  const child = spawn(commandName(command), args, {
+  const invocation = commandInvocation(command);
+  const child = spawn(invocation.command, args, {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
+    shell: invocation.shell,
   });
   let output = "";
   child.stdout.on("data", (chunk) => {
@@ -162,6 +168,12 @@ async function framesToGif(frameDirectory, outputFile) {
   );
 }
 
+export function resolveChromium(playwrightModule) {
+  const chromium = playwrightModule.chromium ?? playwrightModule.default?.chromium;
+  if (!chromium) throw new Error("Playwright Chromium launcher is unavailable.");
+  return chromium;
+}
+
 async function loadChromium(rootDir) {
   const playwrightEntry = path.join(
     rootDir,
@@ -171,7 +183,7 @@ async function loadChromium(rootDir) {
     "index.js",
   );
   const playwright = await import(pathToFileURL(playwrightEntry).href);
-  return playwright.chromium;
+  return resolveChromium(playwright);
 }
 
 export async function assertGifFile(filePath) {

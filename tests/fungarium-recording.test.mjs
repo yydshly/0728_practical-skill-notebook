@@ -7,6 +7,8 @@ import {
   RECORDINGS,
   UPSTREAM_COMMIT,
   assertGifFile,
+  commandInvocation,
+  resolveChromium,
 } from "../scripts/lib/fungarium-recording.mjs";
 
 test("recording manifest pins the upstream comparison and both committed GIF paths", () => {
@@ -26,4 +28,15 @@ test("assertGifFile rejects an empty or non-GIF artifact", async () => {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("npm uses a shell invocation on Windows", () => {
+  const invocation = commandInvocation("npm");
+  assert.equal(invocation.command, "npm.cmd");
+  assert.equal(invocation.shell, true);
+});
+
+test("resolveChromium accepts Playwright's CommonJS default export shape", () => {
+  const chromium = { launch: () => undefined };
+  assert.equal(resolveChromium({ default: { chromium } }), chromium);
 });
