@@ -8,6 +8,14 @@
 
 **Tech Stack:** Vite 8, TypeScript, Three.js, shared showcase packages, Vitest 4, Playwright 1.62.
 
+## 中文执行摘要
+
+Monster Forge（怪物铸造所）是一款面向游戏开发团队的 3D 资产审查工具。首版制作四个原创程序化怪物，目录卡片使用透明 PNG，选中后通过唯一的 Three.js 画布查看模型、动作、骨骼、碰撞体和装备挂点。页面必须明确说明模型由项目代码生成，不得冒充 GLB、FBX 或外部动画资产。WebGL 失败时仍要显示静态预览、资产信息和具体错误原因。
+
+产品界面、操作标签、错误信息、无障碍文本和验证报告使用中文；模型 ID、动作枚举、文件路径和代码接口保留英文。
+
+项目所有者优先阅读：[中文实施指南](./2026-07-28-mengto-showcase-中文实施指南.md)。
+
 ## Global Constraints
 
 - Work only under `mengto-skills-showcase/apps/monster-forge` and approved shared packages.
@@ -19,6 +27,7 @@
 - Missing assets or WebGL show a readable static fallback.
 - Support keyboard, pointer, touch, and reduced-motion behavior.
 - Keep the application independently buildable and deployable.
+- Use Chinese for visible product copy and validation explanations while preserving English code identifiers and action names.
 
 ---
 
@@ -160,10 +169,10 @@ Use these identities and factory mappings:
 
 | ID | Display name | Factory | Readable silhouette |
 | --- | --- | --- | --- |
-| `ash-warden` | Ash Warden | `biped` | tall staff-bearing caster |
-| `glass-crawler` | Glass Crawler | `crawler` | low six-legged crystal creature |
-| `bell-knight` | Bell Knight | `armored` | broad armored humanoid with bell helm |
-| `mire-hound` | Mire Hound | `quadruped` | long-backed four-legged hunter |
+| `ash-warden` | 灰烬守卫 / Ash Warden | `biped` | tall staff-bearing caster |
+| `glass-crawler` | 琉璃爬行者 / Glass Crawler | `crawler` | low six-legged crystal creature |
+| `bell-knight` | 钟甲骑士 / Bell Knight | `armored` | broad armored humanoid with bell helm |
+| `mire-hound` | 泥沼猎犬 / Mire Hound | `quadruped` | long-backed four-legged hunter |
 
 Every definition includes non-zero measured bounds, a collider, at least one named socket, the five actions, and a source description beginning `Project-authored Three.js geometry`.
 
@@ -288,7 +297,7 @@ import { expect, test } from "@playwright/test";
 
 test("catalog cards use images and the inspector owns one canvas", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Monster Forge" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /怪物铸造所/ })).toBeVisible();
   await expect(page.locator("[data-monster-card]")).toHaveCount(4);
   await expect(page.locator("[data-monster-card] canvas")).toHaveCount(0);
   await expect(page.locator("[data-inspector] canvas")).toHaveCount(1);
@@ -296,8 +305,8 @@ test("catalog cards use images and the inspector owns one canvas", async ({ page
 
 test("selection replaces the live model without adding canvases", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: /Glass Crawler/ }).click();
-  await expect(page.getByRole("heading", { name: "Glass Crawler" })).toBeVisible();
+  await page.getByRole("button", { name: /琉璃爬行者/ }).click();
+  await expect(page.getByRole("heading", { name: /琉璃爬行者/ })).toBeVisible();
   await expect(page.locator("[data-inspector] canvas")).toHaveCount(1);
 });
 ```
@@ -388,13 +397,13 @@ Expected: both browser journeys PASS and production build succeeds.
 ```ts
 test("reviewer can play, pause, restart, and inspect overlays", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Attack" }).click();
+  await page.getByRole("button", { name: "攻击" }).click();
   await expect(page.locator("[data-action-status]")).toContainText("Attack");
-  await page.getByRole("button", { name: "Pause animation" }).click();
-  await expect(page.locator("[data-action-status]")).toContainText("Paused");
-  await page.getByLabel("Show sockets").check();
-  await expect(page.locator("[data-overlay-status]")).toContainText("Sockets visible");
-  await page.getByRole("button", { name: "Restart animation" }).click();
+  await page.getByRole("button", { name: "暂停动画" }).click();
+  await expect(page.locator("[data-action-status]")).toContainText("已暂停");
+  await page.getByLabel("显示挂点").check();
+  await expect(page.locator("[data-overlay-status]")).toContainText("挂点已显示");
+  await page.getByRole("button", { name: "重新播放" }).click();
 });
 ```
 
@@ -423,12 +432,12 @@ The inspector must expose:
 - one button per action;
 - pause/play and restart;
 - skeleton, collider, and socket checkboxes;
-- source type `Runtime procedural`;
+- Chinese source label `运行时程序化（Runtime procedural）`;
 - exact factory ID;
 - action count;
 - socket names;
 - dimensions and grounding offset;
-- the statement `No imported GLB/FBX is used for this asset`.
+- the statement `此资产未使用导入的 GLB/FBX 文件`.
 
 - [ ] **Step 5: Verify and commit review behavior**
 
@@ -499,9 +508,9 @@ export async function readPngMetadata(path: string) {
 ```ts
 test("WebGL failure retains the selected asset information", async ({ page }) => {
   await page.goto("/?forceWebglFailure=1");
-  await expect(page.getByRole("img", { name: /Ash Warden/ })).toBeVisible();
-  await expect(page.getByText("3D preview unavailable")).toBeVisible();
-  await expect(page.getByText("Runtime procedural")).toBeVisible();
+  await expect(page.getByRole("img", { name: /灰烬守卫/ })).toBeVisible();
+  await expect(page.getByText("3D 预览不可用")).toBeVisible();
+  await expect(page.getByText(/运行时程序化/)).toBeVisible();
 });
 ```
 

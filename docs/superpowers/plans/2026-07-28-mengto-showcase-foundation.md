@@ -8,6 +8,14 @@
 
 **Tech Stack:** Node.js 22+, npm workspaces, Vite 8, TypeScript, Three.js, Vitest 4, Playwright 1.62, PowerShell, git submodules.
 
+## 中文执行摘要
+
+本计划先在当前工作区创建 `mengto-skills-showcase` 独立目录，然后把 `MengTo/Skills` 作为只读子模块固定到项目中；再把批准的 16 个游戏开发 Skill 安装到 Codex 全局目录。项目会用一份机器可读清单记录每个 Skill 的来源、影响产品和使用阶段，并在中文 README 与安装文档中解释安装位置、全局影响、更新、校验和安全移除方法。最后建立三款产品共同使用的类型、资产、输入、UI 和 Three.js 生命周期基础包。
+
+面向用户的 README、安装说明、验证报告和交付说明以中文为主。代码名称、目录、命令、包名和上游 `SKILL.md` 保留英文原文。
+
+项目所有者优先阅读：[中文实施指南](./2026-07-28-mengto-showcase-中文实施指南.md)。
+
 ## Global Constraints
 
 - Create all new suite files under `D:\codex_project_work\0728_some_github\mengto-skills-showcase`.
@@ -18,6 +26,7 @@
 - Use TypeScript for new application and shared-package source.
 - Use Vitest for deterministic unit tests and Playwright for browser journeys.
 - Record every installed skill, its upstream path, its intended products, and its development impact in the root README and `docs/skill-installation.md`.
+- Write human-facing project documentation in Chinese first; retain English for executable identifiers, commands, paths, package names, and unchanged upstream skill files.
 - Preserve unrelated files and commits in the parent repository.
 
 ---
@@ -375,9 +384,9 @@ it("documents every selected skill and the global install impact", async () => {
     expect(guide).toContain(`\`${skill.name}\``);
   }
   expect(guide).toContain("C:\\Users\\yun68\\.codex\\skills");
-  expect(guide).toContain("development instructions");
-  expect(guide).toContain("not runtime dependencies");
-  expect(guide).toContain("all Codex projects");
+  expect(guide).toContain("开发操作规程");
+  expect(guide).toContain("不是运行时依赖");
+  expect(guide).toContain("所有 Codex 项目");
 });
 ```
 
@@ -736,6 +745,7 @@ Expected: FAIL because `README.md` and `AGENTS.md` do not exist.
 The README must:
 
 - lead with the five-demo portfolio and the three new products;
+- use Chinese as its primary explanatory language;
 - list Node.js 22+, npm, and WebGL prerequisites;
 - include exact install, app-specific dev, test, browser-test, validate, and build commands;
 - show the pinned local source path and global installation path;

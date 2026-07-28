@@ -15,6 +15,21 @@ Build a suite of complementary, independently runnable web products that demonst
 
 The existing `Isle of Quiet Signals` and `Final Four — Typographic Flags` demos remain part of the broader portfolio. The new suite adds three products that share selected 3D infrastructure and assets without sharing product-specific state.
 
+## 1.1 Documentation Language Policy
+
+The project is Chinese-first for human-facing documentation and product copy:
+
+- root and product README files use Chinese as the primary language;
+- installation records, validation reports, architecture explanations, and handoff summaries use Chinese;
+- product navigation, controls, status messages, tutorials, errors, and accessibility labels use Chinese by default;
+- important technical terms may show Chinese followed by the canonical English term once, for example `固定时间步（fixed timestep）`;
+- source-code identifiers, file names, package names, commands, URLs, API names, and third-party error output remain English so they match the executable system;
+- upstream `MengTo/Skills` files remain unchanged in their original language to preserve provenance, diffability, and update compatibility;
+- every installed skill receives a Chinese purpose and impact explanation in the project README and `docs/skill-installation.md`;
+- Codex explanations and project delivery reports to the user are written in Chinese unless the user explicitly requests English.
+
+Language choice must not change product behavior, validation criteria, or runtime dependencies.
+
 ## 2. Product Suite
 
 ### 2.1 Monster Forge

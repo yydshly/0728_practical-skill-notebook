@@ -8,6 +8,14 @@
 
 **Tech Stack:** Vite 8, TypeScript, Three.js, shared showcase packages, Vitest 4, Playwright 1.62, Canvas export, URLSearchParams, localStorage.
 
+## 中文执行摘要
+
+Mech Atelier（机甲定制工坊）是一款商业 3D 配置产品。用户可以选择三种机甲底盘，替换头部、装甲、左右武器和背部模块，并调整颜色、材质和灯光环境。重量、战力、防护、机动性和概念价格由纯逻辑函数计算；非法组合会明确说明原因并恢复到最接近的合法配置。产品支持分享链接、分解视图、部件热点和海报导出，但不会伪装成真实商城，也不包含付款、库存或账号功能。
+
+产品界面、配置说明、兼容性提示、错误和验证报告使用中文；部件 ID、URL 参数、代码接口、文件路径和命令保留英文。
+
+项目所有者优先阅读：[中文实施指南](./2026-07-28-mengto-showcase-中文实施指南.md)。
+
 ## Global Constraints
 
 - Work only under `mengto-skills-showcase/apps/mech-atelier` and approved shared packages.
@@ -19,6 +27,7 @@
 - Keep configuration links deterministic and backward-compatible within version 1.
 - Provide a readable static fallback when WebGL or assembly creation fails.
 - Support desktop, touch, keyboard, reduced motion, and responsive layouts.
+- Use Chinese for visible product copy and validation explanations while preserving English code and configuration identifiers.
 
 ---
 
@@ -159,11 +168,11 @@ export interface MechConfiguration {
 
 Chassis:
 
-| ID | Base price | Base weight | Power | Guard | Mobility | Weight limit |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `strider-scout` | 100000 | 12 | 20 | 12 | 50 | 32 |
-| `bastion-hauler` | 132000 | 20 | 24 | 28 | 24 | 52 |
-| `oracle-frame` | 148000 | 15 | 32 | 16 | 38 | 40 |
+| ID | 中文名称 | Base price | Base weight | Power | Guard | Mobility | Weight limit |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `strider-scout` | 游骑侦察型 | 100000 | 12 | 20 | 12 | 50 | 32 |
+| `bastion-hauler` | 堡垒运输型 | 132000 | 20 | 24 | 28 | 24 | 52 |
+| `oracle-frame` | 神谕框架 | 148000 | 15 | 32 | 16 | 38 | 40 |
 
 Part values:
 
@@ -327,12 +336,12 @@ git commit -m "feat: add modular procedural mech assets"
 ```ts
 test("configures a legal mech and updates summary without duplicating the canvas", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Mech Atelier" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /机甲定制工坊/ })).toBeVisible();
   await expect(page.locator("[data-product-canvas]")).toHaveCount(1);
-  await page.getByRole("radio", { name: "Bastion Hauler" }).check();
-  await page.getByRole("radio", { name: "Aegis Shield" }).check();
+  await page.getByRole("radio", { name: /堡垒运输型/ }).check();
+  await page.getByRole("radio", { name: /神盾/ }).check();
   await expect(page.locator("[data-summary-weight]")).toContainText("kg");
-  await expect(page.locator("[data-summary-price]")).toContainText("credits");
+  await expect(page.locator("[data-summary-price]")).toContainText("信用点");
   await expect(page.locator("[data-product-canvas]")).toHaveCount(1);
 });
 ```
@@ -385,7 +394,7 @@ The scene must:
 
 Use `<fieldset>` and radio controls for chassis, head, armor, weapons, rear module, material properties, and environment. Disable incompatible parts with a visible reason. If changing chassis invalidates a part, show the normalization message and select the nearest legal option before updating the scene.
 
-Summary displays price, weight/current limit, power, guard, and mobility. It must include `Concept configuration — no checkout or inventory` next to the price.
+Summary displays price, weight/current limit, power, guard, and mobility. It must include `概念配置，不提供结算或库存功能` next to the price.
 
 - [ ] **Step 5: Verify and commit the configurator shell**
 
@@ -453,7 +462,7 @@ Colors serialize as six-character hex without `#`. Omit values equal to approved
 
 - [ ] **Step 4: Implement local save and share controls**
 
-Save the last valid configuration after a 250 ms debounce. A Copy Link button uses the current canonical query. When clipboard access fails, show a selectable text field with the full link. A Reset button restores the approved default after confirmation.
+Save the last valid configuration after a 250 ms debounce. The `复制配置链接` button uses the current canonical query. When clipboard access fails, show a selectable text field with the full link. The `恢复默认配置` button restores the approved default after confirmation.
 
 - [ ] **Step 5: Verify and commit sharing**
 
@@ -491,11 +500,11 @@ npm install -D pngjs @types/pngjs --workspace @showcase/mech-atelier
 ```ts
 test("exploded view exposes every configurable part and returns to assembly", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Exploded view" }).click();
-  for (const name of ["Head", "Armor", "Left weapon", "Right weapon", "Rear module"]) {
+  await page.getByRole("button", { name: "分解视图" }).click();
+  for (const name of ["头部", "装甲", "左侧武器", "右侧武器", "背部模块"]) {
     await expect(page.getByRole("button", { name })).toBeVisible();
   }
-  await page.getByRole("button", { name: "Assemble mech" }).click();
+  await page.getByRole("button", { name: "重新组装" }).click();
   await expect(page.locator("[data-exploded-state]")).toHaveAttribute("data-exploded-state", "assembled");
 });
 ```
@@ -506,7 +515,7 @@ import { readPngDimensions } from "./helpers/read-png-dimensions";
 test("exports a 1600x1200 PNG poster", async ({ page }) => {
   await page.goto("/");
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export product poster" }).click();
+  await page.getByRole("button", { name: "导出产品海报" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/mech-atelier-.*\.png$/);
   const path = await download.path();
@@ -547,7 +556,7 @@ Export a 1600×1200 PNG containing:
 - chassis and configuration name;
 - selected module names;
 - price, weight, power, guard, and mobility;
-- `Concept configuration — no checkout or inventory`;
+- `概念配置，不提供结算或库存功能`;
 - a short canonical configuration URL.
 
 Use only local or procedural assets so canvas export cannot be tainted by cross-origin media. If image capture fails, display an actionable error and leave the configurator usable.
@@ -580,18 +589,18 @@ git commit -m "feat: add Mech Atelier presentation tools"
 ```ts
 test("WebGL failure preserves configuration and sharing", async ({ page }) => {
   await page.goto("/?forceWebglFailure=1");
-  await expect(page.getByText("3D preview unavailable")).toBeVisible();
-  await page.getByRole("radio", { name: "Bastion Hauler" }).check();
-  await expect(page.locator("[data-summary-price]")).toContainText("credits");
-  await expect(page.getByRole("button", { name: "Copy configuration link" })).toBeEnabled();
+  await expect(page.getByText("3D 预览不可用")).toBeVisible();
+  await page.getByRole("radio", { name: /堡垒运输型/ }).check();
+  await expect(page.locator("[data-summary-price]")).toContainText("信用点");
+  await expect(page.getByRole("button", { name: "复制配置链接" })).toBeEnabled();
 });
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 test("mobile keeps the product, summary, and options reachable", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("[data-product-stage]")).toBeVisible();
-  await page.getByRole("button", { name: "Configure" }).click();
-  await expect(page.getByRole("group", { name: "Chassis" })).toBeVisible();
+  await page.getByRole("button", { name: "开始配置" }).click();
+  await expect(page.getByRole("group", { name: "底盘" })).toBeVisible();
   await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
 });
 ```

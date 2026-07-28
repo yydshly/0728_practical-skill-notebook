@@ -8,6 +8,14 @@
 
 **Tech Stack:** Vite 8, TypeScript, Three.js, shared showcase packages, Vitest 4, Playwright 1.62, Web Audio API, localStorage.
 
+## 中文执行摘要
+
+Ashfall Arena（灰烬竞技场）是整个案例矩阵的旗舰游戏：玩家在一张紧凑地图中完成教学、普通敌人战、精英战和 Boss 战，期间可以切换两种武器、使用治疗、选择一次升级，并在失败后从最近阶段重试。战斗、敌人 AI、掉落、升级和存档都由可重复测试的固定时间步模拟决定；Three.js 只负责画面表现，不能偷偷决定伤害结果。
+
+游戏标题、教程、HUD、设置、错误、无障碍标签和验证报告使用中文。内部状态名、文件名、查询参数、代码接口和测试命令保留英文。
+
+项目所有者优先阅读：[中文实施指南](./2026-07-28-mengto-showcase-中文实施指南.md)。
+
 ## Global Constraints
 
 - Work only under `mengto-skills-showcase/apps/ashfall-arena` and approved shared packages.
@@ -19,6 +27,7 @@
 - Support keyboard/mouse, touch, and standard gamepad controls.
 - First-time completion target is 8–12 minutes.
 - Respect reduced motion and expose readable non-audio feedback.
+- Use Chinese for visible game copy and validation explanations while preserving English code and fixture identifiers.
 
 ---
 
@@ -318,8 +327,8 @@ it("provides named weapon sockets and disposable geometry", () => {
 ```ts
 test("fresh start exposes the training objective and all input modes", async ({ page }) => {
   await page.goto("/?fixture=fresh");
-  await expect(page.getByRole("heading", { name: "Ashfall Arena" })).toBeVisible();
-  await expect(page.getByText("Enter the first amber practice ring")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /灰烬竞技场/ })).toBeVisible();
+  await expect(page.getByText("进入第一个琥珀训练环")).toBeVisible();
   await expect(page.getByText("105 / 105")).toBeVisible();
   await expect(page.locator("[data-game-canvas]")).toHaveCount(1);
 });
@@ -678,8 +687,8 @@ git commit -m "feat: add Ashfall progression and saves"
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 test("touch controls expose the complete combat vocabulary", async ({ page }) => {
   await page.goto("/?fixture=wave-one");
-  await expect(page.getByLabel("Movement stick")).toBeVisible();
-  for (const name of ["Attack", "Guard", "Dodge", "Target lock", "Switch weapon"]) {
+  await expect(page.getByLabel("移动摇杆")).toBeVisible();
+  for (const name of ["攻击", "格挡", "闪避", "目标锁定", "切换武器"]) {
     await expect(page.getByRole("button", { name })).toBeVisible();
   }
 });
