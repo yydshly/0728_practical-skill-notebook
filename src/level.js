@@ -4,13 +4,6 @@ import { createMaterials } from './world/materials.js';
 import { buildStructure } from './world/buildings.js';
 import { addLantern, addPropCluster } from './world/props.js';
 
-const ROUTE_ANCHOR_POSITIONS = {
-  player_home: [-8, 0, 33],
-  radio: [-11.2, 0, 32.8],
-  neighbour: [10.4, 0, 24.4],
-  flashlight: [13.2, 0, -4.6],
-};
-
 function flatPolygon(points, material, y = 0.012) {
   const shape = new THREE.Shape();
   shape.moveTo(points[0][0], points[0][1]);
@@ -36,6 +29,19 @@ function runtimeZones(zoneDefinitions) {
       { id, center: new THREE.Vector3(...zone.center), radius: zone.radius },
     ]),
   );
+}
+
+function runtimePropColliders(clusterDefinitions) {
+  return clusterDefinitions.flatMap((cluster) => {
+    if (!cluster.collider) return [];
+    return [{
+      id: cluster.collider.id,
+      x: cluster.x + (cluster.collider.offsetX ?? 0),
+      z: cluster.z + (cluster.collider.offsetZ ?? 0),
+      halfX: cluster.collider.halfX,
+      halfZ: cluster.collider.halfZ,
+    }];
+  });
 }
 
 export function createVillage(scene) {
@@ -64,13 +70,9 @@ export function createVillage(scene) {
   }
 
   const anchors = runtimeAnchors(VILLAGE_LAYOUT.anchors);
-  for (const [id, position] of Object.entries(ROUTE_ANCHOR_POSITIONS)) {
-    anchors[id].set(...position);
-  }
   const colliders = [
     ...VILLAGE_LAYOUT.colliders.map((collider) => ({ ...collider })),
-    { id: 'home_fence', x: -7, z: 29, halfX: 2.6, halfZ: 0.18 },
-    { id: 'gate_blockade', x: -4, z: -32, halfX: 3.1, halfZ: 0.9 },
+    ...runtimePropColliders(VILLAGE_LAYOUT.propClusters),
   ];
 
   scene.updateMatrixWorld(true);

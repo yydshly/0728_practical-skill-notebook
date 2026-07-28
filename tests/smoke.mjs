@@ -129,6 +129,19 @@ try {
     throw new Error(`Expected flashlight reveal subtitle, got ${flashlightSubtitle}`);
   }
 
+  const flashlightPromptHidden = await page.evaluate(
+    () => document.querySelector('#interaction').hidden,
+  );
+  if (!flashlightPromptHidden) throw new Error('Expected flashlight prompt to hide after pickup');
+
+  await page.keyboard.press('KeyE');
+  const subtitleAfterSecondKey = await page.evaluate(
+    () => document.querySelector('#subtitle').textContent,
+  );
+  if (subtitleAfterSecondKey !== flashlightSubtitle) {
+    throw new Error('Expected repeated KeyE to preserve the flashlight reveal subtitle');
+  }
+
   const escapeState = await page.evaluate(() => {
     const game = window.__RURAL_ESCAPE__;
     game.setPlayerForTest(0, -34);

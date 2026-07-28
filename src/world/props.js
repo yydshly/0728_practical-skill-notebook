@@ -9,7 +9,8 @@ function box(group, size, position, material, castShadow = true) {
   return mesh;
 }
 
-function addFence(group, materials, length = 6) {
+function addFence(group, materials, collider) {
+  const length = collider.halfX * 2;
   for (const x of [-length / 2, 0, length / 2]) box(group, [0.14, 1.15, 0.14], [x, 0.58, 0], materials.wood);
   for (const y of [0.42, 0.9]) box(group, [length, 0.1, 0.12], [0, y, 0], materials.wood);
 }
@@ -40,10 +41,12 @@ function addStorage(group, materials) {
   }
 }
 
-function addBlockade(group, materials) {
-  box(group, [5.5, 0.25, 0.35], [0, 0.55, 0], materials.wood);
-  box(group, [0.25, 1.4, 0.25], [-2.1, 0.7, 0], materials.wood);
-  box(group, [0.25, 1.4, 0.25], [2.1, 0.7, 0], materials.wood);
+function addBlockade(group, materials, collider) {
+  const beamLength = collider.halfX * 2 - 0.7;
+  const postOffset = collider.halfX - 1;
+  box(group, [beamLength, 0.25, 0.35], [0, 0.55, 0], materials.wood);
+  box(group, [0.25, 1.4, 0.25], [-postOffset, 0.7, 0], materials.wood);
+  box(group, [0.25, 1.4, 0.25], [postOffset, 0.7, 0], materials.wood);
   box(group, [2.2, 0.65, 1.2], [2.6, 0.34, -0.8], materials.metal);
 }
 
@@ -54,8 +57,8 @@ export function addPropCluster(scene, cluster, materials) {
   if (cluster.kind === 'crops') addCropRows(root, materials);
   if (cluster.kind === 'well') addWell(root, materials);
   if (cluster.kind === 'storage' || cluster.kind === 'home') addStorage(root, materials);
-  if (cluster.kind === 'blockade') addBlockade(root, materials);
-  if (cluster.kind === 'home') addFence(root, materials, 5);
+  if (cluster.kind === 'blockade') addBlockade(root, materials, cluster.collider);
+  if (cluster.kind === 'home') addFence(root, materials, cluster.collider);
   scene.add(root);
   return root.children;
 }

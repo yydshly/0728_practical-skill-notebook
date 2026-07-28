@@ -1,13 +1,13 @@
 export const VILLAGE_LAYOUT = {
   bounds: { minX: -38, maxX: 38, minZ: -39, maxZ: 39 },
   anchors: {
-    player_home: [-8, 0, 26],
-    radio: [-11.2, 0, 26.8],
+    player_home: [-8, 0, 33],
+    radio: [-11.2, 0, 32.8],
     courtyard: [8, 0, 17],
-    neighbour: [10.4, 0, 18.4],
+    neighbour: [10.4, 0, 24.4],
     sighting: [-1, 0, 3],
     granary: [11, 0, -10],
-    flashlight: [13.2, 0, -8.7],
+    flashlight: [13.2, 0, -4.6],
     south_gate: [0, 0, -35],
   },
   zones: {
@@ -43,11 +43,23 @@ export const VILLAGE_LAYOUT = {
     { id: 'east_wall_south', x: 21, z: -25, halfX: 0.3, halfZ: 7 },
   ],
   propClusters: [
-    { id: 'home_life', kind: 'home', x: -7, z: 29 },
+    {
+      id: 'home_life',
+      kind: 'home',
+      x: -7,
+      z: 29,
+      collider: { id: 'home_fence', halfX: 2.6, halfZ: 0.18 },
+    },
     { id: 'courtyard_crops', kind: 'crops', x: 18, z: 12 },
     { id: 'hall_forecourt', kind: 'well', x: -7, z: 8 },
     { id: 'barn_storage', kind: 'storage', x: 10, z: -14 },
-    { id: 'gate_blockade', kind: 'blockade', x: -4, z: -32 },
+    {
+      id: 'gate_blockade',
+      kind: 'blockade',
+      x: -4,
+      z: -32,
+      collider: { id: 'gate_blockade', halfX: 3.1, halfZ: 0.9 },
+    },
   ],
   lights: [
     { id: 'home_window', sourceId: 'home_window_mesh', x: -7.3, y: 1.6, z: 28, color: 0xe1a461 },

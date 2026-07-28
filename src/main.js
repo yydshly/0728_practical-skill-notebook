@@ -54,7 +54,9 @@ function updateInteraction() {
   const allowed = new Set(allowedKinds[storyDirector.story.objective] ?? []);
   nearbyInteraction = nearestInteraction(
     player.position,
-    village.interactionAnchors.filter((candidate) => allowed.has(candidate.kind)),
+    village.interactionAnchors.filter(
+      (candidate) => allowed.has(candidate.kind) && !storyDirector.story.flags[candidate.kind],
+    ),
     2.2,
   );
   ui.showInteraction(nearbyInteraction?.label ?? null);

@@ -194,27 +194,28 @@ test('village interaction anchors expose stable flat metadata', () => {
   }
 });
 
-test('critical village route anchors have player-radius collider clearance', () => {
+test('canonical route anchors drive runtime and have player-radius collider clearance', () => {
   const village = createVillage(new THREE.Scene());
-  const routeAnchors = [
-    { id: 'player_home', position: village.anchors.player_home },
-    ...village.interactionAnchors,
-  ];
+  const routeAnchorIds = ['player_home', 'radio', 'neighbour', 'flashlight'];
 
-  for (const anchor of routeAnchors) {
+  for (const id of routeAnchorIds) {
+    const sourcePosition = VILLAGE_LAYOUT.anchors[id];
+    const position = village.anchors[id];
+    assert.deepEqual(position.toArray(), sourcePosition, `${id} must use canonical coordinates`);
+    assert.equal(sourcePosition[1], 0, `${id} must stay on the gameplay plane`);
     const blocked = village.colliders.some((box) => {
       const closestX = Math.max(
         box.x - box.halfX,
-        Math.min(anchor.position.x, box.x + box.halfX),
+        Math.min(sourcePosition[0], box.x + box.halfX),
       );
       const closestZ = Math.max(
         box.z - box.halfZ,
-        Math.min(anchor.position.z, box.z + box.halfZ),
+        Math.min(sourcePosition[2], box.z + box.halfZ),
       );
-      return (anchor.position.x - closestX) ** 2
-        + (anchor.position.z - closestZ) ** 2 < 0.42 ** 2;
+      return (sourcePosition[0] - closestX) ** 2
+        + (sourcePosition[2] - closestZ) ** 2 < 0.42 ** 2;
     });
-    assert.equal(blocked, false, `${anchor.id} must remain reachable`);
+    assert.equal(blocked, false, `${id} must remain reachable`);
   }
 });
 
@@ -233,4 +234,35 @@ test('critical building walls retain solid village collision', () => {
   );
   player.moveDirect(-0.2, 0, village.bounds);
   assert.equal(player.position.x, startX);
+});
+
+test('blocking prop visuals and colliders derive from one canonical cluster', () => {
+  const scene = new THREE.Scene();
+  const village = createVillage(scene);
+  const blockingClusters = VILLAGE_LAYOUT.propClusters.filter(
+    ({ kind }) => kind === 'home' || kind === 'blockade',
+  );
+
+  for (const cluster of blockingClusters) {
+    assert.ok(cluster.collider, `${cluster.id} must own collider metadata`);
+    const visual = scene.getObjectByName(cluster.id);
+    const collider = village.colliders.find(({ id }) => id === cluster.collider.id);
+    assert.ok(visual, `${cluster.id} visual must exist`);
+    assert.ok(collider, `${cluster.collider.id} collider must exist`);
+    assert.deepEqual(
+      [visual.position.x, visual.position.z],
+      [cluster.x, cluster.z],
+      `${cluster.id} visual must use the canonical transform`,
+    );
+    assert.deepEqual(
+      [collider.x, collider.z, collider.halfX, collider.halfZ],
+      [
+        cluster.x + (cluster.collider.offsetX ?? 0),
+        cluster.z + (cluster.collider.offsetZ ?? 0),
+        cluster.collider.halfX,
+        cluster.collider.halfZ,
+      ],
+      `${cluster.id} collider must use canonical metadata`,
+    );
+  }
 });
