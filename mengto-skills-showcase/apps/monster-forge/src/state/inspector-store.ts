@@ -12,6 +12,7 @@ export interface InspectorStore {
   getState(): InspectorState;
   select(id: string): void;
   setAction(action: MonsterActionName): void;
+  restartAction(): void;
   setPaused(paused: boolean): void;
   toggleOverlay(name: InspectorOverlayName): void;
   subscribe(listener: InspectorListener): () => void;
@@ -35,6 +36,8 @@ const initialState = (selectedId: string): InspectorState =>
   createSnapshot({
     selectedId,
     action: "Idle",
+    actionRevision: 0,
+    actionEvent: "selected",
     paused: false,
     overlays: { skeleton: false, colliders: false, sockets: false },
   });
@@ -58,8 +61,9 @@ export function createInspectorStore(initialSelectedId: string): InspectorStore 
     setAction: (action) => {
       const monster = getMonster(state.selectedId);
       if (!monster.actions.includes(action)) throw new Error(`Unknown action: ${action}`);
-      if (state.action !== action) publish({ ...state, action });
+      if (state.action !== action) publish({ ...state, action, actionRevision: state.actionRevision + 1, actionEvent: "selected", paused: false });
     },
+    restartAction: () => publish({ ...state, actionRevision: state.actionRevision + 1, actionEvent: "restarted", paused: false }),
     setPaused: (paused) => {
       if (typeof paused !== "boolean") throw new Error("paused must be a boolean");
       if (state.paused !== paused) publish({ ...state, paused });

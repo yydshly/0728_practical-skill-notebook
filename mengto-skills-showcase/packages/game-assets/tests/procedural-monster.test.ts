@@ -12,6 +12,14 @@ describe("createProceduralMonster", () => {
       factoryId: definition.factoryId,
       source: "runtime factory shipped; catalog PNG not shipped",
     });
+    expect(instance.root.userData.review).toMatchObject({
+      factoryId: definition.factoryId,
+      actionCount: definition.actions.length,
+      socketNames: definition.sockets.map(({ name }) => name),
+      dimensions: definition.bounds,
+      groundOffset: definition.bounds.groundOffset,
+      importedFiles: "none",
+    });
     expect(instance.root.children.map((child) => child.name)).toContain("motion");
     expect(instance.root.getObjectByName("body")).toBeTruthy();
     expect([...instance.sockets.keys()]).toEqual(expect.arrayContaining(definition.sockets.map(({ name }) => name)));

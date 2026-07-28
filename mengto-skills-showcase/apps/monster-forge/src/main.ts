@@ -3,6 +3,7 @@ import { createInspectorStore } from "./state/inspector-store";
 import {
   createInspectorScene,
   type InspectorScene,
+  type InspectorActionStatus,
   type InspectorSceneDiagnostics,
 } from "./scene/create-inspector-scene";
 import { renderCatalog } from "./ui/render-catalog";
@@ -23,7 +24,14 @@ const catalogHost = app.querySelector<HTMLElement>("[data-catalog]")!;
 const inspectorHost = app.querySelector<HTMLElement>("[data-inspector-host]")!;
 const status = app.querySelector<HTMLElement>(".live-status")!;
 const catalog = renderCatalog(catalogHost, monsters, (id) => store.select(id));
-const inspector = renderInspector(inspectorHost, (action) => store.setAction(action), () => store.setPaused(!store.getState().paused), (name) => store.toggleOverlay(name));
+let runtimeActionState: InspectorActionStatus | undefined;
+const inspector = renderInspector(
+  inspectorHost,
+  (action) => store.setAction(action),
+  () => store.setPaused(!store.getState().paused),
+  () => store.restartAction(),
+  (name) => store.toggleOverlay(name),
+);
 type SceneStatus = "loading" | "ready" | "unavailable";
 let sceneStatus: SceneStatus = "loading";
 let sceneError = "";
@@ -50,6 +58,11 @@ try {
   scene = createInspectorScene(inspector.canvas, {
     onReady: () => showSceneStatus("ready"),
     onUnavailable: (error) => showSceneStatus("unavailable", error),
+    onActionState: (actionState) => {
+      runtimeActionState = actionState;
+      const currentState = store.getState();
+      inspector.update(currentState, monsterById.get(currentState.selectedId)!, runtimeActionState);
+    },
   });
 } catch (error) {
   showSceneStatus("unavailable", error);
@@ -61,7 +74,7 @@ const render = () => {
   const state = store.getState();
   const monster = monsterById.get(state.selectedId)!;
   catalog.update(state.selectedId);
-  inspector.update(state, monster);
+  inspector.update(state, monster, runtimeActionState);
   if (previousSelectedId !== state.selectedId) {
     if (sceneStatus !== "unavailable") showSceneStatus("loading");
     scene?.setMonster(monster);

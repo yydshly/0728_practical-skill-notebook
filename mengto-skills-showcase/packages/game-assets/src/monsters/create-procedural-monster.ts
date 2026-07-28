@@ -105,6 +105,14 @@ export function createProceduralMonster(definition: MonsterDefinition): MonsterI
     action: "Idle",
     source,
     provenance: { type: "procedural", factoryId: definition.factoryId, source },
+    review: {
+      factoryId: definition.factoryId,
+      actionCount: definition.actions.length,
+      socketNames: definition.sockets.map(({ name }) => name),
+      dimensions: definition.bounds,
+      groundOffset: definition.bounds.groundOffset,
+      importedFiles: "none",
+    },
   };
 
   const restPose = new Map(

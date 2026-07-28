@@ -1,6 +1,7 @@
 import {
   createProceduralMonster,
   type InspectorState,
+  type MonsterActionState,
   type MonsterDefinition,
   type MonsterInstance,
 } from "@showcase/game-assets";
@@ -13,14 +14,14 @@ import {
   Group,
   HemisphereLight,
   type Material,
-  Mesh,
-  MeshBasicMaterial,
   PerspectiveCamera,
   Scene,
-  SphereGeometry,
   Vector3,
   WebGLRenderer,
 } from "three";
+import { createReviewOverlays, type ReviewOverlays } from "./create-overlays";
+
+export type InspectorActionStatus = Readonly<MonsterActionState & { paused: boolean }>;
 
 export interface InspectorSceneDiagnostics {
   readonly frameCount: number;
@@ -30,6 +31,8 @@ export interface InspectorSceneDiagnostics {
   readonly target: Readonly<{ x: number; y: number; z: number }>;
   readonly radius: number;
   readonly lastError: string | null;
+  readonly action: InspectorActionStatus | null;
+  readonly overlayNodeCount: number;
 }
 
 export interface InspectorScene {
@@ -42,6 +45,7 @@ export interface InspectorScene {
 interface InspectorSceneOptions {
   onReady(): void;
   onUnavailable(error: unknown): void;
+  onActionState?(state: InspectorActionStatus): void;
 }
 
 export function getFrameDelta(
@@ -108,10 +112,8 @@ export function createInspectorScene(
   scene.add(rim);
   const grid = new GridHelper(8, 16, 0x756858, 0x38333a);
   scene.add(grid);
-  const debug = new Group();
-  scene.add(debug);
-
   let current: MonsterInstance | undefined;
+  let overlays: ReviewOverlays | undefined;
   let selectedMonsterId: string | null = null;
   let animationFrame = 0;
   let previousTimestamp: number | undefined;
@@ -122,6 +124,8 @@ export function createInspectorScene(
   let frameCount = 0;
   let lastError: string | null = null;
   let radius = 4;
+  let currentPaused = false;
+  let actionRevision = -1;
   let yaw = -0.48;
   let pitch = 0.13;
   const target = new Vector3(0, 1, 0);
@@ -137,6 +141,10 @@ export function createInspectorScene(
       target: Object.freeze({ x: target.x, y: target.y, z: target.z }),
       radius,
       lastError,
+      action: current
+        ? Object.freeze({ ...current.getActionState(), paused: currentPaused })
+        : null,
+      overlayNodeCount: current?.root.getObjectByName("review-overlays") ? 1 : 0,
     });
 
   const placeCamera = () => {
@@ -162,52 +170,6 @@ export function createInspectorScene(
   const resizeObserver = new ResizeObserver(resize);
   resizeObserver.observe(canvas);
 
-  const clearDebug = () => {
-    while (debug.children.length) {
-      const child = debug.children.pop()!;
-      child.traverse((node) => {
-        if (node instanceof Mesh) {
-          node.geometry.dispose();
-          (node.material as MeshBasicMaterial).dispose();
-        }
-      });
-    }
-  };
-
-  const updateDebug = (state: InspectorState) => {
-    clearDebug();
-    if (!current) return;
-    if (state.overlays.sockets) {
-      for (const socket of current.sockets.values()) {
-        const marker = new Mesh(
-          new SphereGeometry(0.045, 8, 6),
-          new MeshBasicMaterial({ color: 0x90f3d3 }),
-        );
-        socket.add(marker);
-        debug.attach(marker);
-      }
-    }
-    if (state.overlays.colliders) {
-      const marker = new Mesh(
-        new SphereGeometry(current.collider.radius, 16, 10),
-        new MeshBasicMaterial({ color: 0xff9b6c, wireframe: true }),
-      );
-      marker.scale.y = current.collider.height / (current.collider.radius * 2);
-      marker.position.y = current.collider.height / 2;
-      debug.add(marker);
-    }
-    if (state.overlays.skeleton) {
-      for (const joint of current.joints.values()) {
-        const marker = new Mesh(
-          new SphereGeometry(0.025, 6, 4),
-          new MeshBasicMaterial({ color: 0xf5d45e }),
-        );
-        joint.add(marker);
-        debug.attach(marker);
-      }
-    }
-  };
-
   const fail = (error: unknown) => {
     if (failed || disposed) return;
     failed = true;
@@ -221,7 +183,11 @@ export function createInspectorScene(
     const timing = getFrameDelta(previousTimestamp, timestamp);
     previousTimestamp = timing.timestamp;
     const succeeded = runFrameStep(
-      () => current?.update(timing.delta),
+      () => {
+        current?.update(timing.delta);
+        overlays?.update();
+        if (current) options.onActionState?.({ ...current.getActionState(), paused: currentPaused });
+      },
       () => renderer.render(scene, camera),
       fail,
     );
@@ -290,6 +256,8 @@ export function createInspectorScene(
 
   const removeCurrent = () => {
     if (!current) return;
+    overlays?.dispose();
+    overlays = undefined;
     orbit.remove(current.root);
     current.dispose();
     current = undefined;
@@ -300,9 +268,9 @@ export function createInspectorScene(
     setMonster(monster) {
       if (disposed || failed) return;
       try {
-        clearDebug();
         removeCurrent();
         current = createProceduralMonster(monster);
+        overlays = createReviewOverlays(current);
         selectedMonsterId = monster.id;
         current.root.position.y = -monster.bounds.groundOffset;
         orbit.add(current.root);
@@ -317,6 +285,8 @@ export function createInspectorScene(
           Math.max(size.x, size.z) / (2 * Math.tan(horizontalFov / 2));
         radius = Math.max(2.2, Math.max(verticalFit, horizontalFit) * 1.45);
         readyForCurrent = false;
+        actionRevision = -1;
+        currentPaused = false;
         placeCamera();
       } catch (error) {
         fail(error);
@@ -325,9 +295,17 @@ export function createInspectorScene(
     setState(state) {
       if (disposed || failed) return;
       try {
-        current?.playAction(state.action);
-        current?.setPaused(state.paused);
-        updateDebug(state);
+        if (!current) return;
+        if (state.actionRevision !== actionRevision) {
+          current.playAction(state.action);
+          actionRevision = state.actionRevision;
+        }
+        currentPaused = state.paused;
+        current.setPaused(currentPaused);
+        overlays?.setVisible("skeleton", state.overlays.skeleton);
+        overlays?.setVisible("colliders", state.overlays.colliders);
+        overlays?.setVisible("sockets", state.overlays.sockets);
+        options.onActionState?.({ ...current.getActionState(), paused: currentPaused });
       } catch (error) {
         fail(error);
       }
@@ -343,7 +321,6 @@ export function createInspectorScene(
       canvas.removeEventListener("pointerup", pointerUp);
       canvas.removeEventListener("pointercancel", pointerUp);
       canvas.removeEventListener("wheel", wheel);
-      clearDebug();
       removeCurrent();
       grid.geometry.dispose();
       const gridMaterials = Array.isArray(grid.material)
@@ -370,6 +347,8 @@ function createUnavailableScene(error: unknown): InspectorScene {
         target: Object.freeze({ x: 0, y: 0, z: 0 }),
         radius: 0,
         lastError,
+        action: null,
+        overlayNodeCount: 0,
       }),
     dispose() {},
   };

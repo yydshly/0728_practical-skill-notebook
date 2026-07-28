@@ -16,6 +16,9 @@ export interface MonsterDefinition extends AssetManifest {
 export interface InspectorState {
   readonly selectedId: string;
   readonly action: MonsterActionName;
+  /** Increments whenever the reviewer asks to replay the current action. */
+  readonly actionRevision: number;
+  readonly actionEvent: "selected" | "restarted";
   readonly paused: boolean;
   readonly overlays: Readonly<{ skeleton: boolean; colliders: boolean; sockets: boolean }>;
 }

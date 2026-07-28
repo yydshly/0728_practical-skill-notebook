@@ -37,6 +37,21 @@ describe("inspector store", () => {
     expect(store.getState().overlays.skeleton).toBe(false);
   });
 
+  it("restarts the selected action without pretending a different action was chosen", () => {
+    const store = createInspectorStore("ash-warden");
+    store.setAction("Attack");
+    const beforeRestart = store.getState();
+    store.setPaused(true);
+    store.restartAction();
+
+    expect(store.getState()).toMatchObject({
+      action: "Attack",
+      actionRevision: beforeRestart.actionRevision + 1,
+      actionEvent: "restarted",
+      paused: false,
+    });
+  });
+
   it("notifies subscribers until they unsubscribe", () => {
     const store = createInspectorStore("ash-warden");
     const listener = vi.fn();
@@ -50,6 +65,8 @@ describe("inspector store", () => {
     expect(listener).toHaveBeenLastCalledWith({
       selectedId: "ash-warden",
       action: "Idle",
+      actionRevision: 0,
+      actionEvent: "selected",
       paused: true,
       overlays: { skeleton: false, colliders: false, sockets: false },
     });
