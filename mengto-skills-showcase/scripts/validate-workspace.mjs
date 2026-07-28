@@ -126,6 +126,8 @@ if (failures.length === 0) {
     "不会自动同步",
     "已有演示",
     "规划中",
+    "发布候选；自动验收通过，人工可用性门槛未关闭",
+    "apps/ashfall-arena/docs/VALIDATION.md",
   ]) {
     if (!readme.includes(phrase)) failures.push(`README.md must explain: ${phrase}`);
   }

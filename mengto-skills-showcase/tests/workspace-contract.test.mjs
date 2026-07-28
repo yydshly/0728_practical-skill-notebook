@@ -127,6 +127,8 @@ describe("showcase workspace", () => {
     expect(readme).toContain("不会自动同步");
     expect(readme).toContain("已有演示");
     expect(readme).toContain("规划中");
+    expect(readme).toContain("发布候选；自动验收通过，人工可用性门槛未关闭");
+    expect(readme).toContain("[验证记录](apps/ashfall-arena/docs/VALIDATION.md)");
     expect(readme).toContain("Node.js 22+");
 
     const selection = await readJson("../config/selected-skills.json");
@@ -204,10 +206,39 @@ describe("showcase workspace", () => {
     expect(ashfallCommands).toContain("npm run dev:arena");
     expect(ashfallCommands).toContain("npm run test:browser --workspace @showcase/ashfall-arena");
     expect(ashfallCommands).toContain("npm run test:preview --workspace @showcase/ashfall-arena");
+    expect(ashfallCommands).toContain("47.482s");
+    expect(ashfallCommands).toContain("不是游戏时长");
     expect(ashfallCommands).not.toContain("npm run dev:forge");
     expect(ashfallCommands).not.toContain("npm run dev:atelier");
     expect(monsterForgeCommands).not.toContain("npm run dev:atelier");
     expect(readme.match(/npm run test:browser/g)).toHaveLength(2);
+  });
+
+  it("记录 Ashfall 候选证据且不冒充人工可用性结论", async () => {
+    const validation = await readFile(
+      new URL("../apps/ashfall-arena/docs/VALIDATION.md", import.meta.url),
+      "utf8",
+    );
+
+    expect(validation).toContain(
+      "d93291a8882f7e2dbb7562f7c779db5f36b7fbab",
+    );
+    expect(validation).toContain(
+      "发布候选 / 自动验收通过，人工可用性门槛未关闭",
+    );
+    expect(validation).toContain("47.482s");
+    expect(validation).toContain("50.809s");
+    expect(validation).toContain("不是人工游戏时长");
+    expect(validation.match(/`7`/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(validation.match(/未开始/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(validation).toContain("Browser unavailable");
+    expect(validation).toContain("kernel assets path error");
+    expect(validation).toContain("不是真人研究");
+    expect(validation).toContain("8–12 分钟首次人工完成门槛");
+    expect(validation).toContain("ashfall-arena:v1");
+    expect(validation).toContain("ashfall-arena:audio-settings:v1");
+    expect(validation).toContain("Monster Forge 已有单包 `563.30 kB`");
+    expect(validation).not.toContain("独立最终复核结论为 **Ready**");
   });
 
   it("为每个新产品路由到明确且狭范围的 Skills", async () => {

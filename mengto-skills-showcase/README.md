@@ -9,10 +9,10 @@
 | 雾屿灯塔（Isle of Quiet Signals） | 电影感滚动叙事、2.5D 图层与无障碍 | **已有演示，可运行** | [现有验证记录](../isle-of-quiet-signals/docs/VALIDATION.md) |
 | Final Four — Typographic Flags | Canvas 字体排版、指针驱动物理交互 | **已有演示，可运行** | 暂无独立验证记录；以其 README 的构建命令为准 |
 | Monster Forge｜怪物铸造所 | 3D 游戏资产目录、模型审阅、动画与来源追踪 | **已实现，可本地运行** | [验证记录](apps/monster-forge/docs/VALIDATION.md) |
-| Ashfall Arena｜灰烬竞技场 | 完整网页动作游戏切片：战斗、敌人、AI、成长与存档 | **已实现，可本地运行（候选版）** | 自动化用例位于 `apps/ashfall-arena/tests`；最终人工验收记录待补 |
+| Ashfall Arena｜灰烬竞技场 | 完整网页动作游戏切片：战斗、敌人、AI、成长与存档 | **发布候选；自动验收通过，人工可用性门槛未关闭** | [验证记录](apps/ashfall-arena/docs/VALIDATION.md) |
 | Mech Atelier｜机甲定制工坊 | 商业化 3D 产品配置、参数联动、分享与海报导出 | **规划中，尚未实现** | [未来验证记录](apps/mech-atelier/docs/VALIDATION.md) |
 
-前两个是仓库中已有演示；Monster Forge 已实现可审阅的程序化怪物目录、实时检查器和可读回退。Ashfall Arena 已形成可从训练、波次、精英一路打到首领并保存进度的候选版；最终人工试玩时间与发布结论仍需另行记录。Mech Atelier 仍只是独立应用工作区，尚未实现产品功能或验证记录。
+前两个是仓库中已有演示；Monster Forge 已实现可审阅的程序化怪物目录、实时检查器和可读回退。Ashfall Arena 已形成可从训练、波次、精英一路打到首领并保存进度的发布候选，自动验收已经通过；8–12 分钟首次人工完成门槛仍待真人验证，因此当前不是 Ready。Mech Atelier 仍只是独立应用工作区，尚未实现产品功能或验证记录。
 
 ## 本地运行
 
@@ -64,6 +64,8 @@ npm run test:preview --workspace @showcase/ashfall-arena
 ```
 
 生产检查会真实构建和预览 `dist`，确认入口资源可加载、页面可交互、每个 JavaScript 分包小于 500 KiB，并限制 JavaScript gzip 合计不超过 190 KiB、CSS gzip 合计不超过 8 KiB。自动通关使用固定种子和真实战斗事件，不能替代最终人工试玩计时与主观手感验收。
+
+完整的自动化、性能、包体、三次环境阻塞的首次代理体验尝试及人工门槛见 [Ashfall Arena 验证记录](apps/ashfall-arena/docs/VALIDATION.md)。其中 `47.482s` 和 `50.809s` 是加速审阅测试墙钟时间，不是游戏时长；当前状态是“发布候选 / 自动验收通过，人工可用性门槛未关闭”。
 
 Mech Atelier 的命令仍是未来入口，尚不能作为可运行产品或验证通过条件。
 
@@ -164,4 +166,4 @@ git diff --check
 
 `npm run validate` 检查固定的来源、16 项批准清单、中文 README 的关键承诺和 `AGENTS.md` 路由，不依赖会自然变化的记录时间。`node scripts/check-selected-skills.mjs` 是只读审计：它会逐项显示全局目录是否真的有可读的 `SKILL.md`。Ashfall Arena 已启用独立的浏览器与生产预览测试；其他规划中产品仍保留测试入口。
 
-最终人工试玩完成后，对应证据应写入 `apps/<product>/docs/VALIDATION.md`；本次候选版不预填人工完成时间或发布结论。
+产品验证证据写入 `apps/<product>/docs/VALIDATION.md`。Ashfall Arena 已建立候选验证记录，但没有预填人工完成时间或人工结论；取得有效真人样本后才能更新其人工可用性门槛。
