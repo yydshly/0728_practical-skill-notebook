@@ -50,6 +50,16 @@ const selectionQueryFields = [
   ["r", "rearModuleId"],
 ] as const;
 
+export function hasConfigurationQuery(
+  search: string | URLSearchParams,
+): boolean {
+  const params =
+    typeof search === "string"
+      ? new URLSearchParams(stripLeadingQuestion(search))
+      : search;
+  return queryFields.some(([key]) => params.has(key));
+}
+
 export function serializeConfiguration(config: MechConfiguration): string {
   const validation = validateConfiguration(config, catalog);
   if (!validation.ok) {

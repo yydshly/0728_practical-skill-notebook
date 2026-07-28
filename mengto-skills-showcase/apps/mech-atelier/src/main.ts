@@ -1,6 +1,7 @@
 import "./styles.css";
 import { catalog, defaultConfiguration } from "./content/catalog";
 import {
+  hasConfigurationQuery,
   parseConfiguration,
   serializeConfiguration,
   type ParseIssue,
@@ -193,19 +194,27 @@ const shareFallback = requiredElement<HTMLInputElement>(
 );
 
 const search = new URLSearchParams(window.location.search);
+const hasExplicitConfiguration = hasConfigurationQuery(search);
 const reviewId = search.get("review");
 const knownReview = reviewId !== null && isKnownReview(reviewId);
-const initial = resolveInitialConfiguration(search, reviewId, knownReview);
+const initial = resolveInitialConfiguration(
+  hasExplicitConfiguration,
+  reviewId,
+  knownReview,
+);
 let configuration = initial.config;
 const persistence = createSavedConfigurationController();
 
 const productScene = createConfiguratorScene(canvas, configuration);
 renderInterface();
 renderAnnouncement(initial.messages);
-if (search.has("v")) replaceCurrentConfigurationUrl();
+if (hasExplicitConfiguration) replaceCurrentConfigurationUrl();
 
 delete window.__MECH_ATELIER_DEBUG__;
-if (knownReview || search.get("reviewControls") === "1") {
+if (
+  (!hasExplicitConfiguration && knownReview) ||
+  search.get("reviewControls") === "1"
+) {
   window.__MECH_ATELIER_DEBUG__ = {
     snapshot: () => productScene.snapshot(),
     nonEmptyPixelCount: () => productScene.nonEmptyPixelCount(),
@@ -393,11 +402,11 @@ function describeNormalization(
 }
 
 function resolveInitialConfiguration(
-  search: URLSearchParams,
+  hasExplicitConfiguration: boolean,
   reviewId: string | null,
   knownReview: boolean,
 ): { config: MechConfiguration; messages: string[] } {
-  if (search.has("v")) {
+  if (hasExplicitConfiguration) {
     const parsed = parseConfiguration(window.location.search);
     return {
       config: cloneConfiguration(parsed.config),

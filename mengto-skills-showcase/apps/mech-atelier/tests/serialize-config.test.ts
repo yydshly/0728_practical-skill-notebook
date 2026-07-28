@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { catalog, defaultConfiguration } from "../src/content/catalog";
 import {
+  hasConfigurationQuery,
   parseConfiguration,
   serializeConfiguration,
 } from "../src/configuration/serialize-config";
@@ -8,6 +9,36 @@ import type { MechConfiguration } from "../src/configuration/types";
 import { validateConfiguration } from "../src/configuration/validate-config";
 
 describe("canonical configuration sharing", () => {
+  it("recognizes only the canonical configuration keys as an explicit share", () => {
+    for (const key of [
+      "v",
+      "c",
+      "h",
+      "a",
+      "lw",
+      "rw",
+      "r",
+      "p",
+      "s",
+      "m",
+      "rf",
+      "e",
+    ]) {
+      expect(hasConfigurationQuery(`?${key}=value`), key).toBe(true);
+    }
+
+    for (const search of [
+      "",
+      "?review=oracle-dusk",
+      "?reviewControls=1",
+      "?utm_source=v",
+      "?version=1",
+      "?vv=1",
+    ]) {
+      expect(hasConfigurationQuery(search), search).toBe(false);
+    }
+  });
+
   it("serializes defaults with only the required version and chassis keys", () => {
     expect(serializeConfiguration(defaultConfiguration)).toBe(
       "?v=1&c=strider-scout",
@@ -161,6 +192,21 @@ describe("canonical configuration sharing", () => {
         { field: "finish.roughness", code: "invalid-finish" },
       ],
     });
+  });
+
+  it("treats chassis-, part- and finish-only queries as incomplete shares", () => {
+    for (const search of [
+      "?c=oracle-frame",
+      "?h=halo-head",
+      "?p=ffffff",
+      "?e=dusk",
+    ]) {
+      expect(parseConfiguration(search), search).toEqual({
+        ok: false,
+        config: defaultConfiguration,
+        issues: [{ field: "version", code: "missing-version" }],
+      });
+    }
   });
 
   it("treats malicious query text as inert data and returns only a legal configuration", () => {

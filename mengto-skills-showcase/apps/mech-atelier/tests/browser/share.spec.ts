@@ -156,6 +156,48 @@ test("共享链接可粘贴式打开和刷新，并优先于合法本地配置",
   ).toBeChecked();
 });
 
+for (const [label, query] of [
+  [
+    "仅底盘",
+    "?c=oracle-frame&utm_source=untrusted&review=oracle-dusk",
+  ],
+  ["仅头部", "?h=halo-head"],
+  ["仅环境", "?e=dusk"],
+] as const) {
+  test(`${label}参数缺少版本时仍视为显式分享，不允许本地配置劫持`, async ({
+    cleanPage: page,
+  }) => {
+    await seedLocalConfiguration(page, bastionConfiguration);
+    await page.goto(`/${query}`);
+
+    await expect(
+      page.getByRole("radio", { name: /游骑侦察型/ }),
+    ).toBeChecked();
+    await expect(page.locator("[data-config-announcer]")).toContainText(
+      "链接版本缺少版本",
+    );
+    await expect(page.locator("[data-config-announcer]")).toContainText(
+      "已规范化为合法配置",
+    );
+    expect(new URL(page.url()).search).toBe("?v=1&c=strider-scout");
+    expect(
+      await page.evaluate(() => "__MECH_ATELIER_DEBUG__" in window),
+    ).toBe(false);
+  });
+}
+
+test("纯无关查询不会冒充分享，仍读取合法本地配置", async ({
+  cleanPage: page,
+}) => {
+  await seedLocalConfiguration(page, bastionConfiguration);
+  await page.goto("/?utm_source=atelier");
+
+  await expect(
+    page.getByRole("radio", { name: /堡垒运输型/ }),
+  ).toBeChecked();
+  expect(new URL(page.url()).search).toBe("?utm_source=atelier");
+});
+
 test("无版本化 URL 时读取合法本地配置，损坏存储保持原文且回到默认", async ({
   cleanPage: page,
 }) => {
