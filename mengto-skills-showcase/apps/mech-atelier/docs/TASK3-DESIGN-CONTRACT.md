@@ -12,8 +12,8 @@
 - Scene persistence: 桌面端在整个配置旅程中持续可见；1024px 仍保持预览与配置同屏
 - Foreground control model: 语义化 fieldset/radio、重置视图按钮、中文状态说明和精确摘要
 - State-to-scene mapping: 合法配置实时更新部件与材质；环境选择更新本地灯光；非法组合先规范化并播报，再更新场景
-- Mobile transformation: 本任务只承诺 1024px 及以上；390px 移动端完整底部面板属于后续 Task 7
-- Fallback: 完整静态 WebGL 降级属于后续 Task 7；本任务不声称已交付该能力
+- Mobile transformation: 本任务只承诺 1024px 及以上；390px 移动端完整底部面板属于后续 Task 6
+- Fallback: 完整静态 WebGL 降级属于后续 Task 6；本任务不声称已交付该能力
 - Visual constraints: 工业铸造工坊气氛；暖铜、暗钢与冷色状态点缀；首屏只有一个英雄主体；不使用远程纹理
 - Information constraints: 所有可见文案使用中文；价格旁明确“概念配置，不提供结算或库存功能”；不暗示真实商品、照片级模型、付款或库存
 - Operation constraints: 拖拽旋转、滚轮和双指缩放、重置视图；兼容项可发现且禁用原因紧邻；键盘可完成配置
