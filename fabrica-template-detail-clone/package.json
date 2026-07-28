@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "test": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "node ./tests/browser/run-e2e.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
