@@ -186,7 +186,7 @@ function referenceNormalization(
         !part.incompatibleChassisIds?.includes(input.chassisId),
     );
     const selected = legal.find((part) => part.id === input[field]);
-    return (selected ?? legal[0]).id;
+    return (selected ?? legal[0]!).id;
   });
   let best: MechConfiguration | undefined;
   let bestChanges = Number.POSITIVE_INFINITY;

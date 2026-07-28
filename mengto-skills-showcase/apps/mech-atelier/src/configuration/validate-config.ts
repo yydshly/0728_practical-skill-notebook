@@ -286,7 +286,7 @@ function compareIndexVectors(
   const length = Math.min(left.length, right.length);
   for (let index = 0; index < length; index += 1) {
     if (left[index] !== right[index]) {
-      return left[index] - right[index];
+      return left[index]! - right[index]!;
     }
   }
   return left.length - right.length;
@@ -361,11 +361,11 @@ function repairWeight(
       fieldIndex >= 0;
       fieldIndex -= 1
     ) {
-      const minimum = choices[fieldIndex].reduce(
+      const minimum = choices[fieldIndex]!.reduce(
         (current, { part }) => Math.min(current, part.weight),
         Number.POSITIVE_INFINITY,
       );
-      const suffix = minimum + suffixMinimum[fieldIndex + 1];
+      const suffix = minimum + suffixMinimum[fieldIndex + 1]!;
       if (!Number.isFinite(suffix)) {
         suffixIsFinite = false;
         break;
@@ -374,7 +374,7 @@ function repairWeight(
     }
     if (
       !suffixIsFinite ||
-      chassis.weight + suffixMinimum[0] > chassis.weightLimit
+      chassis.weight + suffixMinimum[0]! > chassis.weightLimit
     ) {
       continue;
     }
@@ -386,9 +386,9 @@ function repairWeight(
       fieldIndex < selectionFields.length;
       fieldIndex += 1
     ) {
-      const option = choices[fieldIndex].find(({ part }) => {
+      const option = choices[fieldIndex]!.find(({ part }) => {
         const possibleTotal =
-          prefixWeight + part.weight + suffixMinimum[fieldIndex + 1];
+          prefixWeight + part.weight + suffixMinimum[fieldIndex + 1]!;
         return (
           Number.isFinite(possibleTotal) &&
           possibleTotal <= chassis.weightLimit
