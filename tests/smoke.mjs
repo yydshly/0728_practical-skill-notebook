@@ -51,6 +51,16 @@ try {
   const canvasHeight = await page.locator('#game').evaluate((canvas) => getComputedStyle(canvas).height);
   if (canvasHeight !== '720px') throw new Error(`Expected full viewport game canvas, got ${canvasHeight}`);
 
+  await page.evaluate(() => window.__RURAL_ESCAPE__.completeIntroForTest());
+  const hudState = await page.evaluate(() => ({
+    shellPhase: document.querySelector('.game-shell').dataset.uiPhase,
+    titleHidden: document.querySelector('.title-lockup').getAttribute('aria-hidden'),
+    interactionHidden: document.querySelector('#interaction').hidden,
+  }));
+  if (hudState.shellPhase !== 'playing') throw new Error(`Expected playing HUD, got ${hudState.shellPhase}`);
+  if (hudState.titleHidden !== 'true') throw new Error('Expected chapter title to leave the main view');
+  if (!hudState.interactionHidden) throw new Error('Expected interaction prompt to start hidden');
+
   const objectiveAfterRadio = await page.evaluate(() => {
     window.__RURAL_ESCAPE__.interactForTest('radio');
     return window.__RURAL_ESCAPE__.story.objective;

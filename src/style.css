@@ -1,47 +1,208 @@
 :root {
   color: #f5f0dc;
-  background: #10130f;
+  background: #18201e;
   font-family: Inter, "Noto Sans SC", system-ui, sans-serif;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
 
-body { margin: 0; min-width: 320px; }
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #18201e;
+}
 
 .game-shell {
   min-height: 100vh;
   overflow: hidden;
   position: relative;
-  background:
-    radial-gradient(circle at 73% 12%, rgba(230, 184, 105, .33), transparent 27%),
-    linear-gradient(180deg, #6f7772 0%, #343f35 49%, #151b15 100%);
+  background: #18201e;
 }
 
-#game { display: block; width: 100%; height: 100vh; }
+#game {
+  display: block;
+  height: 100vh;
+  width: 100%;
+}
 
-.story-card {
+.game-shell::after {
+  background: radial-gradient(circle at 50% 42%, transparent 38%, rgba(7, 10, 9, .72) 118%);
+  content: "";
+  inset: 0;
+  pointer-events: none;
   position: absolute;
-  left: clamp(1.2rem, 5vw, 4.5rem);
-  bottom: clamp(3.4rem, 12vh, 7rem);
-  width: min(34rem, calc(100vw - 2.4rem));
-  border-left: 2px solid rgba(233, 191, 110, .86);
-  padding-left: 1.1rem;
-  text-shadow: 0 2px 14px rgba(0, 0, 0, .72);
+  z-index: 1;
 }
 
-.eyebrow { color: #e4bc79; font-size: .73rem; font-weight: 700; letter-spacing: .16em; margin: 0 0 .6rem; }
-h1 { font-family: Georgia, "Noto Serif SC", serif; font-size: clamp(2.5rem, 7vw, 5.8rem); font-weight: 500; letter-spacing: .07em; margin: 0; }
-#objective { font-size: 1.02rem; font-weight: 700; margin: .9rem 0 .35rem; }
-#subtitle { color: rgba(245, 240, 220, .82); line-height: 1.65; margin: 0; }
+.cinematic-grain {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, .02) 0 1px, transparent 1px 4px);
+  inset: 0;
+  mix-blend-mode: soft-light;
+  opacity: .28;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+.title-lockup,
+.mission-hud,
+.subtitle,
+.interaction,
+.controls {
+  pointer-events: none;
+  position: absolute;
+  z-index: 3;
+}
+
+.title-lockup {
+  left: clamp(1.2rem, 5vw, 4.5rem);
+  top: clamp(2rem, 8vh, 5rem);
+  text-shadow: 0 2px 14px rgba(0, 0, 0, .72);
+  transition: opacity .7s ease, transform .9s ease;
+}
+
+[data-ui-phase="playing"] .title-lockup {
+  opacity: 0;
+  transform: translateY(-1rem) scale(.97);
+}
+
+.eyebrow {
+  color: #e4bc79;
+  font-size: .73rem;
+  font-weight: 700;
+  letter-spacing: .16em;
+  margin: 0 0 .6rem;
+}
+
+h1 {
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: clamp(2.5rem, 7vw, 5.8rem);
+  font-weight: 500;
+  letter-spacing: .07em;
+  margin: 0;
+}
+
+.mission-hud {
+  left: clamp(1rem, 3vw, 2.5rem);
+  max-width: 24rem;
+  opacity: 0;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .86);
+  top: clamp(1rem, 3vw, 2.5rem);
+  transform: translateY(-.5rem);
+  transition: opacity .45s ease .25s, transform .55s ease .25s;
+}
+
+[data-ui-phase="playing"] .mission-hud {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.mission-label {
+  color: #d9a96f;
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .18em;
+  margin: 0 0 .35rem;
+}
+
+#objective {
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: clamp(1rem, 1.6vw, 1.18rem);
+  font-weight: 700;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.subtitle,
+.interaction,
+.controls {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.subtitle {
+  bottom: 4.5rem;
+  color: rgba(245, 240, 220, .9);
+  font-family: Georgia, "Noto Serif SC", serif;
+  line-height: 1.65;
+  margin: 0;
+  max-width: min(46rem, 82vw);
+  opacity: 0;
+  text-align: center;
+  text-shadow: 0 2px 12px #000;
+  transition: opacity .3s ease;
+}
+
+.subtitle[data-visible="true"] { opacity: 1; }
+
+.interaction {
+  align-items: center;
+  bottom: 7.5rem;
+  display: flex;
+  gap: .65rem;
+  margin: 0;
+  text-shadow: 0 2px 10px #000;
+}
+
+.interaction[hidden] { display: none; }
+
+.interaction kbd {
+  align-items: center;
+  border: 1px solid rgba(225, 166, 111, .88);
+  border-radius: .2rem;
+  color: #f3c591;
+  display: inline-flex;
+  font: 700 .75rem/1 Inter, sans-serif;
+  height: 1.75rem;
+  justify-content: center;
+  min-width: 1.75rem;
+  padding: 0 .38rem;
+}
 
 .controls {
   bottom: 1.25rem;
-  color: rgba(245, 240, 220, .64);
+  color: rgba(245, 240, 220, .62);
   font-size: .72rem;
-  left: 50%;
   letter-spacing: .06em;
-  position: absolute;
   text-align: center;
-  transform: translateX(-50%);
   white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .title-lockup {
+    left: 1rem;
+    top: 2rem;
+  }
+
+  h1 { font-size: clamp(2.25rem, 14vw, 4rem); }
+
+  .mission-hud {
+    max-width: calc(100vw - 2rem);
+  }
+
+  .subtitle {
+    bottom: 5.5rem;
+    font-size: .9rem;
+    max-width: calc(100vw - 2rem);
+  }
+
+  .interaction { bottom: 8.25rem; }
+
+  .controls {
+    font-size: .68rem;
+    line-height: 1.5;
+    white-space: normal;
+    width: calc(100vw - 2rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title-lockup,
+  .mission-hud,
+  .subtitle {
+    transition: none;
+  }
 }

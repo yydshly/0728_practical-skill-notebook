@@ -6,20 +6,22 @@ import { createCameraController } from './camera.js';
 import { createResident } from './characters.js';
 import { createStoryDirector } from './story.js';
 import { createPursuer } from './pursuer.js';
+import { createAtmosphere } from './atmosphere.js';
+import { createGameUi } from './ui.js';
 
 const canvas = document.querySelector('#game');
+const shell = document.querySelector('.game-shell');
+const title = document.querySelector('.title-lockup');
 const objective = document.querySelector('#objective');
 const subtitle = document.querySelector('#subtitle');
+const interaction = document.querySelector('#interaction');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x9aa6a0);
-scene.fog = new THREE.Fog(0x9aa6a0, 20, 72);
+const atmosphere = createAtmosphere(scene, renderer);
 
 const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 120);
 const village = createVillage(scene);
@@ -27,17 +29,13 @@ const player = createPlayer(scene, village.anchors.player_home);
 const cameraController = createCameraController(camera, player, { occluders: village.cameraOccluders, groundY: 0 });
 createResident(scene, village.anchors.courtyard.clone().add(new THREE.Vector3(1.3, 0, 1.8)), 'neighbour');
 createResident(scene, village.anchors.granary.clone().add(new THREE.Vector3(-1.5, 0, 1.4)), 'barn_resident');
-const storyDirector = createStoryDirector({ ui: { objective, subtitle } });
+const ui = createGameUi({ shell, title, objective, subtitle, interaction });
+const storyDirector = createStoryDirector({ ui });
 const pursuer = createPursuer(scene, { navNodes: village.navNodes, spawn: village.anchors.sighting.clone() });
 
-const sun = new THREE.DirectionalLight(0xf4d3a0, 2.6);
-sun.position.set(-18, 28, 12);
-sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024);
-scene.add(new THREE.HemisphereLight(0x91a7aa, 0x29301f, 1.4), sun);
-
 const input = { forward: false, back: false, left: false, right: false, sprint: false };
-let lastTime = performance.now();
+const startTime = performance.now();
+let lastTime = startTime;
 
 const state = {
   chapter: 'home',
@@ -47,14 +45,14 @@ const state = {
 function setCameraMode(mode) {
   cameraController.setMode(mode);
   state.cameraMode = cameraController.mode;
-  subtitle.textContent = state.cameraMode === 'first-person'
+  ui.showSubtitle(state.cameraMode === 'first-person'
     ? '你屏住呼吸，透过门缝观察逐渐安静下来的院落。'
-    : '雾色压低了屋檐，远处传来一声急促的犬吠。';
+    : '雾色压低了屋檐，远处传来一声急促的犬吠。');
 }
 
 function restart() {
   state.chapter = 'home';
-  objective.textContent = '目标：离开主角家，调查村里的异常。';
+  ui.setObjective('目标：离开主角家，调查村里的异常。');
   setCameraMode('third-person');
 }
 
@@ -97,6 +95,7 @@ function frame(now) {
   pursuer.update(dt, player);
   storyDirector.update(player, village.zones.south_gate_exit);
   cameraController.update(dt);
+  atmosphere.update((now - startTime) / 1000);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
@@ -114,6 +113,9 @@ window.__RURAL_ESCAPE__ = {
   story: storyDirector.story,
   pursuer,
   interactForTest: storyDirector.interact,
+  completeIntroForTest() {
+    ui.completeIntro();
+  },
   moveForTest(x, z) {
     player.moveDirect(x, z, village.bounds);
     cameraController.update();

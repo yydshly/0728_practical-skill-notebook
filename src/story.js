@@ -21,8 +21,8 @@ export function createStoryDirector({ ui }) {
 
   function render() {
     const text = copy[story.objective];
-    ui.objective.textContent = text.objective;
-    ui.subtitle.textContent = text.subtitle;
+    ui.setObjective(text.objective);
+    ui.showSubtitle(text.subtitle);
   }
 
   function interact(kind) {
@@ -34,7 +34,7 @@ export function createStoryDirector({ ui }) {
       story.objective = 'reach_granary';
     } else if (kind === 'flashlight' && story.flags.neighbour && !story.flags.flashlight) {
       story.flags.flashlight = true;
-      ui.subtitle.textContent = '手电亮起的一刻，主路尽头传来了一声不像人类的喘息。';
+      ui.showSubtitle('手电亮起的一刻，主路尽头传来了一声不像人类的喘息。');
     }
     render();
   }
@@ -43,8 +43,8 @@ export function createStoryDirector({ ui }) {
     if (!story.flags.flashlight || story.objective === 'complete') return;
     if (player.position.distanceTo(exitZone.center) > exitZone.radius) return;
     story.objective = 'complete';
-    ui.objective.textContent = '第一章完成：你穿过了南侧村口。';
-    ui.subtitle.textContent = '铁门在身后合拢，雾里仍有人在呼喊你的名字。';
+    ui.setObjective('第一章完成：你穿过了南侧村口。');
+    ui.showSubtitle('铁门在身后合拢，雾里仍有人在呼喊你的名字。');
   }
 
   render();
