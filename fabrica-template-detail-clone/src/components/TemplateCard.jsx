@@ -3,7 +3,7 @@ export default function TemplateCard({ item }) {
 
   return (
     <article className="template-card">
-      <p className="template-card__score">{score}</p>
+      <p className="template-card__score">{score} ★</p>
       <a className="template-card__link" href={href} aria-label={`View ${name} template`}>
         <img className="template-card__image" src={imageSrc} alt={imageAlt} />
       </a>

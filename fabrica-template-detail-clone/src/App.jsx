@@ -42,15 +42,14 @@ export default function App() {
         <TemplateTopBar template={pageData.template} />
         <PreviewMedia {...pageData.preview} alt={pageData.preview.posterAlt} />
         <section className="template-details" aria-label="Template metadata">
-          <p className="template-details__description">{pageData.template.description}</p>
           <MetadataTable rows={pageData.details} />
         </section>
         <section className="content-section" aria-labelledby="recommendations-heading">
-          <h2 id="recommendations-heading">Recommended templates</h2>
+          <h2 id="recommendations-heading">MORE LIKE THIS</h2>
           <TemplateGrid templates={pageData.recommendations} />
         </section>
         <section className="content-section" aria-labelledby="related-posts-heading">
-          <h2 id="related-posts-heading">Related posts</h2>
+          <h2 id="related-posts-heading">RELATED BLOGS</h2>
           <BlogRail posts={pageData.blogs} />
         </section>
       </main>

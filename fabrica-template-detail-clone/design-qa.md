@@ -2,33 +2,26 @@
 
 ## Evidence and method
 
-- Browser checks run this clone at 1280 x 720 and 390 x 844 from its isolated local Vite server.
-- The in-app browser connection was unavailable in this environment, so reproducible interaction checks used the project's configured local Playwright runner.
-- The supplied source artwork was not downloaded, hotlinked, generated, or substituted. `public/assets/ASSET-SOURCES.md` records every required video/image/icon as `replacement required`.
+- The user authorized both source-media copying and local Playwright screenshot comparison on 2026-07-28.
+- Source and clone captures at 1280 × 720 and 390 × 844 are retained outside the repository in the ignored refinement-evidence directory.
+- All preview, recommendation, blog, mark, and menu assets now resolve from `public/assets`; no source-media request is made at runtime.
 
-## Tested clone UI results
+## Calibrated first view
 
-### 1280 x 720
+### 1280 × 720
 
-- Top navigation and template identity: pass - primary navigation and Fabrica heading are present.
-- Metadata content: pass - Overall score is present.
-- Page sections: pass - Recommended templates heading and footer are present.
-- Cookie banner position: pass - the visible banner is in the lower-right portion of the viewport.
+- Navigation, 60px header, template-identity bar, wide Visit button, two-pane preview, and score-table entry align with the source hierarchy.
+- The card grid now uses the source checkerboard rhythm rather than a uniform three-card row.
+- Preview-frame pixels are intentionally not compared frame-for-frame because the same looping source video can render different moments.
 
-### 390 x 844
+### 390 × 844
 
-- Search overlay: pass - Search templates opens the named dialog and Cancel closes it.
-- Mobile menu: pass - Open menu exposes the named mobile navigation and Close navigation dismisses it.
-- Preview control label: pass - its label changes from Pause video to Play video after activation. This does not verify media playback because the licensed video is absent.
-- Metadata content: pass - Overall score is present.
-- Cookie banner position: pass - the visible banner is in the lower portion of the viewport.
+- Header, search field, template bar, Visit button, horizontally clipped preview strip, score rows, and cookie placement were compared against the source capture.
+- Search opens and closes; mobile navigation opens and closes; the preview control changes its accessible label; cookie acceptance persists.
 
-## Outstanding visual blockers
+## Remaining calibration work
 
-- Media crop: blocked - the preview video and poster file are intentionally absent, leaving neutral panes/broken image content instead of the licensed source artwork.
-- Recommendation spacing and card imagery: blocked - all recommendation image files are absent; artwork-dependent comparison cannot be made.
-- Blog rail: blocked - both blog-cover files are absent; source-accurate rail imagery and crop cannot be compared.
-- Footer branding/icon fidelity: blocked - licensed site mark/menu icon files are absent.
-- Source screenshot comparison: blocked - no reproducible source/clone comparison record exists, and no authorized local replacements for the source assets are available.
+- Full-page recommendation, blog, and footer spacing still needs a lower-page screenshot pass before a one-to-one claim.
+- The full source page is taller than the local page, so lower-page vertical rhythm remains an active calibration item.
 
-final result: blocked
+final result: in progress

@@ -20,9 +20,9 @@ test('uses the observed Fabrica visit destination and source scores', () => {
     'https://www.framer.com/marketplace/templates/fabrica/',
   );
   expect(pageData.details.slice(0, 3)).toEqual([
-    { label: 'Overall score', value: '9.55' },
-    { label: 'Design', value: '9.45' },
-    { label: 'Development', value: '9.65' },
+      { label: 'Overall score', value: '9.55 ★' },
+      { label: 'Design score', value: '9.45 ★' },
+      { label: 'Development score', value: '9.65 ★' },
   ]);
 });
 

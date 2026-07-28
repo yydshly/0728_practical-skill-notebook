@@ -31,7 +31,7 @@ test('desktop shows source-visible navigation and detail content', async ({ page
   await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Fabrica' })).toBeVisible();
   await expect(page.getByText('Overall score')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Recommended templates' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'MORE LIKE THIS' })).toBeVisible();
   await expect(page.getByRole('contentinfo')).toBeVisible();
 
   const cookieBanner = page.getByText('We use cookies').locator('..');

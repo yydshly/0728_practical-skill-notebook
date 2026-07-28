@@ -3,7 +3,6 @@ export default function SiteHeader({ onOpenSearch, onToggleMenu, isMenuOpen }) {
     <header className="site-header">
       <a className="site-header__brand" href="/" aria-label="Best Website Template home">
         <img src="/assets/icons/site-mark.svg" alt="" aria-hidden="true" />
-        <span>Best Website Template</span>
       </a>
 
       <nav className="site-header__desktop-nav" aria-label="Primary navigation">
@@ -16,7 +15,7 @@ export default function SiteHeader({ onOpenSearch, onToggleMenu, isMenuOpen }) {
 
       <div className="site-header__mobile-actions">
         <button className="site-header__mobile-search" type="button" onClick={onOpenSearch} aria-label="Search templates">
-          Search
+          Search for Templates
         </button>
         <button
           className="site-header__menu-button"

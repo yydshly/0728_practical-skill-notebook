@@ -18,14 +18,14 @@
 | Requirement | Surface/state | Evidence | Stage | Status | Next action |
 | --- | --- | --- | --- | --- | --- |
 | Local source assets | All media states | Asset inventory and local file check | 1 | pass | Recheck after any data-path change. |
-| Primary desktop composition | 1280 × 720 | Side-by-side source/clone screenshot | 2–3 | continue | Capture both pages in an approved browser route. |
+| Primary desktop composition | 1280 × 720 | Side-by-side source/clone screenshot | 2–3 | pass | Header, identity bar, preview layout, and first score rows recalibrated from captured evidence. |
 | Search and preview controls | 390 × 844 | Browser interaction evidence | 4–6 | pass | Retest after visual calibration. |
-| Mobile layout and menu | 390 × 844 | Browser screenshot and interaction | 7 | continue | Capture in an approved browser route. |
+| Mobile layout and menu | 390 × 844 | Browser screenshot and interaction | 7 | pass | Header, horizontal media strip, score rows, search, and menu checked against the capture. |
+| Full-page editorial rhythm | Desktop and mobile lower sections | Lower-page source/clone screenshots | 3, 7 | continue | Calibrate recommendation, blog, and footer spacing. |
 | Engineering checks | Build and test suite | Fresh terminal output | 9 | pass | Rerun before delivery. |
 
 ## Current evidence
 
 - Local copy inventory: `fabrica-template-detail-clone/public/assets/ASSET-SOURCES.md`.
 - Fresh engineering evidence after asset mapping: 14 unit tests, production build, and the two applicable Playwright checks pass.
-- Browser limitation: the in-app browser binding is unavailable in this environment. A direct Playwright screenshot route requires separate user permission under the active browser policy.
-
+- Direct Playwright comparison permission was granted by the user. Captures of source/clone at both target viewports are retained in ignored refinement evidence.
