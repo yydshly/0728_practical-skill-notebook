@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@showcase/content-schema": "*",
+    "@showcase/three-runtime": "*",
     "three": "^0.183.1"
   }
 }

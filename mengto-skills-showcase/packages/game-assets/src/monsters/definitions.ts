@@ -2,9 +2,9 @@ import type { MonsterDefinition } from "./types";
 
 const actions = ["Idle", "Walk", "Attack", "Hit", "Death"] as const;
 const declaredSource = (factory: string, silhouette: string) =>
-  "Project-authored Three.js geometry contract declared, runtime factory not shipped yet. " +
-  `A future ${factory} factory will create the ${silhouette}. ` +
-  "The previewPath is declared for a future catalog PNG and is not shipped media.";
+  "Project-authored Three.js geometry; runtime factory shipped; catalog PNG not shipped. " +
+  `The ${factory} runtime recipe creates the ${silhouette}. ` +
+  "The previewPath remains declared for a future catalog PNG and is not shipped media.";
 
 const freezeMonster = (monster: MonsterDefinition): MonsterDefinition => {
   Object.freeze(monster.source);
