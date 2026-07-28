@@ -1,10 +1,19 @@
 import "./styles.css";
 import { catalog, defaultConfiguration } from "./content/catalog";
+import {
+  parseConfiguration,
+  serializeConfiguration,
+  type ParseIssue,
+} from "./configuration/serialize-config";
 import type {
   MechConfiguration,
   PartDefinition,
 } from "./configuration/types";
 import { normalizeConfiguration } from "./configuration/validate-config";
+import {
+  createSavedConfigurationController,
+  loadConfiguration,
+} from "./persistence/saved-config";
 import {
   createConfiguratorScene,
   type ConfiguratorSceneSnapshot,
@@ -121,15 +130,39 @@ app.innerHTML = `
           </div>
           <span>10 组参数</span>
         </div>
-        <p
+        <div
           class="config-announcer"
           data-config-announcer
           role="status"
           aria-live="polite"
           aria-atomic="true"
-        ></p>
+        ></div>
         <form class="configuration-form" data-option-groups></form>
         <section class="summary-panel" data-summary aria-label="配置摘要"></section>
+        <section class="sharing-panel" aria-label="保存与分享">
+          <div>
+            <p class="section-kicker">SAVE / SHARE</p>
+            <h2>保存与分享</h2>
+          </div>
+          <div class="sharing-actions">
+            <button type="button" data-copy-link>复制配置链接</button>
+            <button type="button" data-reset-config>恢复默认配置</button>
+          </div>
+          <p
+            class="share-status"
+            data-share-status
+            role="status"
+            aria-live="polite"
+          ></p>
+          <input
+            class="share-fallback"
+            data-share-fallback
+            aria-label="手动复制配置链接"
+            type="text"
+            readonly
+            hidden
+          />
+        </section>
         <footer class="panel-footer">
           <span>所有数值来自本地纯配置规则</span>
           <span>NO CHECKOUT · NO INVENTORY</span>
@@ -150,21 +183,26 @@ const stageEnvironment = requiredElement<HTMLElement>(
   "[data-stage-environment]",
 );
 const resetViewButton = requiredElement<HTMLButtonElement>("[data-reset-view]");
+const copyLinkButton = requiredElement<HTMLButtonElement>("[data-copy-link]");
+const resetConfigurationButton = requiredElement<HTMLButtonElement>(
+  "[data-reset-config]",
+);
+const shareStatus = requiredElement<HTMLElement>("[data-share-status]");
+const shareFallback = requiredElement<HTMLInputElement>(
+  "[data-share-fallback]",
+);
 
 const search = new URLSearchParams(window.location.search);
 const reviewId = search.get("review");
 const knownReview = reviewId !== null && isKnownReview(reviewId);
-let configuration = knownReview
-  ? cloneConfiguration(reviewConfigurations[reviewId])
-  : cloneConfiguration(defaultConfiguration);
-const initialAnnouncement =
-  reviewId !== null && !knownReview
-    ? `未知审阅状态 ${reviewId}，已恢复默认配置。`
-    : "";
+const initial = resolveInitialConfiguration(search, reviewId, knownReview);
+let configuration = initial.config;
+const persistence = createSavedConfigurationController();
 
 const productScene = createConfiguratorScene(canvas, configuration);
 renderInterface();
-announcer.textContent = initialAnnouncement;
+renderAnnouncement(initial.messages);
+if (search.has("v")) replaceCurrentConfigurationUrl();
 
 delete window.__MECH_ATELIER_DEBUG__;
 if (knownReview || search.get("reviewControls") === "1") {
@@ -218,16 +256,55 @@ optionsContainer.addEventListener("change", (event) => {
 });
 
 resetViewButton.addEventListener("click", () => productScene.resetView());
+copyLinkButton.addEventListener("click", async () => {
+  const link = canonicalAbsoluteUrl();
+  shareFallback.hidden = true;
+  shareStatus.textContent = "";
+
+  try {
+    if (!navigator.clipboard?.writeText) {
+      throw new Error("当前浏览器未开放剪贴板权限");
+    }
+    await navigator.clipboard.writeText(link);
+    shareStatus.textContent = "配置链接已复制。";
+  } catch (error) {
+    const detail =
+      error instanceof Error && error.message
+        ? ` 技术原因：${error.message}。`
+        : "";
+    shareStatus.textContent =
+      `无法自动复制，请手动选择并复制以下链接。${detail}`;
+    shareFallback.value = link;
+    shareFallback.hidden = false;
+    shareFallback.focus();
+    shareFallback.select();
+  }
+});
+resetConfigurationButton.addEventListener("click", () => {
+  if (!window.confirm("确定恢复默认配置吗？当前选择将被替换。")) return;
+  applyConfiguration(cloneConfiguration(defaultConfiguration), {
+    announcement: "已恢复默认配置。",
+  });
+  const saved = persistence.flush();
+  if (!saved.ok) {
+    shareStatus.textContent = "默认配置已恢复，但本地保存失败。";
+  }
+});
 window.addEventListener(
   "pagehide",
   () => {
+    persistence.flush();
+    persistence.dispose();
     productScene.dispose();
     delete window.__MECH_ATELIER_DEBUG__;
   },
   { once: true },
 );
 
-function applyConfiguration(requested: MechConfiguration): void {
+function applyConfiguration(
+  requested: MechConfiguration,
+  options: { announcement?: string } = {},
+): void {
   const activeName =
     document.activeElement instanceof HTMLInputElement
       ? document.activeElement.name
@@ -235,8 +312,20 @@ function applyConfiguration(requested: MechConfiguration): void {
   const normalized = normalizeConfiguration(requested, catalog);
   configuration = normalized.config;
   productScene.updateConfiguration(configuration);
-  announcer.textContent = describeNormalization(requested, configuration);
+  const normalizationMessage = describeNormalization(
+    requested,
+    configuration,
+  );
+  renderAnnouncement(
+    options.announcement
+      ? [options.announcement]
+      : normalizationMessage
+        ? [normalizationMessage]
+        : [],
+  );
   renderInterface(activeName);
+  replaceCurrentConfigurationUrl();
+  persistence.schedule(configuration);
 }
 
 function renderInterface(focusGroup: string | null = null): void {
@@ -301,6 +390,113 @@ function describeNormalization(
   }
 
   return messages.join(" ");
+}
+
+function resolveInitialConfiguration(
+  search: URLSearchParams,
+  reviewId: string | null,
+  knownReview: boolean,
+): { config: MechConfiguration; messages: string[] } {
+  if (search.has("v")) {
+    const parsed = parseConfiguration(window.location.search);
+    return {
+      config: cloneConfiguration(parsed.config),
+      messages: parsed.issues.map(describeParseIssue),
+    };
+  }
+
+  if (reviewId !== null) {
+    return knownReview
+      ? {
+          config: cloneConfiguration(
+            reviewConfigurations[
+              reviewId as keyof typeof reviewConfigurations
+            ],
+          ),
+          messages: [],
+        }
+      : {
+          config: cloneConfiguration(defaultConfiguration),
+          messages: [
+            `未知审阅状态 ${reviewId}，已恢复默认配置。`,
+          ],
+        };
+  }
+
+  const saved = loadConfiguration();
+  if (saved.ok) {
+    return {
+      config: cloneConfiguration(saved.config),
+      messages: [],
+    };
+  }
+  const shouldAnnounce = saved.issues.some(
+    (issue) => issue.code !== "missing",
+  );
+  return {
+    config: cloneConfiguration(defaultConfiguration),
+    messages: shouldAnnounce
+      ? ["本地保存的配置无法读取，已使用默认配置。"]
+      : [],
+  };
+}
+
+function describeParseIssue(issue: ParseIssue): string {
+  const label = {
+    version: "链接版本",
+    chassisId: "底盘",
+    headId: "头部",
+    armorId: "装甲",
+    leftWeaponId: "左侧武器",
+    rightWeaponId: "右侧武器",
+    rearModuleId: "背部模块",
+    "finish.primary": "主色",
+    "finish.secondary": "辅色",
+    "finish.metalness": "金属度",
+    "finish.roughness": "粗糙度",
+    "finish.environment": "环境",
+    weight: "载重",
+  }[issue.field];
+  const value =
+    "value" in issue && issue.value !== undefined
+      ? `“${String(issue.value)}”`
+      : "";
+  const detail = {
+    "missing-version": "缺少版本，",
+    "unsupported-version": `${value}不受支持，`,
+    "malformed-value": `${value}格式错误，`,
+    "duplicate-key": `${value}是重复参数，已采用第一个值并`,
+    "unknown-option": `${value}不存在，`,
+    "slot-incompatible": `${value}不支持这个挂载位，`,
+    "chassis-incompatible": `${value}与当前底盘不兼容，`,
+    "invalid-finish": `${value}不是允许的表面参数，`,
+    "weight-limit": `${value}超过底盘载重上限，`,
+  }[issue.code];
+  return `${label}${detail}已规范化为合法配置。`;
+}
+
+function renderAnnouncement(messages: readonly string[]): void {
+  announcer.replaceChildren(
+    ...messages.map((message) => {
+      const line = document.createElement("span");
+      line.dataset.configIssue = "";
+      line.textContent = message;
+      return line;
+    }),
+  );
+}
+
+function canonicalAbsoluteUrl(): string {
+  return new URL(
+    serializeConfiguration(configuration),
+    window.location.origin,
+  ).href;
+}
+
+function replaceCurrentConfigurationUrl(): void {
+  const url = new URL(window.location.href);
+  url.search = serializeConfiguration(configuration);
+  window.history.replaceState(window.history.state, "", url);
 }
 
 function findPart(id: string): PartDefinition | undefined {

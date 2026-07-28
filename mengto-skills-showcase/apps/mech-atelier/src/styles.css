@@ -362,6 +362,14 @@ input:focus-visible + span {
   background: rgb(232 109 61 / 7%);
 }
 
+.config-announcer span {
+  display: block;
+}
+
+.config-announcer span + span {
+  margin-top: 5px;
+}
+
 .configuration-form {
   display: block;
 }
@@ -576,6 +584,70 @@ input:checked + .option-indicator {
     #0d0f11;
 }
 
+.sharing-panel {
+  padding: 24px 28px 26px;
+  border-bottom: 1px solid var(--line);
+  background: #101214;
+}
+
+.sharing-panel h2 {
+  margin: 0;
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 23px;
+  font-weight: 400;
+}
+
+.sharing-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.sharing-actions button {
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--line-strong);
+  background: rgb(255 255 255 / 3%);
+  color: #dedbd5;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.sharing-actions button:first-child {
+  border-color: rgb(232 109 61 / 58%);
+  background: rgb(232 109 61 / 10%);
+}
+
+.sharing-actions button:hover {
+  border-color: var(--ember);
+  color: white;
+}
+
+.share-status {
+  min-height: 1.5em;
+  margin: 12px 0 0;
+  color: #dca17e;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.share-fallback {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgb(232 109 61 / 55%);
+  background: #08090a;
+  color: #f0dfd3;
+  font: 9px/1.4 "JetBrains Mono", Consolas, monospace;
+}
+
+.share-fallback[hidden] {
+  display: none;
+}
+
 .summary-heading,
 .summary-price-row {
   display: flex;
@@ -750,7 +822,8 @@ input:checked + .option-indicator {
 
   .panel-intro,
   .option-group,
-  .summary-panel {
+  .summary-panel,
+  .sharing-panel {
     padding-right: 22px;
     padding-left: 22px;
   }
