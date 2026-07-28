@@ -1,16 +1,20 @@
 import { expect, test } from "@playwright/test";
 
 const consoleErrors: string[] = [];
+const pageErrors: string[] = [];
 
 test.beforeEach(async ({ page }) => {
   consoleErrors.length = 0;
+  pageErrors.length = 0;
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
 });
 
 test.afterEach(() => {
   expect(consoleErrors, "browser console errors").toEqual([]);
+  expect(pageErrors, "uncaught page errors").toEqual([]);
 });
 
 test("catalog cards use readable fallbacks and no canvases", async ({ page }) => {
