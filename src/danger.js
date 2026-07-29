@@ -9,7 +9,7 @@ export function createDangerController({ recoverySeconds = 1.2 } = {}) {
       const closeness = Math.max(0, Math.min(1, (4 - distance) / 2));
       return {
         mode: 'threaten',
-        label: '杩戣韩濞佽儊',
+        label: '近身威胁',
         intensity: 0.72 + closeness * 0.28,
         heartbeatBpm: 108 + closeness * 24,
       };
@@ -20,7 +20,7 @@ export function createDangerController({ recoverySeconds = 1.2 } = {}) {
       const closeness = Math.max(0, Math.min(1, (11 - distance) / 8));
       return {
         mode: 'chase',
-        label: '宸茶鍙戠幇',
+        label: '已被发现',
         intensity: 0.3 + closeness * 0.38,
         heartbeatBpm: 72 + closeness * 28,
       };
@@ -31,7 +31,7 @@ export function createDangerController({ recoverySeconds = 1.2 } = {}) {
       if (recoveryRemaining === 0) wasDangerous = false;
       return {
         mode: recoveryRemaining > 0 ? 'recover' : 'safe',
-        label: recoveryRemaining > 0 ? '姝ｅ湪鑴辩鍗遍櫓' : '',
+        label: recoveryRemaining > 0 ? '正在脱离危险' : '',
         intensity: intensity * 0.25,
         heartbeatBpm: 0,
       };

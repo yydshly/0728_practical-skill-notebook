@@ -39,11 +39,12 @@ test('danger controller distinguishes chase, close threat, recovery, and safety'
   const danger = createDangerController({ recoverySeconds: 1.2 });
   assert.equal(danger.update(0.016, 'patrol', 20).mode, 'safe');
   const chase = danger.update(0.016, 'chase', 8);
-  assert.deepEqual([chase.mode, chase.label], ['chase', '宸茶鍙戠幇']);
+  assert.deepEqual([chase.mode, chase.label], ['chase', '已被发现']);
   const threat = danger.update(0.016, 'threaten', 2.4);
-  assert.equal(threat.mode, 'threaten');
+  assert.deepEqual([threat.mode, threat.label], ['threaten', '近身威胁']);
   assert.ok(threat.heartbeatBpm > chase.heartbeatBpm);
-  assert.equal(danger.update(0.4, 'patrol', 18).mode, 'recover');
+  const recovery = danger.update(0.4, 'patrol', 18);
+  assert.deepEqual([recovery.mode, recovery.label], ['recover', '正在脱离危险']);
   assert.equal(danger.update(0.81, 'patrol', 18).mode, 'safe');
 });
 
@@ -62,6 +63,43 @@ test('audio feedback remains safe without an AudioContext implementation', async
   }));
   audio.setMuted(true);
   assert.equal(audio.muted, true);
+  audio.dispose();
+});
+
+test('audio feedback swallows node allocation errors after unlocking', async () => {
+  const audio = createAudioFeedback({
+    AudioContextCtor: class ThrowingAudioContext {
+      constructor() {
+        this.state = 'running';
+        this.currentTime = 0;
+        this.destination = {};
+      }
+
+      createGain() {
+        return {
+          gain: {
+            value: 0,
+            setValueAtTime() {},
+            exponentialRampToValueAtTime() {},
+            setTargetAtTime() {},
+          },
+          connect() {},
+          disconnect() {},
+        };
+      }
+
+      createOscillator() {
+        throw new Error('audio node allocation failed');
+      }
+    },
+  });
+  assert.equal(await audio.unlock(), true);
+  assert.doesNotThrow(() => audio.handleStoryEvent({ type: 'objective-completed' }));
+  assert.doesNotThrow(() => audio.updateDanger({
+    mode: 'threaten',
+    heartbeatBpm: 110,
+    intensity: 1,
+  }, 0));
   audio.dispose();
 });
 

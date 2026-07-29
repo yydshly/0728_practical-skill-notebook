@@ -33,16 +33,24 @@ export function createAudioFeedback({
 
   function tone(frequency, duration, gain = 0.08, offset = 0) {
     if (!unlocked || muted || !context || !master) return;
-    const start = context.currentTime + offset;
-    const oscillator = context.createOscillator();
-    const voice = context.createGain();
-    oscillator.frequency.value = frequency;
-    voice.gain.setValueAtTime(gain, start);
-    voice.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-    oscillator.connect(voice);
-    voice.connect(master);
-    oscillator.start(start);
-    oscillator.stop(start + duration);
+    let oscillator = null;
+    let voice = null;
+    try {
+      const start = context.currentTime + offset;
+      oscillator = context.createOscillator();
+      voice = context.createGain();
+      oscillator.frequency.value = frequency;
+      voice.gain.setValueAtTime(gain, start);
+      voice.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+      oscillator.connect(voice);
+      voice.connect(master);
+      oscillator.start(start);
+      oscillator.stop(start + duration);
+    } catch {
+      try { oscillator?.stop?.(); } catch {}
+      try { oscillator?.disconnect?.(); } catch {}
+      try { voice?.disconnect?.(); } catch {}
+    }
   }
 
   function handleStoryEvent(event) {
