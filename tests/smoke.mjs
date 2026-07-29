@@ -366,9 +366,549 @@ async function assertFullViewportAcceptance(page, testPort, viewport) {
   return renderEvidence;
 }
 
+const AUDIO_FILES = Object.freeze([
+  'rural-dusk-bed',
+  'mutation-danger-layer',
+  'mutation-reveal-stinger',
+  'south-gate-escape-stinger',
+]);
+
+function audioAssetIdentity(url) {
+  const parsed = new URL(url);
+  if (parsed.searchParams.has('import')) return null;
+  const match = parsed.pathname.match(
+    /\/(rural-dusk-bed|mutation-danger-layer|mutation-reveal-stinger|south-gate-escape-stinger)\.(ogg|mp3)$/,
+  );
+  return match ? `${match[1]}.${match[2]}` : null;
+}
+
+function createNavigationLog(page) {
+  let active = false;
+  let responses = new Map();
+  let pageErrors = [];
+  let consoleErrors = [];
+  let consoleWarnings = [];
+  page.on('response', (response) => {
+    if (!active) return;
+    const identity = audioAssetIdentity(response.url());
+    if (!identity) return;
+    const records = responses.get(identity) ?? [];
+    records.push({ status: response.status(), url: response.url() });
+    responses.set(identity, records);
+  });
+  page.on('pageerror', (error) => {
+    if (active) pageErrors.push(error.message);
+  });
+  page.on('console', (message) => {
+    if (!active) return;
+    if (message.type() === 'error') consoleErrors.push(message.text());
+    if (message.type() === 'warning') consoleWarnings.push(message.text());
+  });
+  return {
+    start() {
+      responses = new Map();
+      pageErrors = [];
+      consoleErrors = [];
+      consoleWarnings = [];
+      active = true;
+    },
+    freeze() {
+      active = false;
+      return {
+        responses: new Map(
+          [...responses].map(([identity, records]) => [identity, [...records]]),
+        ),
+        pageErrors: [...pageErrors],
+        consoleErrors: [...consoleErrors],
+        consoleWarnings: [...consoleWarnings],
+      };
+    },
+  };
+}
+
+function assertNoBrowserErrors(log, label) {
+  if (log.pageErrors.length) {
+    throw new Error(`${label} page errors: ${log.pageErrors.join(' | ')}`);
+  }
+  if (log.consoleErrors.length) {
+    throw new Error(`${label} console errors: ${log.consoleErrors.join(' | ')}`);
+  }
+}
+
+function assertAudioRequestAccounting({ responses, consoleWarnings }) {
+  for (const stem of AUDIO_FILES) {
+    const ogg = responses.get(`${stem}.ogg`) ?? [];
+    if (ogg.length !== 1 || ogg[0].status !== 200) {
+      throw new Error(
+        `Expected one HTTP 200 OGG request for ${stem}, got ${JSON.stringify(ogg)}`,
+      );
+    }
+    const mp3 = responses.get(`${stem}.mp3`) ?? [];
+    if (mp3.length > 1 || (mp3.length === 1 && mp3[0].status !== 200)) {
+      throw new Error(
+        `Expected at most one successful MP3 fallback for ${stem}, got ${JSON.stringify(mp3)}`,
+      );
+    }
+  }
+  const mp3Counts = AUDIO_FILES.map(
+    (stem) => (responses.get(`${stem}.mp3`) ?? []).length,
+  );
+  const oggRejected = consoleWarnings.some(
+    (warning) => warning.includes('[music-director:ogg-decode-or-spec]'),
+  );
+  if (mp3Counts.some(Boolean) && !oggRejected) {
+    throw new Error(
+      `Expected MP3 only after Chromium rejects OGG, got counts ${mp3Counts}`,
+    );
+  }
+  if (mp3Counts.some(Boolean) && mp3Counts.some((count) => count !== 1)) {
+    throw new Error(`Expected MP3 fallback to replace the complete codec set: ${mp3Counts}`);
+  }
+  for (const [identity, records] of responses) {
+    if (records.some(({ status }) => status === 200) && records.length !== 1) {
+      throw new Error(`Expected selected ${identity} URL to be fetched once`);
+    }
+  }
+}
+
+async function waitForPlayingAudio(page) {
+  await page.waitForFunction(() => {
+    const audio = window.__RURAL_ESCAPE__?.audio;
+    return audio?.musicState?.playback === 'playing'
+      && audio.contextState === 'running';
+  }, null, { timeout: 15000 });
+}
+
+async function completeStoryRoute(page) {
+  const route = [
+    { position: [-9, 32.8], objective: 'visit_courtyard' },
+    { position: [10.4, 24.4], objective: 'reach_granary' },
+    { position: [13.2, -4.6], objective: 'escape_south_gate' },
+  ];
+  for (const step of route) {
+    await page.evaluate(([x, z]) => window.__RURAL_ESCAPE__.setPlayerForTest(x, z), step.position);
+    await page.keyboard.press('KeyE');
+    await page.waitForFunction(
+      (objective) => window.__RURAL_ESCAPE__.story.objective === objective,
+      step.objective,
+    );
+    await page.waitForFunction(() => document.querySelector('#completion-toast').hidden);
+  }
+  await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    game.setPlayerForTest(0, -34);
+    game.updateStoryForTest();
+  });
+  await page.waitForFunction(() => window.__RURAL_ESCAPE__.story.objective === 'complete');
+}
+
+async function assertAudioAcceptance(browserInstance, testPort) {
+  const context = await browserInstance.newContext({
+    viewport: { width: 1280, height: 720 },
+  });
+  const page = await context.newPage();
+  const navigationLog = createNavigationLog(page);
+  try {
+    navigationLog.start();
+    await page.goto(
+      `http://127.0.0.1:${testPort}/?evidence=birth`,
+      { waitUntil: 'domcontentloaded' },
+    );
+    await page.waitForFunction(() => Boolean(window.__RURAL_ESCAPE__));
+    const initial = await page.evaluate(() => {
+      const button = document.querySelector('#mute-toggle');
+      return {
+        ariaLabel: button.getAttribute('aria-label'),
+        audioState: button.dataset.audioState,
+      };
+    });
+    if (initial.audioState !== 'locked' || initial.ariaLabel !== '开启声音') {
+      throw new Error(`Expected initially locked sound control, got ${JSON.stringify(initial)}`);
+    }
+
+    const syntheticState = await page.evaluate(() => {
+      document.querySelector('#mute-toggle').click();
+      const button = document.querySelector('#mute-toggle');
+      return {
+        audioState: button.dataset.audioState,
+        muted: window.__RURAL_ESCAPE__.audio.muted,
+      };
+    });
+    await page.click('#mute-toggle');
+    await waitForPlayingAudio(page);
+    if (syntheticState.audioState !== 'locked' || syntheticState.muted) {
+      throw new Error(
+        `Expected synthetic click to remain locked, got ${JSON.stringify(syntheticState)}`,
+      );
+    }
+
+    const playback = await page.evaluate(() => {
+      const audio = window.__RURAL_ESCAPE__.audio;
+      const descriptors = Object.getOwnPropertyDescriptors(audio);
+      return {
+        contextState: audio.contextState,
+        playback: audio.musicState.playback,
+        activeVoices: audio.activeVoices,
+        keys: Object.keys(audio).sort(),
+        frozen: Object.isFrozen(audio),
+        getterOnly: Object.values(descriptors).every(
+          ({ get, set, value }) => typeof get === 'function'
+            && set === undefined
+            && value === undefined,
+        ),
+      };
+    });
+    if (
+      playback.playback !== 'playing'
+      || playback.contextState !== 'running'
+      || !Number.isFinite(playback.activeVoices)
+      || playback.activeVoices < 0
+    ) {
+      throw new Error(`Expected healthy playing snapshot: ${JSON.stringify(playback)}`);
+    }
+    const expectedDebugKeys = [
+      'activeVoices',
+      'assetState',
+      'contextState',
+      'dangerMix',
+      'musicState',
+      'muted',
+    ];
+    if (
+      !playback.frozen
+      || !playback.getterOnly
+      || JSON.stringify(playback.keys) !== JSON.stringify(expectedDebugKeys)
+    ) {
+      throw new Error(`Expected frozen getter-only audio debug facade: ${JSON.stringify(playback)}`);
+    }
+    const birthLog = navigationLog.freeze();
+    assertNoBrowserErrors(birthLog, 'normal audio navigation');
+    assertAudioRequestAccounting(birthLog);
+
+    navigationLog.start();
+    await page.goto(
+      `http://127.0.0.1:${testPort}/?evidence=contact`,
+      { waitUntil: 'domcontentloaded' },
+    );
+    await page.waitForFunction(() => window.__RURAL_ESCAPE__?.pursuer?.state === 'threaten');
+    await page.click('#mute-toggle');
+    await waitForPlayingAudio(page);
+    const initialGeneration = await page.evaluate(
+      () => window.__RURAL_ESCAPE__.audio.musicState.loopGeneration,
+    );
+    if (initialGeneration !== 1) {
+      throw new Error(`Expected first contact loop generation 1, got ${initialGeneration}`);
+    }
+
+    await page.evaluate(() => {
+      const game = window.__RURAL_ESCAPE__;
+      const pursuer = game.pursuer.object.position;
+      game.setPlayerForTest(pursuer.x, pursuer.z + 6);
+    });
+    await page.waitForFunction(() => (
+      window.__RURAL_ESCAPE__.pursuer.state === 'chase'
+      && window.__RURAL_ESCAPE__.audio.musicState.mode === 'chase'
+    ));
+    const chaseMix = await page.evaluate(() => window.__RURAL_ESCAPE__.audio.dangerMix);
+
+    await page.evaluate(() => {
+      const game = window.__RURAL_ESCAPE__;
+      const pursuer = game.pursuer.object.position;
+      game.setPlayerForTest(pursuer.x, pursuer.z);
+    });
+    await page.waitForFunction(() => (
+      window.__RURAL_ESCAPE__.pursuer.state === 'threaten'
+      && window.__RURAL_ESCAPE__.audio.musicState.mode === 'threaten'
+    ));
+    const threatenMix = await page.evaluate(() => window.__RURAL_ESCAPE__.audio.dangerMix);
+    if (!(threatenMix > chaseMix)) {
+      throw new Error(`Expected threaten mix ${threatenMix} above chase mix ${chaseMix}`);
+    }
+
+    const recoverStartedAt = await page.evaluate(() => {
+      window.__RURAL_ESCAPE__.setPlayerForTest(-8, 33);
+      return performance.now();
+    });
+    await page.waitForFunction(() => window.__RURAL_ESCAPE__.audio.musicState.mode === 'recover');
+    await page.waitForFunction((startedAt) => (
+      performance.now() - startedAt >= 3900
+      || window.__RURAL_ESCAPE__.audio.musicState.mode !== 'recover'
+    ), recoverStartedAt);
+    const recoverWindow = await page.evaluate((startedAt) => ({
+      elapsed: performance.now() - startedAt,
+      mode: window.__RURAL_ESCAPE__.audio.musicState.mode,
+      loopGeneration: window.__RURAL_ESCAPE__.audio.musicState.loopGeneration,
+    }), recoverStartedAt);
+    if (recoverWindow.elapsed < 3900 || recoverWindow.mode !== 'recover') {
+      throw new Error(`Expected full four-second recover window: ${JSON.stringify(recoverWindow)}`);
+    }
+    await page.waitForFunction(() => window.__RURAL_ESCAPE__.audio.musicState.mode === 'safe');
+
+    const generationAfterDanger = await page.evaluate(
+      () => window.__RURAL_ESCAPE__.audio.musicState.loopGeneration,
+    );
+    if (generationAfterDanger !== initialGeneration) {
+      throw new Error('Expected danger transitions to preserve the loop generation');
+    }
+
+    await page.click('#mute-toggle');
+    await page.waitForFunction(() => window.__RURAL_ESCAPE__.audio.muted === true);
+    const mutedGeneration = await page.evaluate(
+      () => window.__RURAL_ESCAPE__.audio.musicState.loopGeneration,
+    );
+    await page.click('#mute-toggle');
+    await waitForPlayingAudio(page);
+    const unmutedGeneration = await page.evaluate(
+      () => window.__RURAL_ESCAPE__.audio.musicState.loopGeneration,
+    );
+    if (mutedGeneration !== 1 || unmutedGeneration !== 1) {
+      throw new Error(
+        `Expected same-document mute cycle to preserve generation 1, got `
+        + `${mutedGeneration}/${unmutedGeneration}`,
+      );
+    }
+
+    await page.click('#mute-toggle');
+    await page.waitForFunction(() => window.__RURAL_ESCAPE__.audio.muted === true);
+    navigationLog.freeze();
+    navigationLog.start();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.__RURAL_ESCAPE__?.audio?.muted === true);
+    const persisted = await page.evaluate(() => {
+      const button = document.querySelector('#mute-toggle');
+      const audio = window.__RURAL_ESCAPE__.audio;
+      return {
+        audioState: button.dataset.audioState,
+        loopGeneration: audio.musicState.loopGeneration,
+        muted: audio.muted,
+      };
+    });
+    if (
+      !persisted.muted
+      || persisted.audioState !== 'muted'
+      || persisted.loopGeneration !== 0
+    ) {
+      throw new Error(`Expected reload to restore mute without loops: ${JSON.stringify(persisted)}`);
+    }
+    await page.click('#mute-toggle');
+    await waitForPlayingAudio(page);
+    const reloadedGeneration = await page.evaluate(
+      () => window.__RURAL_ESCAPE__.audio.musicState.loopGeneration,
+    );
+    if (reloadedGeneration !== 1) {
+      throw new Error(`Expected new document's first generation 1, got ${reloadedGeneration}`);
+    }
+    await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-8, 33));
+    await page.waitForFunction(() => (
+      window.__RURAL_ESCAPE__.audio.musicState.mode === 'safe'
+      && window.__RURAL_ESCAPE__.audio.activeVoices === 0
+    ), null, { timeout: 10000 });
+    await page.evaluate(() => {
+      const game = window.__RURAL_ESCAPE__;
+      game.setStoryStateForTest(
+        { radio: true, neighbour: true, flashlight: false },
+        'reach_granary',
+      );
+      game.interactForTest('flashlight');
+    });
+    await page.waitForFunction(() => window.__RURAL_ESCAPE__.audio.activeVoices > 0);
+    await page.waitForFunction(
+      () => window.__RURAL_ESCAPE__.audio.activeVoices === 0,
+      null,
+      { timeout: 10000 },
+    );
+
+    const beforeFreeze = await page.evaluate(() => ({
+      activeVoices: window.__RURAL_ESCAPE__.audio.activeVoices,
+      loopGeneration: window.__RURAL_ESCAPE__.audio.musicState.loopGeneration,
+      startedAt: window.__RURAL_ESCAPE__.audio.musicState.startedAt,
+    }));
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Page.setWebLifecycleState', { state: 'frozen' });
+    await cdp.send('Page.setWebLifecycleState', { state: 'active' });
+    const contextState = await page.evaluate(
+      () => window.__RURAL_ESCAPE__.audio.contextState,
+    );
+    if (contextState !== 'running') {
+      await page.click('#game', { position: { x: 20, y: 20 } });
+      await page.waitForFunction(() => window.__RURAL_ESCAPE__.audio.contextState === 'running');
+    }
+    const postReactivateStartedAt = await page.evaluate(() => performance.now());
+    await page.waitForFunction((startedAt) => (
+      performance.now() - startedAt >= 1000
+      || window.__RURAL_ESCAPE__.audio.activeVoices > 0
+    ), postReactivateStartedAt);
+    const afterFreeze = await page.evaluate(() => ({
+      activeVoices: window.__RURAL_ESCAPE__.audio.activeVoices,
+      loopGeneration: window.__RURAL_ESCAPE__.audio.musicState.loopGeneration,
+      startedAt: window.__RURAL_ESCAPE__.audio.musicState.startedAt,
+    }));
+    if (
+      afterFreeze.loopGeneration !== beforeFreeze.loopGeneration
+      || afterFreeze.startedAt !== beforeFreeze.startedAt
+      || afterFreeze.activeVoices !== 0
+    ) {
+      throw new Error(
+        `Expected freeze/reactivate to preserve loops and stingers: `
+        + `${JSON.stringify({ beforeFreeze, afterFreeze })}`,
+      );
+    }
+    assertNoBrowserErrors(navigationLog.freeze(), 'audio persistence navigation');
+  } finally {
+    await context.close();
+  }
+}
+
+async function assertPortraitAudioAcceptance(browserInstance, testPort) {
+  const context = await browserInstance.newContext({
+    viewport: { width: 390, height: 844 },
+  });
+  const page = await context.newPage();
+  const navigationLog = createNavigationLog(page);
+  try {
+    navigationLog.start();
+    await page.goto(
+      `http://127.0.0.1:${testPort}/?evidence=birth`,
+      { waitUntil: 'domcontentloaded' },
+    );
+    await page.click('#mute-toggle');
+    await waitForPlayingAudio(page);
+    await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-9, 32.8));
+    const portrait = await page.evaluate(() => {
+      const button = document.querySelector('#mute-toggle');
+      const tutorial = document.querySelector('#tutorial-hint');
+      const interaction = document.querySelector('#interaction');
+      const audio = window.__RURAL_ESCAPE__.audio;
+      const rect = (element) => (
+        element.hidden ? null : element.getBoundingClientRect().toJSON()
+      );
+      const expectedState = audio.muted
+        ? 'muted'
+        : audio.assetState === 'error' || audio.musicState.playback === 'error'
+          ? 'error'
+          : audio.musicState.playback === 'loading'
+            ? 'loading'
+            : audio.musicState.playback === 'playing'
+              ? 'playing'
+              : 'locked';
+      return {
+        audioState: button.dataset.audioState,
+        expectedState,
+        pointerEvents: getComputedStyle(button).pointerEvents,
+        button: rect(button),
+        tutorial: rect(tutorial),
+        interaction: rect(interaction),
+        viewport: [innerWidth, innerHeight],
+      };
+    });
+    const overlaps = (left, right) => Boolean(
+      left
+      && right
+      && left.left < right.right
+      && left.right > right.left
+      && left.top < right.bottom
+      && left.bottom > right.top
+    );
+    if (
+      !portrait.button
+      || portrait.button.width < 44
+      || portrait.button.height < 44
+      || portrait.button.left < 0
+      || portrait.button.top < 0
+      || portrait.button.right > portrait.viewport[0]
+      || portrait.button.bottom > portrait.viewport[1]
+      || portrait.pointerEvents === 'none'
+      || portrait.audioState !== portrait.expectedState
+      || overlaps(portrait.button, portrait.tutorial)
+      || overlaps(portrait.button, portrait.interaction)
+    ) {
+      throw new Error(`Expected accessible non-overlapping portrait audio control: ${JSON.stringify(portrait)}`);
+    }
+    assertNoBrowserErrors(navigationLog.freeze(), 'portrait audio navigation');
+  } finally {
+    await context.close();
+  }
+}
+
+async function assertMissingAudioAcceptance(browserInstance, testPort) {
+  const context = await browserInstance.newContext({
+    viewport: { width: 1280, height: 720 },
+  });
+  const page = await context.newPage();
+  const navigationLog = createNavigationLog(page);
+  try {
+    navigationLog.start();
+    await page.goto(
+      `http://127.0.0.1:${testPort}/?evidence=birth&audio-fixture=missing`,
+      { waitUntil: 'domcontentloaded' },
+    );
+    await page.click('#mute-toggle');
+    await page.waitForFunction(() => (
+      window.__RURAL_ESCAPE__?.audio?.assetState === 'error'
+      && document.querySelector('#mute-toggle').dataset.audioState === 'error'
+    ));
+    const failure = await page.evaluate(() => {
+      const button = document.querySelector('#mute-toggle');
+      return {
+        ariaLabel: button.getAttribute('aria-label'),
+        assetState: window.__RURAL_ESCAPE__.audio.assetState,
+        audioState: button.dataset.audioState,
+      };
+    });
+    if (
+      failure.audioState !== 'error'
+      || failure.ariaLabel !== '重试声音'
+      || failure.assetState !== 'error'
+    ) {
+      throw new Error(`Expected deterministic missing-audio state: ${JSON.stringify(failure)}`);
+    }
+    await completeStoryRoute(page);
+    await page.waitForFunction(() => {
+      const shell = document.querySelector('.game-shell');
+      return Number(shell.dataset.renderCalls) > 0
+        && Number(shell.dataset.renderTriangles) > 0;
+    });
+    const renderer = await page.evaluate(() => {
+      const shell = document.querySelector('.game-shell');
+      return {
+        calls: Number(shell.dataset.renderCalls),
+        triangles: Number(shell.dataset.renderTriangles),
+        objective: window.__RURAL_ESCAPE__.story.objective,
+      };
+    });
+    if (
+      renderer.objective !== 'complete'
+      || !Number.isFinite(renderer.calls)
+      || renderer.calls <= 0
+      || !Number.isFinite(renderer.triangles)
+      || renderer.triangles <= 0
+    ) {
+      throw new Error(`Expected healthy story and renderer after audio failure: ${JSON.stringify(renderer)}`);
+    }
+    const failureLog = navigationLog.freeze();
+    assertNoBrowserErrors(failureLog, 'missing audio navigation');
+    const warningClasses = new Map();
+    for (const warning of failureLog.consoleWarnings) {
+      const failureClass = warning.match(/\[(?:audio-feedback|music-director):([^\]]+)\]/)?.[0];
+      if (!failureClass) continue;
+      warningClasses.set(failureClass, (warningClasses.get(failureClass) ?? 0) + 1);
+    }
+    for (const [failureClass, count] of warningClasses) {
+      if (count > 1) {
+        throw new Error(`Expected one ${failureClass} warning, got ${count}`);
+      }
+    }
+  } finally {
+    await context.close();
+  }
+}
+
 try {
   await waitForServer();
   browser = await chromium.launch({ headless: true });
+  await assertAudioAcceptance(browser, port);
+  await assertPortraitAudioAcceptance(browser, port);
+  await assertMissingAudioAcceptance(browser, port);
   const page = await browser.newPage({
     viewport: { width: 1280, height: 720 },
     deviceScaleFactor: 2,
@@ -1218,6 +1758,16 @@ try {
   );
 
   await page.click('#mute-toggle');
+  await waitForPlayingAudio(page);
+  const enabledState = await page.evaluate(() => ({
+    pressed: document.querySelector('#mute-toggle').getAttribute('aria-pressed'),
+    muted: window.__RURAL_ESCAPE__.audio.muted,
+  }));
+  if (enabledState.pressed !== 'false' || enabledState.muted !== false) {
+    throw new Error('Expected first sound-control click to enable playback');
+  }
+  await page.click('#mute-toggle');
+  await page.waitForFunction(() => window.__RURAL_ESCAPE__.audio.muted === true);
   const mutedState = await page.evaluate(() => ({
     pressed: document.querySelector('#mute-toggle').getAttribute('aria-pressed'),
     muted: window.__RURAL_ESCAPE__.audio.muted,

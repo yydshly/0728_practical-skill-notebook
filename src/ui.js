@@ -202,14 +202,6 @@ export function createGameUi({
     muteToggle.addEventListener('click', handler);
   }
 
-  function setMuted(muted) {
-    renderSoundState(muted ? 'muted' : 'playing');
-  }
-
-  function onMute(handler) {
-    onSoundToggle(handler);
-  }
-
   const introTimer = setTimeout(completeIntro, 2400);
 
   return {
@@ -227,8 +219,6 @@ export function createGameUi({
     showTutorial,
     renderSoundState,
     onSoundToggle,
-    setMuted,
-    onMute,
     get transitionActive() { return completionActive; },
   };
 }

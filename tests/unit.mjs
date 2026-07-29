@@ -39,6 +39,7 @@ import { createWorldObjectiveMarker } from '../src/world-marker.js';
 import { createTutorialTracker } from '../src/tutorial.js';
 import { createDangerController } from '../src/danger.js';
 import { createAudioFeedback } from '../src/audio-feedback.js';
+import { bindAudioLifecycle } from '../src/audio-lifecycle.js';
 import { createMusicDirector } from '../src/music-director.js';
 import * as uiModule from '../src/ui.js';
 import {
@@ -60,6 +61,130 @@ const MUSIC_ASSETS = Object.freeze(Object.fromEntries(
     }),
   ]),
 ));
+
+test('audio lifecycle follows visibility and cleans every owner exactly once', async (t) => {
+  function createHarness() {
+    const documentRef = new EventTarget();
+    const windowRef = new EventTarget();
+    const calls = {
+      dispose: 0,
+      resume: 0,
+      suspend: 0,
+      unsubscribe: 0,
+    };
+    const removedListeners = {
+      document: [],
+      window: [],
+    };
+    const removeDocumentListener = documentRef.removeEventListener.bind(documentRef);
+    const removeWindowListener = windowRef.removeEventListener.bind(windowRef);
+    documentRef.removeEventListener = (type, listener, options) => {
+      removedListeners.document.push({ listener, options, type });
+      removeDocumentListener(type, listener, options);
+    };
+    windowRef.removeEventListener = (type, listener, options) => {
+      removedListeners.window.push({ listener, options, type });
+      removeWindowListener(type, listener, options);
+    };
+    let hidden = false;
+    let hotDisposer;
+    Object.defineProperty(documentRef, 'hidden', {
+      get: () => hidden,
+    });
+    const audio = {
+      dispose() {
+        calls.dispose += 1;
+      },
+      resume() {
+        calls.resume += 1;
+        return Promise.resolve(true);
+      },
+      suspend() {
+        calls.suspend += 1;
+        return Promise.resolve(true);
+      },
+    };
+    const dispose = bindAudioLifecycle({
+      audio,
+      unsubscribe() {
+        calls.unsubscribe += 1;
+      },
+      documentRef,
+      windowRef,
+      hot: {
+        dispose(callback) {
+          hotDisposer = callback;
+        },
+      },
+    });
+    return {
+      audio,
+      calls,
+      dispose,
+      documentRef,
+      hotDisposer: () => hotDisposer,
+      removedListeners,
+      setHidden(value) {
+        hidden = value;
+      },
+      windowRef,
+    };
+  }
+
+  await t.test('visible to hidden suspends and hidden to visible resumes', async () => {
+    const harness = createHarness();
+    harness.setHidden(true);
+    harness.documentRef.dispatchEvent(new Event('visibilitychange'));
+    harness.setHidden(false);
+    harness.documentRef.dispatchEvent(new Event('visibilitychange'));
+    await Promise.resolve();
+    assert.equal(harness.calls.suspend, 1);
+    assert.equal(harness.calls.resume, 1);
+  });
+
+  await t.test('pagehide unsubscribes, disposes, and removes lifecycle listeners', () => {
+    const harness = createHarness();
+    harness.windowRef.dispatchEvent(new Event('pagehide'));
+    harness.setHidden(true);
+    harness.documentRef.dispatchEvent(new Event('visibilitychange'));
+    harness.windowRef.dispatchEvent(new Event('pagehide'));
+    assert.deepEqual(harness.calls, {
+      dispose: 1,
+      resume: 0,
+      suspend: 0,
+      unsubscribe: 1,
+    });
+    assert.deepEqual(
+      harness.removedListeners.document.map(({ type }) => type),
+      ['visibilitychange'],
+    );
+    assert.deepEqual(
+      harness.removedListeners.window.map(({ type }) => type),
+      ['pagehide'],
+    );
+  });
+
+  await t.test('HMR cleanup matches pagehide cleanup', () => {
+    const harness = createHarness();
+    const result = harness.hotDisposer()();
+    assert.equal(result, undefined);
+    assert.equal(harness.calls.unsubscribe, 1);
+    assert.equal(harness.calls.dispose, 1);
+    harness.setHidden(true);
+    harness.documentRef.dispatchEvent(new Event('visibilitychange'));
+    harness.windowRef.dispatchEvent(new Event('pagehide'));
+    assert.equal(harness.calls.suspend, 0);
+  });
+
+  await t.test('pagehide, HMR, and returned disposer remain idempotent', () => {
+    const harness = createHarness();
+    assert.equal(harness.windowRef.dispatchEvent(new Event('pagehide')), true);
+    assert.equal(harness.hotDisposer()(), undefined);
+    assert.equal(harness.dispose(), undefined);
+    assert.equal(harness.calls.unsubscribe, 1);
+    assert.equal(harness.calls.dispose, 1);
+  });
+});
 
 function createAssetReader({ failures = new Set() } = {}) {
   const counts = new Map();

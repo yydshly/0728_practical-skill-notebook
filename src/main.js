@@ -8,7 +8,8 @@ import { createResident } from './characters.js';
 import { createStoryDirector } from './story.js';
 import { createPursuer } from './pursuer.js';
 import { createAtmosphere } from './atmosphere.js';
-import { createGameUi } from './ui.js';
+import { createGameUi, deriveSoundState } from './ui.js';
+import { bindAudioLifecycle } from './audio-lifecycle.js';
 import { nearestInteraction } from './interactions.js';
 import {
   OBJECTIVE_DEFINITIONS,
@@ -24,6 +25,21 @@ import { createWorldObjectiveMarker } from './world-marker.js';
 import { createTutorialTracker } from './tutorial.js';
 import { createDangerController } from './danger.js';
 import { createAudioFeedback } from './audio-feedback.js';
+import explorationOgg from './assets/audio/rural-dusk-bed.ogg?url';
+import explorationMp3 from './assets/audio/rural-dusk-bed.mp3?url';
+import dangerOgg from './assets/audio/mutation-danger-layer.ogg?url';
+import dangerMp3 from './assets/audio/mutation-danger-layer.mp3?url';
+import revealOgg from './assets/audio/mutation-reveal-stinger.ogg?url';
+import revealMp3 from './assets/audio/mutation-reveal-stinger.mp3?url';
+import escapeOgg from './assets/audio/south-gate-escape-stinger.ogg?url';
+import escapeMp3 from './assets/audio/south-gate-escape-stinger.mp3?url';
+
+const productionMusicAssets = {
+  exploration: { ogg: explorationOgg, mp3: explorationMp3 },
+  danger: { ogg: dangerOgg, mp3: dangerMp3 },
+  reveal: { ogg: revealOgg, mp3: revealMp3 },
+  escape: { ogg: escapeOgg, mp3: escapeMp3 },
+};
 
 const canvas = document.querySelector('#game');
 const shell = document.querySelector('.game-shell');
@@ -31,6 +47,7 @@ const title = document.querySelector('.title-lockup');
 const objective = document.querySelector('#objective');
 const subtitle = document.querySelector('#subtitle');
 const interaction = document.querySelector('#interaction');
+const searchParams = new URLSearchParams(window.location.search);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
@@ -69,7 +86,32 @@ const ui = createGameUi({
   completionToast: document.querySelector('#completion-toast'),
   muteToggle: document.querySelector('#mute-toggle'),
 });
-const audio = createAudioFeedback();
+const forceMissingAudio =
+  import.meta.env.DEV
+  && searchParams.get('audio-fixture') === 'missing';
+const musicAssets = forceMissingAudio
+  ? Object.fromEntries(
+      Object.keys(productionMusicAssets).map((role) => [
+        role,
+        {
+          ogg: `/__audio-fixture__/missing/${role}.ogg`,
+          mp3: `/__audio-fixture__/missing/${role}.mp3`,
+        },
+      ]),
+    )
+  : productionMusicAssets;
+const audio = createAudioFeedback({ musicAssets });
+const unsubscribeAudio = audio.subscribe((snapshot) => {
+  ui.renderSoundState(deriveSoundState(snapshot));
+});
+void audio.prefetch();
+bindAudioLifecycle({
+  audio,
+  unsubscribe: unsubscribeAudio,
+  documentRef: document,
+  windowRef: window,
+  hot: import.meta.hot,
+});
 const worldMarker = createWorldObjectiveMarker(scene);
 const dangerController = createDangerController();
 const pursuer = createPursuer(scene, {
@@ -120,7 +162,6 @@ const allowedKinds = {
   visit_courtyard: ['neighbour'],
   reach_granary: ['flashlight'],
 };
-const searchParams = new URLSearchParams(window.location.search);
 const hasEvidenceParam = searchParams.has('evidence');
 const evidenceState = searchParams.get('evidence');
 const evidenceFixtures = {
@@ -254,12 +295,24 @@ function setKey(event, pressed) {
   if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') input.sprint = pressed;
 }
 
-function unlockAudio() {
-  audio.unlock();
+async function handleAudioGesture(event, { toggle = false } = {}) {
+  if (!event.isTrusted) return false;
+
+  const snapshot = audio.getSnapshot();
+  if (toggle) {
+    if (snapshot.muted || snapshot.musicState.playback !== 'playing') {
+      audio.setMuted(false);
+      return audio.unlock();
+    }
+    audio.setMuted(true);
+    return true;
+  }
+
+  return audio.unlock();
 }
 
 addEventListener('keydown', (event) => {
-  unlockAudio();
+  void handleAudioGesture(event);
   setKey(event, true);
   if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(event.code)) tutorial.complete('move');
   if ((event.code === 'ShiftLeft' || event.code === 'ShiftRight') && !event.repeat) {
@@ -276,7 +329,9 @@ addEventListener('keydown', (event) => {
   }
 });
 addEventListener('keyup', (event) => setKey(event, false));
-canvas.addEventListener('pointerdown', unlockAudio);
+canvas.addEventListener('pointerdown', (event) => {
+  void handleAudioGesture(event);
+});
 createCameraPointerInput({
   surface: canvas,
   eventTarget: window,
@@ -287,12 +342,8 @@ createCameraPointerInput({
   },
 });
 addEventListener('resize', resize);
-ui.onMute(() => {
-  ui.setMuted(audio.toggleMuted());
-});
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) audio.suspend();
-  else audio.resume();
+ui.onSoundToggle((event) => {
+  void handleAudioGesture(event, { toggle: true });
 });
 
 function frame(now) {
@@ -324,6 +375,22 @@ cameraController.snap();
 refreshFeedback(0, 0);
 requestAnimationFrame(frame);
 
+const audioDebug = {};
+for (const key of [
+  'contextState',
+  'assetState',
+  'musicState',
+  'dangerMix',
+  'activeVoices',
+  'muted',
+]) {
+  Object.defineProperty(audioDebug, key, {
+    enumerable: true,
+    get: () => audio.getSnapshot()[key],
+  });
+}
+Object.freeze(audioDebug);
+
 window.__RURAL_ESCAPE__ = {
   state,
   restart,
@@ -337,7 +404,7 @@ window.__RURAL_ESCAPE__ = {
   get actorColliders() {
     return village.actorColliders.map((collider) => ({ ...collider }));
   },
-  audio,
+  audio: audioDebug,
   rendererPixelRatio: renderer.getPixelRatio(),
   interactForTest: storyDirector.interact,
   setStoryStateForTest(flags, objectiveName) {
