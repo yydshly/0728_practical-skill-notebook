@@ -40,7 +40,7 @@ import { createTutorialTracker } from '../src/tutorial.js';
 import { createDangerController } from '../src/danger.js';
 import { createAudioFeedback } from '../src/audio-feedback.js';
 import { createMusicDirector } from '../src/music-director.js';
-import { createGameUi } from '../src/ui.js';
+import * as uiModule from '../src/ui.js';
 import {
   FakeAudioContext,
   decodeAssetIdentity,
@@ -49,6 +49,7 @@ import {
 
 const { computeThirdPersonPose } = cameraMath;
 const { buildVillageGate } = buildings;
+const { createGameUi } = uiModule;
 
 const MUSIC_ASSETS = Object.freeze(Object.fromEntries(
   ['exploration', 'danger', 'reveal', 'escape'].map((role) => [
@@ -1519,12 +1520,16 @@ function createTrackedElement({ childSpan = null } = {}) {
     style: 0,
     textContent: 0,
   };
+  const attributeValues = {};
   const datasetValues = {};
+  const eventListeners = new Map();
   const styleValues = {};
+  let disabled = false;
   let hidden = false;
   let textContent = '';
   return {
     writes,
+    eventListeners,
     dataset: new Proxy(datasetValues, {
       set(target, key, value) {
         writes.dataset += 1;
@@ -1541,6 +1546,10 @@ function createTrackedElement({ childSpan = null } = {}) {
         styleValues[name] = value;
       },
     },
+    get disabled() { return disabled; },
+    set disabled(value) {
+      disabled = value;
+    },
     get hidden() { return hidden; },
     set hidden(value) {
       writes.hidden += 1;
@@ -1551,10 +1560,21 @@ function createTrackedElement({ childSpan = null } = {}) {
       writes.textContent += 1;
       textContent = value;
     },
-    setAttribute() {
+    setAttribute(name, value) {
       writes.attributes += 1;
+      attributeValues[name] = String(value);
     },
-    addEventListener() {},
+    getAttribute(name) {
+      return Object.hasOwn(attributeValues, name) ? attributeValues[name] : null;
+    },
+    addEventListener(type, listener) {
+      const listeners = eventListeners.get(type) ?? [];
+      listeners.push(listener);
+      eventListeners.set(type, listeners);
+    },
+    dispatchStoredEvent(type, event) {
+      for (const listener of eventListeners.get(type) ?? []) listener(event);
+    },
     querySelector(selector) {
       return selector === 'span' ? childSpan : null;
     },
@@ -1574,6 +1594,172 @@ function totalTrackedWrites(...elements) {
     0,
   );
 }
+
+function createTrackedGameUi() {
+  const elements = Object.fromEntries([
+    'shell',
+    'title',
+    'missionHud',
+    'missionStep',
+    'missionTitle',
+    'missionClue',
+    'objective',
+    'subtitle',
+    'approachPrompt',
+    'interactionSpan',
+    'tutorialHint',
+    'compass',
+    'compassLabel',
+    'compassDistance',
+    'marker',
+    'dangerState',
+    'completionToast',
+    'muteToggle',
+  ].map((name) => [name, createTrackedElement()]));
+  elements.interaction = createTrackedElement({ childSpan: elements.interactionSpan });
+  return {
+    elements,
+    ui: createGameUi(elements),
+  };
+}
+
+test('sound control renders every accessible state', () => {
+  const { elements, ui } = createTrackedGameUi();
+  const states = [
+    {
+      state: 'locked',
+      icon: '🔈',
+      label: '开启声音',
+      pressed: 'false',
+      busy: 'false',
+      disabled: false,
+    },
+    {
+      state: 'loading',
+      icon: '…',
+      label: '正在加载声音',
+      pressed: 'false',
+      busy: 'true',
+      disabled: true,
+    },
+    {
+      state: 'playing',
+      icon: '🔊',
+      label: '关闭声音',
+      pressed: 'false',
+      busy: 'false',
+      disabled: false,
+    },
+    {
+      state: 'muted',
+      icon: '🔇',
+      label: '开启声音',
+      pressed: 'true',
+      busy: 'false',
+      disabled: false,
+    },
+    {
+      state: 'error',
+      icon: '⚠',
+      label: '重试声音',
+      pressed: 'false',
+      busy: 'false',
+      disabled: false,
+    },
+  ];
+
+  for (const expected of states) {
+    ui.renderSoundState(expected.state);
+    const button = elements.muteToggle;
+    assert.equal(button.dataset.audioState, expected.state);
+    assert.equal(button.getAttribute('aria-label'), expected.label);
+    assert.equal(button.getAttribute('title'), expected.label);
+    assert.equal(button.getAttribute('aria-pressed'), expected.pressed);
+    assert.equal(button.getAttribute('aria-busy'), expected.busy);
+    assert.equal(button.disabled, expected.disabled);
+    assert.equal(button.textContent, expected.icon);
+  }
+});
+
+test('derives sound state in mute error loading playing locked priority', () => {
+  const base = {
+    muted: false,
+    contextState: 'suspended',
+    assetState: 'idle',
+    musicState: { playback: 'idle' },
+  };
+  const cases = [
+    {
+      snapshot: {
+        ...base,
+        muted: true,
+        contextState: 'unavailable',
+        assetState: 'error',
+        musicState: { playback: 'error' },
+      },
+      expected: 'muted',
+    },
+    {
+      snapshot: {
+        ...base,
+        contextState: 'unavailable',
+        musicState: { playback: 'loading' },
+      },
+      expected: 'error',
+    },
+    {
+      snapshot: {
+        ...base,
+        assetState: 'error',
+        musicState: { playback: 'loading' },
+      },
+      expected: 'error',
+    },
+    {
+      snapshot: {
+        ...base,
+        musicState: { playback: 'error' },
+      },
+      expected: 'error',
+    },
+    {
+      snapshot: {
+        ...base,
+        musicState: { playback: 'loading' },
+      },
+      expected: 'loading',
+    },
+    {
+      snapshot: {
+        ...base,
+        musicState: { playback: 'playing' },
+      },
+      expected: 'playing',
+    },
+    {
+      snapshot: base,
+      expected: 'locked',
+    },
+  ];
+
+  for (const { snapshot, expected } of cases) {
+    assert.equal(uiModule.deriveSoundState(snapshot), expected);
+  }
+});
+
+test('sound control renders toggle events without wrapping the trusted click', () => {
+  const { elements, ui } = createTrackedGameUi();
+  const originalEvent = Object.freeze({ isTrusted: 'trusted-sentinel' });
+  let receivedEvent;
+
+  ui.onSoundToggle((event) => {
+    receivedEvent = event;
+  });
+  elements.muteToggle.dispatchStoredEvent('click', originalEvent);
+
+  assert.strictEqual(receivedEvent, originalEvent);
+  assert.equal(receivedEvent.isTrusted, 'trusted-sentinel');
+});
 
 test('unlocked left-button drag rotates while ordinary hover stays inert', () => {
   const surface = new EventTarget();

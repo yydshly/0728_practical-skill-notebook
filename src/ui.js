@@ -1,3 +1,57 @@
+const SOUND_CONTROL_STATES = Object.freeze({
+  locked: Object.freeze({
+    icon: '🔈',
+    label: '开启声音',
+    pressed: false,
+    busy: false,
+    disabled: false,
+  }),
+  loading: Object.freeze({
+    icon: '…',
+    label: '正在加载声音',
+    pressed: false,
+    busy: true,
+    disabled: true,
+  }),
+  playing: Object.freeze({
+    icon: '🔊',
+    label: '关闭声音',
+    pressed: false,
+    busy: false,
+    disabled: false,
+  }),
+  muted: Object.freeze({
+    icon: '🔇',
+    label: '开启声音',
+    pressed: true,
+    busy: false,
+    disabled: false,
+  }),
+  error: Object.freeze({
+    icon: '⚠',
+    label: '重试声音',
+    pressed: false,
+    busy: false,
+    disabled: false,
+  }),
+});
+
+/**
+ * @param {AudioFeedbackSnapshot} snapshot
+ * @returns {'locked'|'loading'|'playing'|'muted'|'error'}
+ */
+export function deriveSoundState(snapshot) {
+  if (snapshot.muted) return 'muted';
+  if (
+    snapshot.contextState === 'unavailable'
+    || snapshot.assetState === 'error'
+    || snapshot.musicState.playback === 'error'
+  ) return 'error';
+  if (snapshot.musicState.playback === 'loading') return 'loading';
+  if (snapshot.musicState.playback === 'playing') return 'playing';
+  return 'locked';
+}
+
 export function createGameUi({
   shell,
   title,
@@ -133,14 +187,27 @@ export function createGameUi({
     tutorialHint.textContent = tutorial?.text ?? '';
   }
 
+  function renderSoundState(state) {
+    const definition = SOUND_CONTROL_STATES[state];
+    setDataset(muteToggle, 'audioState', state);
+    muteToggle.setAttribute('aria-label', definition.label);
+    muteToggle.setAttribute('title', definition.label);
+    muteToggle.setAttribute('aria-pressed', String(definition.pressed));
+    muteToggle.setAttribute('aria-busy', String(definition.busy));
+    muteToggle.disabled = definition.disabled;
+    setText(muteToggle, definition.icon);
+  }
+
+  function onSoundToggle(handler) {
+    muteToggle.addEventListener('click', handler);
+  }
+
   function setMuted(muted) {
-    muteToggle.setAttribute('aria-pressed', String(muted));
-    muteToggle.setAttribute('aria-label', muted ? '开启音效' : '关闭音效');
-    muteToggle.textContent = muted ? '🔇' : '🔊';
+    renderSoundState(muted ? 'muted' : 'playing');
   }
 
   function onMute(handler) {
-    muteToggle.addEventListener('click', handler);
+    onSoundToggle(handler);
   }
 
   const introTimer = setTimeout(completeIntro, 2400);
@@ -158,6 +225,8 @@ export function createGameUi({
     renderDanger,
     showCompletion,
     showTutorial,
+    renderSoundState,
+    onSoundToggle,
     setMuted,
     onMute,
     get transitionActive() { return completionActive; },

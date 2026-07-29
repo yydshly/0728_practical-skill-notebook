@@ -176,11 +176,27 @@ h1 {
 .mute-toggle {
   background: rgba(13, 17, 15, .52);
   border: 1px solid rgba(245, 240, 220, .22);
+  border-radius: 999px;
   bottom: 1rem;
   color: inherit;
   cursor: pointer;
+  min-height: 44px;
+  min-width: 44px;
   pointer-events: auto;
   right: 1rem;
+}
+
+.mute-toggle:focus-visible {
+  outline: 2px solid #f3c591;
+  outline-offset: 3px;
+}
+
+.mute-toggle[data-audio-state="loading"] {
+  cursor: progress;
+}
+
+.mute-toggle[data-audio-state="error"] {
+  border-color: rgba(231, 160, 139, 0.72);
 }
 
 .danger-vignette {

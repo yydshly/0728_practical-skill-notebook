@@ -33,7 +33,16 @@
       <p id="approach-prompt" class="approach-prompt" hidden></p>
       <p id="interaction" class="interaction" hidden><kbd>E</kbd><span></span></p>
       <p id="tutorial-hint" class="tutorial-hint">WASD 移动</p>
-      <button id="mute-toggle" class="mute-toggle" type="button" aria-pressed="false" aria-label="关闭音效">🔊</button>
+      <button
+        id="mute-toggle"
+        class="mute-toggle"
+        type="button"
+        data-audio-state="locked"
+        aria-pressed="false"
+        aria-busy="false"
+        aria-label="开启声音"
+        title="开启声音"
+      >🔈</button>
     </main>
     <script type="module" src="/src/main.js"></script>
   </body>
