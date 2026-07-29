@@ -4,8 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "audio:render": "node scripts/render-rural-score.mjs",
     "dev": "vite",
     "build": "vite build",
+    "test:audio": "node --test tests/audio-assets.mjs",
     "test:unit": "node --test tests/unit.mjs",
     "test": "npm run test:unit && node tests/smoke.mjs"
   },

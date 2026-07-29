@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "pipelineStage": "rendered",
+  "provenance": {
+    "source": "original procedural composition for rural-mutation-escape",
+    "prohibitedDerivation": "not modeled on a named artist or protected work"
+  },
+  "generator": {
+    "id": "rural-score-core",
+    "version": "1.0.0",
+    "script": "scripts/rural-score-core.mjs"
+  },
+  "format": {
+    "sampleRate": 48000,
+    "channels": 2,
+    "bitDepth": 16,
+    "bpm": 60
+  },
+  "assets": [
+    {
+      "id": "rural-dusk-bed",
+      "role": "exploration",
+      "kind": "loop",
+      "seed": 1296651092,
+      "durationSeconds": 48,
+      "sampleFrames": 2304000,
+      "targetLufs": -22,
+      "loopStart": 0,
+      "loopEnd": 48,
+      "sourcePcmSha256": "d9b8a025bd96305c2278ce9b2029f6412f800934734ac9df030ec456f6bfbdac",
+      "analysis": {
+        "peak": 0.18823242,
+        "dcOffset": -0.00000598,
+        "rms": 0.06941721,
+        "seamDelta": 0,
+        "approximateLufs": -23.862
+      },
+      "files": {
+        "wav": {
+          "path": "audio-source/masters/rural-dusk-bed.wav",
+          "bytes": 9216044,
+          "sha256": "a9116eb0e014fac5547fa63bc4ac43e498f16be21bb61980aac6e718870efee5"
+        }
+      }
+    },
+    {
+      "id": "mutation-danger-layer",
+      "role": "danger",
+      "kind": "loop",
+      "seed": 1297437761,
+      "durationSeconds": 48,
+      "sampleFrames": 2304000,
+      "targetLufs": -25,
+      "loopStart": 0,
+      "loopEnd": 48,
+      "sourcePcmSha256": "a8d353564306cf678272e4fada09066c766f1541990b968f747aa724990f5b92",
+      "analysis": {
+        "peak": 0.24200439,
+        "dcOffset": 0.00003626,
+        "rms": 0.06916204,
+        "seamDelta": 0,
+        "approximateLufs": -23.894
+      },
+      "files": {
+        "wav": {
+          "path": "audio-source/masters/mutation-danger-layer.wav",
+          "bytes": 9216044,
+          "sha256": "0285da58857be81f3d57fe468aae6a876881f563b329527ec7c46d601c1e3432"
+        }
+      }
+    },
+    {
+      "id": "mutation-reveal-stinger",
+      "role": "reveal",
+      "kind": "stinger",
+      "seed": 1380275788,
+      "durationSeconds": 3,
+      "sampleFrames": 144000,
+      "targetLufs": -18,
+      "sourcePcmSha256": "b9fba2181c48e1fa5227021af6de679f5cf0fdabf2b8f7b1f142685499d1c7b8",
+      "analysis": {
+        "peak": 0.36599731,
+        "dcOffset": 0.0003437,
+        "rms": 0.04813439,
+        "seamDelta": 0.02087402,
+        "approximateLufs": -27.042
+      },
+      "files": {
+        "wav": {
+          "path": "audio-source/masters/mutation-reveal-stinger.wav",
+          "bytes": 576044,
+          "sha256": "ddeb787bd373824c1eef442658a07529694dc161e791d98891dbf7ecff889300"
+        }
+      }
+    },
+    {
+      "id": "south-gate-escape-stinger",
+      "role": "escape",
+      "kind": "stinger",
+      "seed": 1195463749,
+      "durationSeconds": 6,
+      "sampleFrames": 288000,
+      "targetLufs": -18,
+      "sourcePcmSha256": "c1fd3336b1d28e5009d437d6149f1164e16d7c79f35e6b9f76fb785f6a44a09a",
+      "analysis": {
+        "peak": 0.15499878,
+        "dcOffset": -0.000009,
+        "rms": 0.04033908,
+        "seamDelta": 0,
+        "approximateLufs": -28.576
+      },
+      "files": {
+        "wav": {
+          "path": "audio-source/masters/south-gate-escape-stinger.wav",
+          "bytes": 1152044,
+          "sha256": "71d7f4acfba8571645e2ce152ed756f71f70f6ce8adcaea5f27adb01f1d552a0"
+        }
+      }
+    }
+  ]
+}
