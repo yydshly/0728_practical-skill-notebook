@@ -39,10 +39,490 @@ import { createWorldObjectiveMarker } from '../src/world-marker.js';
 import { createTutorialTracker } from '../src/tutorial.js';
 import { createDangerController } from '../src/danger.js';
 import { createAudioFeedback } from '../src/audio-feedback.js';
+import { createMusicDirector } from '../src/music-director.js';
 import { createGameUi } from '../src/ui.js';
+import {
+  FakeAudioContext,
+  encodeAssetIdentity,
+} from './fake-audio-context.mjs';
 
 const { computeThirdPersonPose } = cameraMath;
 const { buildVillageGate } = buildings;
+
+const MUSIC_ASSETS = Object.freeze(Object.fromEntries(
+  ['exploration', 'danger', 'reveal', 'escape'].map((role) => [
+    role,
+    Object.freeze({
+      ogg: `${role}.ogg`,
+      mp3: `${role}.mp3`,
+    }),
+  ]),
+));
+
+function createAssetReader({ failures = new Set() } = {}) {
+  const counts = new Map();
+  return {
+    counts,
+    async readAsset(url) {
+      counts.set(url, (counts.get(url) ?? 0) + 1);
+      if (failures.has(url)) throw new Error(`network failure for ${url}`);
+      return encodeAssetIdentity(url);
+    },
+  };
+}
+
+function createDeferredAssetReader() {
+  const counts = new Map();
+  const pending = new Map();
+  return {
+    counts,
+    pending,
+    readAsset(url) {
+      counts.set(url, (counts.get(url) ?? 0) + 1);
+      return new Promise((resolve) => pending.set(url, resolve));
+    },
+  };
+}
+
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function createDirectorHarness({
+  context = new FakeAudioContext(),
+  reader = createAssetReader(),
+  logger = { warn() {} },
+  onStateChange = () => {},
+} = {}) {
+  const director = createMusicDirector({
+    musicAssets: MUSIC_ASSETS,
+    readAsset: reader.readAsset,
+    logger,
+    onStateChange,
+  });
+  const outputs = {
+    context,
+    musicOutput: { type: 'music-output' },
+    stingerOutput: { type: 'stinger-output' },
+  };
+  return { context, director, outputs, reader };
+}
+
+function assetUrls(codec) {
+  return Object.values(MUSIC_ASSETS).map((asset) => asset[codec]);
+}
+
+test('music director coalesces concurrent prefetch and fetches each OGG asset once', async () => {
+  const { director, reader } = createDirectorHarness();
+
+  const [first, second] = await Promise.all([
+    director.prefetch(),
+    director.prefetch(),
+  ]);
+
+  assert.deepEqual([first, second], [true, true]);
+  assert.deepEqual(
+    assetUrls('ogg').map((url) => reader.counts.get(url)),
+    [1, 1, 1, 1],
+  );
+  assert.deepEqual(
+    assetUrls('mp3').map((url) => reader.counts.get(url) ?? 0),
+    [0, 0, 0, 0],
+  );
+  assert.equal(director.getSnapshot().assetState, 'prefetched');
+});
+
+test('music director fallback replaces a failed OGG fetch with one complete MP3 set', async () => {
+  const reader = createAssetReader({ failures: new Set(['exploration.ogg']) });
+  const { context, director, outputs } = createDirectorHarness({ reader });
+
+  assert.equal(await director.unlock(outputs), true);
+  assert.deepEqual(
+    assetUrls('ogg').map((url) => reader.counts.get(url)),
+    [1, 1, 1, 1],
+  );
+  assert.deepEqual(
+    assetUrls('mp3').map((url) => reader.counts.get(url)),
+    [1, 1, 1, 1],
+  );
+  assert.deepEqual(
+    context.decodeCalls.map(({ identity }) => identity),
+    assetUrls('mp3'),
+  );
+  assert.deepEqual(
+    context.sources.map(({ buffer }) => buffer.identity),
+    ['exploration.mp3', 'danger.mp3'],
+  );
+});
+
+test('music director fallback discards an invalid OGG decode set for a complete MP3 set', async () => {
+  const context = new FakeAudioContext({
+    decodePlan(identity) {
+      return identity === 'danger.ogg'
+        ? { sampleRate: 44_100 }
+        : undefined;
+    },
+  });
+  const { director, outputs } = createDirectorHarness({ context });
+
+  assert.equal(await director.unlock(outputs), true);
+  assert.deepEqual(
+    context.decodeCalls.map(({ identity }) => identity),
+    [...assetUrls('ogg'), ...assetUrls('mp3')],
+  );
+  assert.deepEqual(
+    context.sources.map(({ buffer }) => buffer.identity),
+    ['exploration.mp3', 'danger.mp3'],
+  );
+  assert.equal(
+    context.sources.some(({ buffer }) => buffer.identity.endsWith('.ogg')),
+    false,
+  );
+});
+
+test('music director retains only one successful decoded codec set', async () => {
+  const { context, director, outputs } = createDirectorHarness();
+
+  assert.equal(await director.unlock(outputs), true);
+
+  assert.deepEqual(
+    context.decodeCalls.map(({ identity }) => identity),
+    assetUrls('ogg'),
+  );
+  assert.deepEqual(
+    context.sources.map(({ buffer }) => buffer.identity),
+    ['exploration.ogg', 'danger.ogg'],
+  );
+  assert.equal(director.getSnapshot().assetState, 'ready');
+});
+
+test('music director coalesces concurrent prefetch and unlock work', async () => {
+  const reader = createDeferredAssetReader();
+  const { director, outputs } = createDirectorHarness({ reader });
+
+  const prefetched = director.prefetch();
+  const unlocked = director.unlock(outputs);
+  assert.deepEqual([...reader.pending.keys()], assetUrls('ogg'));
+  for (const [url, resolve] of reader.pending) resolve(encodeAssetIdentity(url));
+
+  assert.deepEqual(await Promise.all([prefetched, unlocked]), [true, true]);
+  assert.deepEqual(
+    assetUrls('ogg').map((url) => reader.counts.get(url)),
+    [1, 1, 1, 1],
+  );
+  assert.equal(director.getSnapshot().loopGeneration, 1);
+});
+
+test('music director starts synchronized exploration and danger loops', async () => {
+  const context = new FakeAudioContext({ currentTime: 12.5 });
+  const { director, outputs } = createDirectorHarness({ context });
+
+  assert.equal(await director.unlock(outputs), true);
+
+  assert.equal(context.sources.length, 2);
+  for (const source of context.sources) {
+    assert.equal(source.loop, true);
+    assert.equal(source.loopStart, 0);
+    assert.equal(source.loopEnd, 48);
+    assert.deepEqual(source.startCalls, [[12.55]]);
+  }
+  assert.deepEqual(director.getSnapshot(), {
+    assetState: 'ready',
+    playback: 'playing',
+    mode: 'safe',
+    loopGeneration: 1,
+    startedAt: 12.55,
+    dangerMix: 0,
+    activeVoices: 0,
+  });
+});
+
+test('music director repeated unlock keeps exactly one loop generation', async () => {
+  const { context, director, outputs } = createDirectorHarness();
+
+  assert.equal(await director.unlock(outputs), true);
+  assert.equal(await director.unlock(outputs), true);
+  assert.equal(await director.unlock(outputs), true);
+
+  assert.equal(context.sources.length, 2);
+  assert.equal(director.getSnapshot().loopGeneration, 1);
+});
+
+test('music director rejects invalid technical buffer specifications without throwing', async (t) => {
+  const sampleRate = 48_000;
+  const cases = [
+    {
+      name: 'wrong sample rate',
+      decodePlan: () => ({ sampleRate: 44_100 }),
+    },
+    {
+      name: 'wrong channel count',
+      decodePlan: () => ({ numberOfChannels: 1 }),
+    },
+    {
+      name: 'wrong loop duration',
+      decodePlan: (identity) => (
+        /exploration|danger/.test(identity)
+          ? { length: (48 * sampleRate) - 2 }
+          : undefined
+      ),
+    },
+    {
+      name: 'unequal loop sample counts',
+      decodePlan: (identity) => (
+        identity.includes('danger')
+          ? { length: (48 * sampleRate) - 1 }
+          : undefined
+      ),
+    },
+    {
+      name: 'wrong reveal duration',
+      decodePlan: (identity) => (
+        identity.includes('reveal')
+          ? { length: (3 * sampleRate) - 2 }
+          : undefined
+      ),
+    },
+    {
+      name: 'wrong escape duration',
+      decodePlan: (identity) => (
+        identity.includes('escape')
+          ? { length: (6 * sampleRate) + 2 }
+          : undefined
+      ),
+    },
+  ];
+
+  for (const scenario of cases) {
+    await t.test(scenario.name, async () => {
+      const context = new FakeAudioContext({ sampleRate, decodePlan: scenario.decodePlan });
+      const { director, outputs } = createDirectorHarness({ context });
+
+      assert.equal(await director.unlock(outputs), false);
+      assert.equal(context.sources.length, 0);
+      assert.equal(director.getSnapshot().assetState, 'error');
+      assert.equal(director.getSnapshot().playback, 'error');
+    });
+  }
+});
+
+test('music director accepts one-sample stinger duration tolerance', async () => {
+  const sampleRate = 48_000;
+  const context = new FakeAudioContext({
+    sampleRate,
+    decodePlan(identity) {
+      if (identity.includes('reveal')) return { length: (3 * sampleRate) - 1 };
+      if (identity.includes('escape')) return { length: (6 * sampleRate) + 1 };
+      return undefined;
+    },
+  });
+  const { director, outputs } = createDirectorHarness({ context });
+
+  assert.equal(await director.unlock(outputs), true);
+  assert.equal(director.getSnapshot().playback, 'playing');
+});
+
+test('music director zeros both layer gains before connecting or starting sources', async () => {
+  const { context, director, outputs } = createDirectorHarness();
+
+  assert.equal(await director.unlock(outputs), true);
+
+  const firstStartIndex = context.events.findIndex(({ type }) => type === 'source-start');
+  assert.equal(context.gains.length, 2);
+  for (const gain of context.gains) {
+    assert.equal(gain.gain.value, 0);
+    const zeroIndex = context.events.findIndex((event) => (
+      event.type === 'audio-param'
+      && event.param === gain.gain
+      && event.method === 'setValueAtTime'
+      && event.args[0] === 0
+    ));
+    const connectIndex = context.events.findIndex((event) => (
+      event.type === 'connect' && event.node === gain
+    ));
+    assert.ok(zeroIndex >= 0);
+    assert.ok(zeroIndex < connectIndex);
+    assert.ok(zeroIndex < firstStartIndex);
+  }
+});
+
+test('music director unlock retries after a failed MP3 decode without stacking loops', async () => {
+  const reader = createAssetReader({ failures: new Set(['exploration.ogg']) });
+  const context = new FakeAudioContext({
+    decodePlan(identity, attempt) {
+      if (identity === 'danger.mp3' && attempt === 1) {
+        return { reject: true };
+      }
+      return undefined;
+    },
+  });
+  const { director, outputs } = createDirectorHarness({ context, reader });
+
+  assert.equal(await director.unlock(outputs), false);
+  assert.equal(director.getSnapshot().playback, 'error');
+  assert.equal(context.sources.length, 0);
+
+  assert.equal(await director.unlock(), true);
+  assert.equal(context.sources.length, 2);
+  assert.equal(director.getSnapshot().loopGeneration, 1);
+  assert.deepEqual(
+    assetUrls('ogg').map((url) => reader.counts.get(url)),
+    [2, 2, 2, 2],
+  );
+  assert.deepEqual(
+    assetUrls('mp3').map((url) => reader.counts.get(url)),
+    [2, 2, 2, 2],
+  );
+});
+
+test('music director retrying unlock remains loading until playback starts', async () => {
+  const snapshots = [];
+  const reader = createAssetReader({ failures: new Set(['exploration.ogg']) });
+  const context = new FakeAudioContext({
+    decodePlan(identity, attempt) {
+      if (identity === 'danger.mp3' && attempt === 1) {
+        return { reject: true };
+      }
+      return undefined;
+    },
+  });
+  const { director, outputs } = createDirectorHarness({
+    context,
+    reader,
+    onStateChange: (snapshot) => snapshots.push(snapshot),
+  });
+  assert.equal(await director.unlock(outputs), false);
+
+  const retryStart = snapshots.length;
+  assert.equal(await director.unlock(outputs), true);
+  const retrySnapshots = snapshots.slice(retryStart);
+
+  assert.ok(retrySnapshots.some(({ assetState }) => assetState === 'loading'));
+  assert.equal(
+    retrySnapshots.some((snapshot) => (
+      snapshot.assetState === 'loading' && snapshot.playback !== 'loading'
+    )),
+    false,
+  );
+});
+
+test('music director preserves non-rejecting and idempotent public contracts', async () => {
+  const reader = createAssetReader({
+    failures: new Set([...assetUrls('ogg'), ...assetUrls('mp3')]),
+  });
+  const { director, outputs } = createDirectorHarness({ reader });
+
+  assert.equal(await director.prefetch(), false);
+  assert.equal(await director.unlock(outputs), false);
+  assert.equal(await director.suspendTransientVoices(), true);
+  assert.equal(await director.resume(), true);
+  assert.equal(director.handleStoryEvent({ type: 'unrelated' }), undefined);
+  assert.equal(director.updateDanger({ mode: 'safe', intensity: 0 }), undefined);
+  assert.doesNotThrow(() => {
+    director.dispose();
+    director.dispose();
+  });
+  assert.deepEqual(director.getSnapshot(), {
+    assetState: 'disposed',
+    playback: 'disposed',
+    mode: 'safe',
+    loopGeneration: 0,
+    startedAt: null,
+    dangerMix: 0,
+    activeVoices: 0,
+  });
+  assert.equal(await director.prefetch(), false);
+  assert.equal(await director.unlock(outputs), false);
+  assert.equal(await director.suspendTransientVoices(), false);
+  assert.equal(await director.resume(), false);
+});
+
+test('music director dispose remains terminal when an in-flight prefetch fails', async () => {
+  const reader = createAssetReader({
+    failures: new Set([...assetUrls('ogg'), ...assetUrls('mp3')]),
+  });
+  const { director } = createDirectorHarness({ reader });
+
+  const prefetching = director.prefetch();
+  director.dispose();
+
+  assert.equal(await prefetching, false);
+  assert.equal(director.getSnapshot().assetState, 'disposed');
+  assert.equal(director.getSnapshot().playback, 'disposed');
+});
+
+test('music director concurrent prefetch cannot overwrite a ready fallback', async () => {
+  const counts = new Map();
+  const mp3Pending = new Map();
+  const secondOggPending = new Map();
+  const mp3Started = createDeferred();
+  const dangerDecodeStarted = createDeferred();
+  const dangerDecode = createDeferred();
+  const reader = {
+    counts,
+    readAsset(url) {
+      const count = (counts.get(url) ?? 0) + 1;
+      counts.set(url, count);
+      if (url.endsWith('.mp3')) {
+        const pending = createDeferred();
+        mp3Pending.set(url, pending);
+        mp3Started.resolve();
+        return pending.promise;
+      }
+      if (count === 2) {
+        const pending = createDeferred();
+        secondOggPending.set(url, pending);
+        return pending.promise;
+      }
+      return Promise.resolve(encodeAssetIdentity(url));
+    },
+  };
+  const context = new FakeAudioContext({
+    decodePlan(identity) {
+      if (identity === 'danger.ogg') {
+        dangerDecodeStarted.resolve();
+        return dangerDecode.promise;
+      }
+      return undefined;
+    },
+  });
+  const { director, outputs } = createDirectorHarness({ context, reader });
+
+  const unlocking = director.unlock(outputs);
+  await dangerDecodeStarted.promise;
+  dangerDecode.reject(new Error('OGG decode failed'));
+  await mp3Started.promise;
+
+  const prefetching = director.prefetch();
+  for (const [url, pending] of mp3Pending) {
+    pending.resolve(encodeAssetIdentity(url));
+  }
+  assert.equal(await unlocking, true);
+  assert.equal(director.getSnapshot().assetState, 'ready');
+
+  for (const [url, pending] of secondOggPending) {
+    pending.resolve(encodeAssetIdentity(url));
+  }
+  assert.equal(await prefetching, true);
+  assert.equal(director.getSnapshot().assetState, 'ready');
+  assert.equal(director.getSnapshot().playback, 'playing');
+  assert.equal(context.sources.length, 2);
+  assert.equal(secondOggPending.size, 0);
+  assert.deepEqual(
+    assetUrls('ogg').map((url) => counts.get(url)),
+    [1, 1, 1, 1],
+  );
+  assert.deepEqual(
+    assetUrls('mp3').map((url) => counts.get(url)),
+    [1, 1, 1, 1],
+  );
+});
 
 function createPointerEvent(type, properties) {
   const event = new Event(type);
