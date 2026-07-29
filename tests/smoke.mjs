@@ -92,6 +92,7 @@ try {
     markerHidden: document.querySelector('#screen-marker')?.hidden,
     tutorialText: document.querySelector('#tutorial-hint')?.textContent,
     mutePressed: document.querySelector('#mute-toggle')?.getAttribute('aria-pressed'),
+    compassLive: document.querySelector('#objective-compass')?.getAttribute('aria-live'),
   }));
   if (guidanceHud.missionStep !== '任务 1/4') throw new Error('Expected mission step 1/4');
   if (guidanceHud.missionTitle !== '调查收音机') throw new Error('Expected radio mission title');
@@ -99,7 +100,6 @@ try {
   if (guidanceHud.compassHidden !== false) throw new Error('Expected objective compass');
   if (guidanceHud.tutorialText !== 'WASD 移动') throw new Error('Expected first tutorial hint');
   if (guidanceHud.mutePressed !== 'false') throw new Error('Expected sound enabled state');
-
   const normalEvidenceDataset = await page.evaluate(() => {
     const { evidenceState, renderCalls, renderTriangles } = document.querySelector('.game-shell').dataset;
     return { evidenceState, renderCalls, renderTriangles };
@@ -606,8 +606,10 @@ try {
     {
       id: 'contact',
       position: [0, 8],
-      pursuerPosition: [0, 5.6],
+      pursuerPosition: [1.6, 6.211145618],
       contactPursuer: true,
+      expectedContactDistance: 2.4,
+      minimumLateralSeparation: 1.4,
       minimumPursuerDistance: 2.35,
       objective: 'escape_south_gate',
       flags: { radio: true, neighbour: true, flashlight: true },
@@ -779,6 +781,7 @@ try {
         const shellElement = document.querySelector('.game-shell');
         return {
           position: [game.pursuer.object.position.x, game.pursuer.object.position.z],
+          rotationY: game.pursuer.object.rotation.y,
           state: game.pursuer.state,
           playerDistance: game.pursuer.object.position.distanceTo(game.player.position),
           datasetState: shellElement.dataset.pursuerState,
@@ -814,6 +817,36 @@ try {
         throw new Error(
           `Expected ${evidenceCase.id} readable live spacing, got `
           + `${contactPursuer.playerDistance}/${contactPursuer.datasetDistance}`,
+        );
+      }
+      if (
+        Math.abs(contactPursuer.playerDistance - evidenceCase.expectedContactDistance) > 0.01
+        || Math.abs(contactPursuer.datasetDistance - evidenceCase.expectedContactDistance) > 0.01
+      ) {
+        throw new Error(
+          `Expected ${evidenceCase.id} authored 2.4m contact distance, got `
+          + `${contactPursuer.playerDistance}/${contactPursuer.datasetDistance}`,
+        );
+      }
+      const lateralSeparation = Math.abs(
+        contactPursuer.position[0] - evidenceCase.position[0],
+      );
+      if (lateralSeparation < evidenceCase.minimumLateralSeparation) {
+        throw new Error(
+          `Expected ${evidenceCase.id} at least `
+          + `${evidenceCase.minimumLateralSeparation}m lateral separation, got `
+          + `${lateralSeparation}`,
+        );
+      }
+      const toPlayerX = evidenceCase.position[0] - contactPursuer.position[0];
+      const toPlayerZ = evidenceCase.position[1] - contactPursuer.position[1];
+      const inverseDistance = 1 / Math.hypot(toPlayerX, toPlayerZ);
+      const facingAlignment = Math.sin(contactPursuer.rotationY) * toPlayerX * inverseDistance
+        + Math.cos(contactPursuer.rotationY) * toPlayerZ * inverseDistance;
+      if (!Number.isFinite(facingAlignment) || facingAlignment < 0.999) {
+        throw new Error(
+          `Expected ${evidenceCase.id} pursuer to face the player, got alignment `
+          + `${facingAlignment}`,
         );
       }
     }
@@ -937,6 +970,17 @@ try {
     }
   }
 
+  if (guidanceHud.compassLive !== null) {
+    throw new Error('Expected changing compass distance outside a live region');
+  }
+
+  const normalMotion = await page.evaluate(() => ({
+    missionTransition: getComputedStyle(document.querySelector('.mission-hud')).transitionDuration,
+  }));
+  if (normalMotion.missionTransition === '0s') {
+    throw new Error('Expected normal mission HUD transition to remain animated');
+  }
+
   const reducedPageErrors = [];
   const reducedConsoleErrors = [];
   const reducedPage = await browser.newPage({
@@ -953,6 +997,7 @@ try {
   );
   const reducedMotion = await reducedPage.evaluate(() => ({
     markerAnimation: getComputedStyle(document.querySelector('#screen-marker')).animationName,
+    missionTransition: getComputedStyle(document.querySelector('.mission-hud')).transitionDuration,
     toastTransition: getComputedStyle(document.querySelector('#completion-toast')).transitionDuration,
   }));
   if (reducedMotion.markerAnimation !== 'none') {
@@ -960,6 +1005,9 @@ try {
   }
   if (reducedMotion.toastTransition !== '0s') {
     throw new Error('Expected reduced-motion completion transition to be disabled');
+  }
+  if (reducedMotion.missionTransition !== '0s') {
+    throw new Error('Expected reduced-motion mission transition to be disabled');
   }
   await reducedPage.close();
 

@@ -32,6 +32,7 @@ import { createWorldObjectiveMarker } from '../src/world-marker.js';
 import { createTutorialTracker } from '../src/tutorial.js';
 import { createDangerController } from '../src/danger.js';
 import { createAudioFeedback } from '../src/audio-feedback.js';
+import { createGameUi } from '../src/ui.js';
 
 const { computeThirdPersonPose } = cameraMath;
 const { buildVillageGate } = buildings;
@@ -45,6 +46,70 @@ function createPointerEvent(type, properties) {
     ]),
   ));
   return event;
+}
+
+function createTrackedElement({ childSpan = null } = {}) {
+  const writes = {
+    attributes: 0,
+    dataset: 0,
+    hidden: 0,
+    style: 0,
+    textContent: 0,
+  };
+  const datasetValues = {};
+  const styleValues = {};
+  let hidden = false;
+  let textContent = '';
+  return {
+    writes,
+    dataset: new Proxy(datasetValues, {
+      set(target, key, value) {
+        writes.dataset += 1;
+        target[key] = value;
+        return true;
+      },
+    }),
+    style: {
+      getPropertyValue(name) {
+        return styleValues[name] ?? '';
+      },
+      setProperty(name, value) {
+        writes.style += 1;
+        styleValues[name] = value;
+      },
+    },
+    get hidden() { return hidden; },
+    set hidden(value) {
+      writes.hidden += 1;
+      hidden = value;
+    },
+    get textContent() { return textContent; },
+    set textContent(value) {
+      writes.textContent += 1;
+      textContent = value;
+    },
+    setAttribute() {
+      writes.attributes += 1;
+    },
+    addEventListener() {},
+    querySelector(selector) {
+      return selector === 'span' ? childSpan : null;
+    },
+  };
+}
+
+function resetTrackedWrites(...elements) {
+  for (const element of elements) {
+    for (const key of Object.keys(element.writes)) element.writes[key] = 0;
+  }
+}
+
+function totalTrackedWrites(...elements) {
+  return elements.reduce(
+    (total, element) => total
+      + Object.values(element.writes).reduce((sum, count) => sum + count, 0),
+    0,
+  );
 }
 
 test('unlocked left-button drag rotates while ordinary hover stays inert', () => {
@@ -220,6 +285,117 @@ test('audio feedback swallows node allocation errors after unlocking', async () 
     intensity: 1,
   }, 0));
   audio.dispose();
+});
+
+test('audio feedback cleans up an oscillator when later node allocation fails', async () => {
+  const oscillators = [];
+  let gainAllocations = 0;
+  const audio = createAudioFeedback({
+    AudioContextCtor: class PartiallyThrowingAudioContext {
+      constructor() {
+        this.state = 'running';
+        this.currentTime = 0;
+        this.destination = {};
+      }
+
+      createGain() {
+        gainAllocations += 1;
+        if (gainAllocations > 1) throw new Error('voice gain allocation failed');
+        return {
+          gain: {
+            value: 0,
+            setTargetAtTime() {},
+          },
+          connect() {},
+          disconnect() {},
+        };
+      }
+
+      createOscillator() {
+        const calls = { disconnect: 0, stop: 0 };
+        oscillators.push(calls);
+        return {
+          frequency: { value: 0 },
+          connect() {},
+          disconnect() { calls.disconnect += 1; },
+          stop() { calls.stop += 1; },
+        };
+      }
+    },
+  });
+
+  assert.equal(await audio.unlock(), true);
+  assert.doesNotThrow(() => audio.handleStoryEvent({ type: 'objective-completed' }));
+  assert.equal(oscillators.length, 2);
+  assert.deepEqual(
+    oscillators.map(({ disconnect, stop }) => [disconnect, stop]),
+    [[1, 1], [1, 1]],
+  );
+  audio.dispose();
+});
+
+test('identical mission guidance and danger frames do not rewrite rendered UI', () => {
+  const elements = Object.fromEntries([
+    'shell',
+    'title',
+    'missionHud',
+    'missionStep',
+    'missionTitle',
+    'missionClue',
+    'objective',
+    'subtitle',
+    'approachPrompt',
+    'interactionSpan',
+    'tutorialHint',
+    'compass',
+    'compassLabel',
+    'compassDistance',
+    'marker',
+    'dangerState',
+    'completionToast',
+    'muteToggle',
+  ].map((name) => [name, createTrackedElement()]));
+  elements.interaction = createTrackedElement({ childSpan: elements.interactionSpan });
+  const ui = createGameUi(elements);
+  ui.completeIntro();
+
+  const definition = {
+    step: 4,
+    total: 4,
+    title: 'Escape',
+    clue: 'South gate',
+    objective: 'Reach the gate',
+    actionLabel: null,
+  };
+  const guidance = {
+    targetPosition: { x: 0, y: 0, z: -32 },
+    distanceLabel: '7m',
+    relativeAngle: 0.25,
+    proximity: 'far',
+  };
+  const screenMarker = { x: 620, y: 180, edge: false };
+  const danger = {
+    mode: 'threaten',
+    label: 'Close threat',
+    intensity: 0.9,
+  };
+
+  ui.renderMission(definition);
+  ui.renderGuidance(definition, guidance, screenMarker);
+  ui.renderDanger(danger);
+  const tracked = Object.values(elements);
+  resetTrackedWrites(...tracked);
+
+  ui.renderMission(definition);
+  ui.renderGuidance(definition, guidance, screenMarker);
+  ui.renderDanger(danger);
+
+  assert.equal(totalTrackedWrites(...tracked), 0);
+
+  ui.renderGuidance(definition, { ...guidance, distanceLabel: '6m' }, screenMarker);
+  assert.equal(elements.compassDistance.textContent, '6m');
+  assert.equal(elements.compassDistance.writes.textContent, 1);
+  assert.equal(elements.dangerState.writes.textContent, 0);
 });
 
 test('tutorial tracker reveals each control once in authored order', () => {

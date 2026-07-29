@@ -22,6 +22,28 @@ export function createGameUi({
   let completionTimer;
   let completionActive = false;
 
+  function setText(element, value) {
+    const text = String(value);
+    if (element.textContent !== text) element.textContent = text;
+  }
+
+  function setHidden(element, value) {
+    const hidden = Boolean(value);
+    if (element.hidden !== hidden) element.hidden = hidden;
+  }
+
+  function setDataset(element, name, value) {
+    const text = String(value);
+    if (element.dataset[name] !== text) element.dataset[name] = text;
+  }
+
+  function setStyle(element, name, value) {
+    const text = String(value);
+    if (element.style.getPropertyValue(name) !== text) {
+      element.style.setProperty(name, text);
+    }
+  }
+
   shell.dataset.uiPhase = 'intro';
   title.setAttribute('aria-hidden', 'false');
   interaction.hidden = true;
@@ -32,7 +54,7 @@ export function createGameUi({
   }
 
   function setObjective(text) {
-    objective.textContent = text.replace(/^目标：/, '');
+    setText(objective, text.replace(/^目标：/, ''));
   }
 
   function showSubtitle(text, duration = 4200) {
@@ -45,44 +67,49 @@ export function createGameUi({
   }
 
   function showInteraction(label) {
-    interaction.hidden = !label;
-    interaction.querySelector('span').textContent = label ?? '';
+    setHidden(interaction, !label);
+    setText(interaction.querySelector('span'), label ?? '');
   }
 
   function renderMission(definition) {
     if (completionActive) return;
-    missionStep.textContent = `任务 ${definition.step}/${definition.total}`;
-    missionTitle.textContent = definition.title;
-    missionClue.textContent = definition.clue;
+    setText(missionStep, `任务 ${definition.step}/${definition.total}`);
+    setText(missionTitle, definition.title);
+    setText(missionClue, definition.clue);
     setObjective(definition.objective);
-    missionHud.dataset.state = 'active';
+    setDataset(missionHud, 'state', 'active');
   }
 
   function renderGuidance(definition, snapshot, screenMarker) {
     const visible = Boolean(snapshot.targetPosition);
-    compass.hidden = completionActive || !visible;
-    marker.hidden = completionActive || !visible || !screenMarker;
-    approachPrompt.hidden = completionActive || snapshot.proximity !== 'approach';
-    interaction.hidden = completionActive
-      || snapshot.proximity !== 'interact'
-      || !definition.actionLabel;
+    setHidden(compass, completionActive || !visible);
+    setHidden(marker, completionActive || !visible || !screenMarker);
+    setHidden(approachPrompt, completionActive || snapshot.proximity !== 'approach');
+    setHidden(
+      interaction,
+      completionActive || snapshot.proximity !== 'interact' || !definition.actionLabel,
+    );
     if (!visible) return;
-    compassLabel.textContent = definition.title;
-    compassDistance.textContent = snapshot.distanceLabel;
-    compass.style.setProperty('--bearing', `${snapshot.relativeAngle}rad`);
+    setText(compassLabel, definition.title);
+    setText(compassDistance, snapshot.distanceLabel);
+    setStyle(compass, '--bearing', `${snapshot.relativeAngle}rad`);
     if (screenMarker) {
-      marker.style.transform = `translate3d(${screenMarker.x}px, ${screenMarker.y}px, 0)`;
-      marker.dataset.edge = String(screenMarker.edge);
+      setStyle(
+        marker,
+        'transform',
+        `translate3d(${screenMarker.x}px, ${screenMarker.y}px, 0)`,
+      );
+      setDataset(marker, 'edge', screenMarker.edge);
     }
-    approachPrompt.textContent = `靠近：${definition.title}`;
-    interaction.querySelector('span').textContent = definition.actionLabel ?? '';
+    setText(approachPrompt, `靠近：${definition.title}`);
+    setText(interaction.querySelector('span'), definition.actionLabel ?? '');
   }
 
   function renderDanger(snapshot) {
-    shell.dataset.danger = snapshot.mode;
-    dangerState.hidden = snapshot.mode === 'safe';
-    dangerState.textContent = snapshot.label;
-    shell.style.setProperty('--danger-intensity', snapshot.intensity.toFixed(3));
+    setDataset(shell, 'danger', snapshot.mode);
+    setHidden(dangerState, snapshot.mode === 'safe');
+    setText(dangerState, snapshot.label);
+    setStyle(shell, '--danger-intensity', snapshot.intensity.toFixed(3));
   }
 
   function showCompletion(definition) {

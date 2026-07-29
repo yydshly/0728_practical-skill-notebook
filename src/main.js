@@ -136,8 +136,12 @@ const evidenceFixtures = {
   contact: {
     position: new THREE.Vector3(0, 0, 8),
     pursuer: {
-      position: new THREE.Vector3(0, 0, 5.6),
-      yaw: 0,
+      position: new THREE.Vector3(
+        1.6,
+        0,
+        8 - Math.sqrt(2.4 ** 2 - 1.6 ** 2),
+      ),
+      yaw: Math.atan2(-1.6, Math.sqrt(2.4 ** 2 - 1.6 ** 2)),
       frozen: false,
     },
     flags: { radio: true, neighbour: true, flashlight: true },
