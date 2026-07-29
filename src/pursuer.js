@@ -1,7 +1,17 @@
 import * as THREE from 'three';
 import { createMutant } from './characters.js';
+import { resolveCircleMove } from './collision.js';
 
-export function createPursuer(scene, { navNodes, spawn }) {
+export function createPursuer(
+  scene,
+  {
+    navNodes,
+    spawn,
+    bounds,
+    actorColliders = [],
+  },
+) {
+  const actorRadius = 0.46;
   const rig = createMutant(scene, spawn);
   const object = rig.root;
   const direction = new THREE.Vector3();
@@ -11,6 +21,38 @@ export function createPursuer(scene, { navNodes, spawn }) {
   const contactDistance = 2.4;
   const minimumSeparation = 2.2;
   const resumeChaseDistance = 3;
+  const maximumCollisionStep = 0.2;
+
+  function moveResolved(deltaX, deltaZ) {
+    const requestedDistance = Math.hypot(deltaX, deltaZ);
+    const stepCount = Math.max(
+      1,
+      Math.ceil(requestedDistance / maximumCollisionStep),
+    );
+    const stepX = deltaX / stepCount;
+    const stepZ = deltaZ / stepCount;
+    let actualAdvance = 0;
+
+    for (let index = 0; index < stepCount; index += 1) {
+      const next = resolveCircleMove(
+        object.position,
+        { x: stepX, z: stepZ },
+        actorRadius,
+        bounds,
+        actorColliders,
+      );
+      const stepAdvance = Math.hypot(
+        next.x - object.position.x,
+        next.z - object.position.z,
+      );
+      object.position.x = next.x;
+      object.position.z = next.z;
+      actualAdvance += stepAdvance;
+      if (stepAdvance <= 1e-9) break;
+    }
+
+    return actualAdvance;
+  }
 
   function update(dt, player) {
     elapsed += dt;
@@ -37,7 +79,8 @@ export function createPursuer(scene, { navNodes, spawn }) {
         object.rotation.y = Math.atan2(direction.x, direction.z);
       }
       if (distance < minimumSeparation) {
-        object.position.addScaledVector(direction, -(minimumSeparation - distance));
+        const retreat = minimumSeparation - distance;
+        moveResolved(-direction.x * retreat, -direction.z * retreat);
       }
       rig.setMotion(0, elapsed);
       return state;
@@ -55,10 +98,19 @@ export function createPursuer(scene, { navNodes, spawn }) {
         ? Math.max(0, targetDistance - contactDistance)
         : targetDistance;
       const advance = Math.min(speed * dt, maximumAdvance);
-      object.position.addScaledVector(direction, advance);
+      const deltaX = direction.x * advance;
+      const deltaZ = direction.z * advance;
+      const actualAdvance = moveResolved(deltaX, deltaZ);
       object.rotation.y = Math.atan2(direction.x, direction.z);
-      rig.setMotion(advance / Math.max(dt, Number.EPSILON), elapsed);
-      if (state === 'chase' && advance >= maximumAdvance - Number.EPSILON) {
+      rig.setMotion(
+        actualAdvance / Math.max(dt, Number.EPSILON),
+        elapsed,
+      );
+      const resolvedDistance = object.position.distanceTo(player.position);
+      if (
+        state === 'chase'
+        && resolvedDistance <= contactDistance + Number.EPSILON
+      ) {
         state = 'threaten';
       }
     } else {

@@ -75,6 +75,8 @@ const dangerController = createDangerController();
 const pursuer = createPursuer(scene, {
   navNodes: village.navNodes,
   spawn: village.anchors.sighting.clone(),
+  bounds: village.bounds,
+  actorColliders: village.actorColliders,
 });
 const tutorial = createTutorialTracker({
   onChange: (value) => ui.showTutorial(value),

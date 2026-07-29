@@ -905,7 +905,12 @@ test('W follows camera forward and D follows camera right at every cardinal yaw'
 test('pursuer movement drives the mutant rig and settles while idle', () => {
   const scene = new THREE.Scene();
   const spawn = new THREE.Vector3();
-  const pursuer = createPursuer(scene, { navNodes: [spawn.clone()], spawn });
+  const pursuer = createPursuer(scene, {
+    navNodes: [spawn.clone()],
+    spawn,
+    bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+    actorColliders: [],
+  });
 
   assert.equal(pursuer.object.parent, scene);
   assert.equal(pursuer.update(0.25, { position: new THREE.Vector3(0, 0, 5) }), 'chase');
@@ -916,10 +921,104 @@ test('pursuer movement drives the mutant rig and settles while idle', () => {
   assert.equal(Math.abs(pursuer.object.getObjectByName('leftShoulder').rotation.x), 0);
 });
 
+test('pursuer cannot penetrate shared circle or box actor colliders', () => {
+  const cases = [
+    {
+      id: 'test_post',
+      shape: 'circle',
+      x: 0,
+      z: 0,
+      radius: 0.16,
+      blocksActors: true,
+      blocksCamera: false,
+    },
+    {
+      id: 'test_wall',
+      shape: 'box',
+      x: 0,
+      z: 0,
+      halfX: 1,
+      halfZ: 0.2,
+      blocksActors: true,
+      blocksCamera: true,
+    },
+  ];
+
+  for (const collider of cases) {
+    const pursuer = createPursuer(new THREE.Scene(), {
+      navNodes: [new THREE.Vector3(0, 0, -4)],
+      spawn: new THREE.Vector3(0, 0, 2),
+      bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+      actorColliders: [collider],
+    });
+    const player = { position: new THREE.Vector3(0, 0, -4) };
+    let maximumPenetration = -Infinity;
+
+    for (let index = 0; index < 120; index += 1) {
+      pursuer.update(1 / 60, player);
+      maximumPenetration = Math.max(
+        maximumPenetration,
+        circleColliderPenetration(
+          pursuer.object.position.x,
+          pursuer.object.position.z,
+          0.46,
+          collider,
+        ),
+      );
+    }
+
+    assert.ok(
+      maximumPenetration <= 1e-9,
+      `pursuer penetrated ${collider.id} by ${maximumPenetration}`,
+    );
+  }
+});
+
+test('pursuer threat separation cannot tunnel through a thin post', () => {
+  const post = {
+    id: 'retreat_post',
+    shape: 'circle',
+    x: 0,
+    z: -1.1,
+    radius: 0.16,
+    blocksActors: true,
+    blocksCamera: false,
+  };
+  const pursuer = createPursuer(new THREE.Scene(), {
+    navNodes: [new THREE.Vector3(0, 0, 3)],
+    spawn: new THREE.Vector3(0, 0, 0),
+    bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+    actorColliders: [post],
+  });
+  const player = { position: new THREE.Vector3(0, 0, 0) };
+  pursuer.object.rotation.y = 0;
+
+  pursuer.update(1 / 60, player);
+
+  assert.equal(pursuer.state, 'threaten');
+  assert.ok(
+    pursuer.object.position.z > post.z,
+    'pursuer must remain on its starting side of the post',
+  );
+  assert.ok(
+    circleColliderPenetration(
+      pursuer.object.position.x,
+      pursuer.object.position.z,
+      0.46,
+      post,
+    ) <= 1e-9,
+  );
+});
+
 test('pursuer holds readable spacing instead of crossing through the player', () => {
   const scene = new THREE.Scene();
   const spawn = new THREE.Vector3();
-  const pursuer = createPursuer(scene, { navNodes: [spawn.clone()], spawn });
+  const pursuer = createPursuer(scene, {
+    navNodes: [spawn.clone()],
+    spawn,
+    bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+    actorColliders: [],
+  });
   const player = { position: new THREE.Vector3(0, 0, 5) };
   let minimumDistance = Infinity;
 
@@ -949,7 +1048,12 @@ test('pursuer holds readable spacing instead of crossing through the player', ()
 test('pursuer reset restores the authored mutant pose and spawn orientation', () => {
   const scene = new THREE.Scene();
   const spawn = new THREE.Vector3(-1, 0, 3);
-  const pursuer = createPursuer(scene, { navNodes: [spawn.clone()], spawn });
+  const pursuer = createPursuer(scene, {
+    navNodes: [spawn.clone()],
+    spawn,
+    bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+    actorColliders: [],
+  });
 
   pursuer.update(0.25, { position: new THREE.Vector3(4, 0, 8) });
   assert.notEqual(pursuer.object.rotation.y, 0);
