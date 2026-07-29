@@ -1,6 +1,12 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 test.use({ storageState: { cookies: [], origins: [] } });
+
+async function requestGuideWhileBlocked(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "这是什么？" }).evaluate(
+    (button: HTMLButtonElement) => button.click(),
+  );
+}
 
 test("first visit gates before the first RAF and input sample", async ({
   page,
@@ -247,4 +253,374 @@ test("Start releases only the guide gate and real input moves and attacks", asyn
     window.__ashfallDiagnostics!.snapshot());
   expect(after.guideGateOpen).toBe(false);
   expect(after.paused).toBe(before.paused);
+});
+
+test("player pause prevents a second dialog and manual guide opens after resume", async ({
+  page,
+}) => {
+  await page.goto("/?fixture=fresh&reviewControls=1&guideReview=1");
+  await page.getByRole("button", { name: "开始体验" }).click();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("dialog", { name: "游戏已暂停" }),
+  ).toBeVisible();
+
+  await requestGuideWhileBlocked(page);
+
+  await expect(page.locator("dialog[open]")).toHaveCount(1);
+  await expect(
+    page.getByRole("dialog", { name: /灰烬竞技场｜/ }),
+  ).toBeHidden();
+  await page.getByRole("button", { name: "继续战斗" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "游戏已暂停" }),
+  ).toBeHidden();
+  await page.getByRole("button", { name: "这是什么？" }).click();
+  await expect(
+    page.getByRole("dialog", { name: /灰烬竞技场｜/ }),
+  ).toBeVisible();
+});
+
+test("upgrade prevents a second dialog until an actual upgrade is chosen", async ({
+  page,
+}) => {
+  await page.goto("/?fixture=wave-one&reviewControls=1&guideReview=1");
+  await page.getByRole("button", { name: "开始体验" }).click();
+  const enemyIds = await page.evaluate(() =>
+    window.__ashfallDiagnostics!.snapshot().enemies
+      .filter(({ health }) => health > 0)
+      .map(({ id }) => id),
+  );
+  for (const id of enemyIds) {
+    await page.evaluate(
+      (enemyId) =>
+        window.__ashfallDiagnostics!.drivePlayerStrike(enemyId),
+      id,
+    );
+  }
+  await expect.poll(() => page.evaluate(() =>
+    window.__ashfallDiagnostics!.snapshot().status
+  )).toBe("upgrade");
+
+  await requestGuideWhileBlocked(page);
+
+  await expect(page.locator("dialog[open]")).toHaveCount(1);
+  await expect(
+    page.getByRole("dialog", { name: /灰烬竞技场｜/ }),
+  ).toBeHidden();
+  await page.locator('[data-upgrade-id="vitality"]').click();
+  await expect(
+    page.getByRole("dialog", { name: "选择一次升级" }),
+  ).toBeHidden();
+  await page.getByRole("button", { name: "这是什么？" }).click();
+  await expect(
+    page.getByRole("dialog", { name: /灰烬竞技场｜/ }),
+  ).toBeVisible();
+});
+
+test("defeat prevents a second dialog until checkpoint retry", async ({
+  page,
+}) => {
+  await page.goto("/?fixture=elite&reviewControls=1&guideReview=1");
+  await page.getByRole("button", { name: "开始体验" }).click();
+  await page.evaluate(() =>
+    window.__ashfallDiagnostics!.drivePlayerDefeat("elite-bell"),
+  );
+  await expect.poll(() => page.evaluate(() =>
+    window.__ashfallDiagnostics!.snapshot().status
+  )).toBe("defeated");
+
+  await requestGuideWhileBlocked(page);
+
+  await expect(page.locator("dialog[open]")).toHaveCount(1);
+  await expect(
+    page.getByRole("dialog", { name: /灰烬竞技场｜/ }),
+  ).toBeHidden();
+  await page.getByRole("button", { name: "从检查点重试" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "本轮挑战失败" }),
+  ).toBeHidden();
+  await page.getByRole("button", { name: "这是什么？" }).click();
+  await expect(
+    page.getByRole("dialog", { name: /灰烬竞技场｜/ }),
+  ).toBeVisible();
+});
+
+test("complete keeps automatic open pending and retries after a new run", async ({
+  page,
+}) => {
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.goto("/?fixture=complete&reviewControls=1&guideReview=1");
+  await expect(
+    page.getByRole("dialog", { name: "挑战完成记录" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: /灰烬竞技场｜/ }),
+  ).toBeHidden();
+
+  await page
+    .getByRole("dialog", { name: "挑战完成记录" })
+    .getByRole("button", { name: "新开一局" })
+    .click();
+
+  await expect(
+    page.getByRole("dialog", { name: /灰烬竞技场｜/ }),
+  ).toBeVisible();
+  await expect(page.locator("dialog[open]")).toHaveCount(1);
+});
+
+test("repeated guide cycles preserve state, save, listeners, and guide DOM", async ({
+  page,
+}) => {
+  await page.goto("/?fixture=fresh&reviewControls=1&guideReview=1");
+  await page.evaluate(() =>
+    window.__ashfallDiagnostics!.setManualReviewClock(true),
+  );
+  const before = await page.evaluate(() => ({
+    state: window.__ashfallDiagnostics!.getSerializableState(),
+    save: localStorage.getItem("ashfall-arena:v1"),
+    listeners:
+      window.__ashfallDiagnostics!.snapshot().performance.lifecycle
+        .listenerRegistrations,
+  }));
+
+  for (let cycle = 0; cycle < 5; cycle += 1) {
+    await page.getByRole("button", { name: "关闭说明" }).click();
+    await page.getByRole("button", { name: "这是什么？" }).click();
+  }
+
+  const after = await page.evaluate(() => ({
+    state: window.__ashfallDiagnostics!.getSerializableState(),
+    save: localStorage.getItem("ashfall-arena:v1"),
+    listeners:
+      window.__ashfallDiagnostics!.snapshot().performance.lifecycle
+        .listenerRegistrations,
+    guideDialogs:
+      document.querySelectorAll(".showcase-guide-dialog").length,
+    guideTriggers:
+      document.querySelectorAll(".showcase-guide-trigger").length,
+  }));
+  expect(after.state).toEqual(before.state);
+  expect(after.save).toBe(before.save);
+  expect(after.listeners).toBe(before.listeners);
+  expect(after.guideDialogs).toBe(1);
+  expect(after.guideTriggers).toBe(1);
+});
+
+test("direct diagnostics mutators reject while the guide is open without changing state", async ({
+  page,
+}) => {
+  await page.goto("/?fixture=wave-one&reviewControls=1&guideReview=1");
+  await page.evaluate(() =>
+    window.__ashfallDiagnostics!.setManualReviewClock(true),
+  );
+  const result = await page.evaluate(() => {
+    const diagnostics = window.__ashfallDiagnostics!;
+    const enemy = diagnostics.snapshot().enemies.find(
+      ({ health }) => health > 0,
+    )!;
+    const moveId =
+      enemy.kind === "ash-warden"
+        ? "warden-bolt"
+        : enemy.kind === "bell-elite"
+          ? "elite-sweep"
+          : enemy.kind === "bell-sovereign"
+            ? "sovereign-sweep"
+            : "crawler-lunge";
+    const before = diagnostics.getSerializableState();
+    const calls = [
+      () => diagnostics.triggerCameraShake(),
+      () => diagnostics.queueEnemyMove(enemy.id, moveId),
+      () => diagnostics.drivePlayerDodge(enemy.id, moveId),
+      () => diagnostics.drivePlayerStrike(enemy.id),
+      () => diagnostics.drivePlayerDefeat(enemy.id),
+      () => diagnostics.retryLatestCheckpoint(),
+    ];
+    const outcomes = calls.map((call) => {
+      try {
+        call();
+        return "resolved";
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+    });
+    return {
+      before,
+      after: diagnostics.getSerializableState(),
+      outcomes,
+    };
+  });
+
+  expect(result.outcomes).toEqual(
+    Array.from({ length: 6 }, () => "guide gate is open"),
+  );
+  expect(result.after).toEqual(result.before);
+});
+
+test("window review commits reject while the guide is open without changing state", async ({
+  page,
+}) => {
+  await page.goto("/?fixture=wave-one&reviewControls=1&guideReview=1");
+  const result = await page.evaluate(() => {
+    const diagnostics = window.__ashfallDiagnostics!;
+    const before = diagnostics.getSerializableState();
+    let outcome = "resolved";
+    try {
+      window.__review!.setPlayerHealth(before.player.health - 1);
+    } catch (error) {
+      outcome = error instanceof Error ? error.message : String(error);
+    }
+    return {
+      before,
+      after: diagnostics.getSerializableState(),
+      outcome,
+    };
+  });
+
+  expect(result.outcome).toBe("guide gate is open");
+  expect(result.after).toEqual(result.before);
+});
+
+test("a blocked localStorage getter keeps Ashfall onboarding usable", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("blocked", "SecurityError");
+      },
+    });
+  });
+  await page.goto("/?fixture=fresh&reviewControls=1&guideReview=1");
+  await expect(
+    page.getByRole("dialog", { name: /灰烬竞技场｜/ }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "关闭说明" }).click();
+  await page.getByRole("button", { name: "这是什么？" }).click();
+
+  await expect(
+    page.getByRole("dialog", { name: /灰烬竞技场｜/ }),
+  ).toBeVisible();
+});
+
+test("hub return is same-tab while live lifecycle diagnostics report the guide gate", async ({
+  page,
+}) => {
+  await page.goto("/?reviewControls=1&guideReview=1");
+  const link = page.getByRole("link", { name: "返回能力展厅" });
+  await expect(link).not.toHaveAttribute("target");
+  await expect(link).toHaveAttribute(
+    "href",
+    /#product-ashfall-arena$/,
+  );
+
+  const openLifecycle = await page.evaluate(() =>
+    window.__ashfallDiagnostics!.snapshot().performance.lifecycle,
+  );
+  expect(openLifecycle.guideGateOpen).toBe(true);
+  expect(openLifecycle.recoveryFrames).toBe(0);
+
+  await page.getByRole("button", { name: "关闭说明" }).click();
+  const closedLifecycle = await page.evaluate(() =>
+    window.__ashfallDiagnostics!.snapshot().performance.lifecycle,
+  );
+  expect(closedLifecycle.guideGateOpen).toBe(false);
+  expect(closedLifecycle.recoveryFrames).toBe(0);
+});
+
+test("WebGL fallback creates an independent guide after disabling gameplay controls", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    HTMLCanvasElement.prototype.getContext = function () {
+      return null;
+    } as typeof HTMLCanvasElement.prototype.getContext;
+  });
+  await page.goto("/?reviewControls=1&guideReview=1");
+
+  await expect(page.getByText(/3D 不可用/).first()).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: /灰烬竞技场/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "关闭说明" }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("link", { name: "返回能力展厅" }),
+  ).toBeEnabled();
+  const snapshot = await page.evaluate(() =>
+    window.__ashfallDiagnostics!.snapshot(),
+  );
+  expect(snapshot.runtimeMode).toBe("information-fallback");
+  expect(snapshot.guideGateOpen).toBe(false);
+  expect(snapshot.guideOpen).toBe(true);
+  expect(snapshot.frameCount).toBe(0);
+  expect(snapshot.inputSampleCount).toBe(0);
+  expect(snapshot.audio).toEqual({
+    paused: true,
+    contextState: "not-created",
+    contextCreateCount: 0,
+    playedCueCount: 0,
+  });
+});
+
+test("live pagehide destroys the guide without a close recovery frame", async ({
+  page,
+}) => {
+  await page.goto("/?reviewControls=1&guideReview=1");
+  await page.evaluate(() =>
+    window.dispatchEvent(new PageTransitionEvent("pagehide")),
+  );
+  await page.waitForTimeout(100);
+
+  const disposal = await page.evaluate(() => ({
+    snapshot: window.__ashfallReleaseDisposalSnapshot,
+    diagnosticsPresent: window.__ashfallDiagnostics !== undefined,
+    guideDialogs:
+      document.querySelectorAll(".showcase-guide-dialog").length,
+    guideTriggers:
+      document.querySelectorAll(".showcase-guide-trigger").length,
+  }));
+  expect(disposal.snapshot?.lifecycle.disposed).toBe(true);
+  expect(disposal.snapshot?.lifecycle.guideGateOpen).toBe(false);
+  expect(disposal.snapshot?.lifecycle.recoveryFrames).toBe(0);
+  expect(disposal.diagnosticsPresent).toBe(false);
+  expect(disposal.guideDialogs).toBe(0);
+  expect(disposal.guideTriggers).toBe(0);
+});
+
+test("fallback pagehide destroys its independent guide without starting recovery", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    HTMLCanvasElement.prototype.getContext = function () {
+      return null;
+    } as typeof HTMLCanvasElement.prototype.getContext;
+  });
+  await page.goto("/?reviewControls=1&guideReview=1");
+  await expect(
+    page.getByRole("dialog", { name: /灰烬竞技场/ }),
+  ).toBeVisible();
+
+  await page.evaluate(() =>
+    window.dispatchEvent(new PageTransitionEvent("pagehide")),
+  );
+  await page.waitForTimeout(100);
+
+  const disposal = await page.evaluate(() => ({
+    snapshot: window.__ashfallReleaseDisposalSnapshot,
+    diagnosticsPresent: window.__ashfallDiagnostics !== undefined,
+    guideDialogs:
+      document.querySelectorAll(".showcase-guide-dialog").length,
+    guideTriggers:
+      document.querySelectorAll(".showcase-guide-trigger").length,
+  }));
+  expect(disposal.snapshot?.lifecycle.disposed).toBe(true);
+  expect(disposal.snapshot?.lifecycle.guideGateOpen).toBe(false);
+  expect(disposal.snapshot?.lifecycle.recoveryFrames).toBe(0);
+  expect(disposal.diagnosticsPresent).toBe(false);
+  expect(disposal.guideDialogs).toBe(0);
+  expect(disposal.guideTriggers).toBe(0);
 });

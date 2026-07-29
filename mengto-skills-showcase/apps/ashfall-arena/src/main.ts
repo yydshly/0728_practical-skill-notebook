@@ -159,6 +159,8 @@ interface AshfallPerformanceSnapshot {
     | { supported: false };
   lifecycle: {
     disposed: boolean;
+    guideGateOpen: boolean;
+    recoveryFrames: number;
     sceneChildren: number;
     entityRoots: number;
     listenerRegistrations: number;
@@ -206,6 +208,8 @@ if (!allowedFixtures.has(requestedFixture as EncounterFixture)) {
 }
 const fixture = requestedFixture as EncounterFixture;
 const reviewControls = query.get("reviewControls") === "1";
+const guideEnabled =
+  !reviewControls || query.get("guideReview") === "1";
 const safeTraining = query.get("safeTraining") === "1";
 const manualEnemyAi = query.get("manualEnemyAi") === "1";
 const captureMode = query.get("capture") === "1";
@@ -483,6 +487,13 @@ const arena = createArenaScene(canvas, {
 });
 
 if (arena.renderer === null) {
+  let fallbackGuide: ProductGuideController | null = null;
+  if (guideEnabled) {
+    fallbackGuide = createProductGuide(app, {
+      ...ASHFALL_GUIDE,
+      hubHref: resolveAshfallHubHref(import.meta.env, window.location.href),
+    });
+  }
   const neutralInput: GameIntent = {
     moveX: 0,
     moveY: 0,
@@ -525,6 +536,8 @@ if (arena.renderer === null) {
     heap: { supported: false },
     lifecycle: {
       disposed: runtimeDisposed,
+      guideGateOpen: false,
+      recoveryFrames: 0,
       sceneChildren: runtimeDisposed ? 0 : arena.scene.children.length,
       entityRoots: 0,
       listenerRegistrations: runtimeDisposed ? 0 : 1,
@@ -553,7 +566,7 @@ if (arena.renderer === null) {
     droppedSeconds: 0,
     manualReviewClock: false,
     guideGateOpen: false,
-    guideOpen: false,
+    guideOpen: fallbackGuide?.isOpen() ?? false,
     inputSampleCount: 0,
     presentationSeconds: {
       entitySync: 0,
@@ -563,7 +576,7 @@ if (arena.renderer === null) {
     },
     audio: {
       paused: true,
-      contextState: "unavailable",
+      contextState: "not-created",
       contextCreateCount: 0,
       playedCueCount: 0,
     },
@@ -644,6 +657,8 @@ if (arena.renderer === null) {
   const disposeInformationFallback = () => {
     if (fallbackDisposed) return;
     fallbackDisposed = true;
+    fallbackGuide?.destroy();
+    fallbackGuide = null;
     fallbackResizeObserver.disconnect();
     arena.dispose();
     if (reviewControls) {
@@ -705,8 +720,12 @@ const presentationSeconds = {
   hud: 0,
   camera: 0,
 };
-const guideEnabled =
-  !reviewControls || query.get("guideReview") === "1";
+let recoveryFrames = 0;
+const assertGuideGateClosed = () => {
+  if (guideGateOpen) {
+    throw new Error("guide gate is open");
+  }
+};
 const audioUnlockKeyCodes = new Set([
   "KeyW",
   "KeyA",
@@ -1040,7 +1059,11 @@ const consumePresentationEvents = () => {
 };
 
 const frame = (timestamp: number) => {
-  if (disposed) return;
+  if (disposed) {
+    const disposal = window.__ashfallReleaseDisposalSnapshot;
+    if (disposal) disposal.lifecycle.recoveryFrames += 1;
+    return;
+  }
   guide?.retryAutoOpen();
   if (guideGateOpen) {
     previousTimestamp = null;
@@ -1208,6 +1231,8 @@ const getPerformanceSnapshot = (
     heap,
     lifecycle: {
       disposed: runtimeDisposed,
+      guideGateOpen,
+      recoveryFrames,
       sceneChildren: arena.scene.children.length,
       entityRoots:
         playerRoots +
@@ -1230,7 +1255,10 @@ const getPerformanceSnapshot = (
 
 const reviewApi = installReviewApi(reviewControls, {
   readState: () => state,
-  commit: commitAuthoritativeResult,
+  commit(result) {
+    assertGuideGateClosed();
+    commitAuthoritativeResult(result);
+  },
   readDiagnostics() {
     const cameraDiagnostics = cameraController.getDiagnostics();
     return {
@@ -1265,9 +1293,7 @@ if (reviewControls) {
       input.clear();
     },
     advanceInput(intent, ticks = 1) {
-      if (guideGateOpen) {
-        throw new Error("guide gate is open");
-      }
+      assertGuideGateClosed();
       if (!manualReviewClock) {
         throw new Error(
           "review input requires the manual review clock",
@@ -1394,6 +1420,7 @@ if (reviewControls) {
       };
     },
     triggerCameraShake() {
+      assertGuideGateClosed();
       dispatchPresentationEvent({
         type: "camera-shake",
         amplitude: 0.2,
@@ -1404,6 +1431,7 @@ if (reviewControls) {
       return JSON.parse(JSON.stringify(state)) as GameState;
     },
     queueEnemyMove(enemyId, moveId) {
+      assertGuideGateClosed();
       const enemy = state.enemies[enemyId];
       if (!enemy) throw new Error(`Unknown enemy: ${enemyId}`);
       if (enemy.currentMoveId !== null || enemy.cooldownTicks !== 0) {
@@ -1451,6 +1479,7 @@ if (reviewControls) {
       return `${enemyId}:${moveId}:${requested.attackSequence}`;
     },
     drivePlayerDodge(enemyId, moveId) {
+      assertGuideGateClosed();
       const enemy = state.enemies[enemyId];
       if (!enemy) throw new Error(`Unknown enemy: ${enemyId}`);
       if (state.status !== "playing") {
@@ -1539,9 +1568,11 @@ if (reviewControls) {
       return attackId;
     },
     drivePlayerStrike(enemyId) {
+      assertGuideGateClosed();
       window.__review!.defeatEnemy(enemyId);
     },
     drivePlayerDefeat(enemyId) {
+      assertGuideGateClosed();
       const enemy = state.enemies[enemyId];
       if (!enemy) throw new Error(`Unknown enemy: ${enemyId}`);
       if (state.status !== "playing") {
@@ -1624,7 +1655,10 @@ if (reviewControls) {
       }
       throw new Error(`${enemyId} did not defeat the player`);
     },
-    retryLatestCheckpoint,
+    retryLatestCheckpoint() {
+      assertGuideGateClosed();
+      return retryLatestCheckpoint();
+    },
   };
 }
 
@@ -1632,17 +1666,17 @@ const dispose = () => {
   if (disposed) return;
   disposed = true;
   cancelAnimationFrame(frameRequest);
+  input.dispose();
+  audio.dispose();
+  guide?.destroy();
+  guide = null;
+  guideGateOpen = false;
   resizeObserver.disconnect();
   document.removeEventListener("visibilitychange", onVisibility);
   reducedMotion.removeEventListener("change", onReducedMotion);
   reviewApi.dispose();
-  guide?.destroy();
-  guide = null;
-  guideGateOpen = false;
   hud?.dispose();
-  audio.dispose();
   vfx.dispose();
-  input.dispose();
   synchronizer.dispose();
   cameraController.dispose();
   player.dispose();

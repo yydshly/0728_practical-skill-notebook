@@ -2,8 +2,8 @@
 
 ## 当前结论与验证边界
 
-- 被测产品候选提交：`43ef034d06f341f525740fbfd243a6d9aabc0b20`（`fix: close final installer and ashfall review gaps`）。
-- 前一轮发布边界基线提交是 `b560d636eed004c7b09e88f34ad7c5e17adb44e9`；下表中的当前计数均来自新的代码候选，不把历史结果冒充为本轮重跑。
+- 本轮 Task 9 候选基线：`97991ccbc33184aa6b01e0733e5917b5e76f7a34`（`fix: unlock Ashfall audio from focused gameplay keys`）；验证对象是该基线之上的 Ashfall onboarding 状态边界候选。最终提交与本文件同属一个提交，因此不在提交内容中写入不可自指的最终 SHA。
+- 下表中明确标为“本轮新鲜”的 Ashfall onboarding、unit、functional、performance、preview、bundle 预算与差异检查来自 2026-07-29 对本轮候选的全新串行重跑。根工作区、Skill 安装器、工作区契约、Skill 只读审计和依赖审计只保留前序历史结果，并明确标注本轮未重跑，供 Task 13 统一终验；不把它们冒充为本轮证据。
 - 当前状态：**发布候选 / 自动验收通过，人工可用性门槛未关闭**。
 - 8–12 分钟首次人工完成门槛：**待人工验证**。没有有效的首次人工完成时长，也没有可计算的中位数。
 - 本记录证明的是本地开发服务、自动化浏览器旅程和本地生产预览；本任务没有部署到公网，也没有验证线上 CDN、缓存或真实移动设备。
@@ -17,46 +17,60 @@
 | Node.js | `v22.15.0` |
 | npm | `10.9.2` |
 | Playwright | `1.62.0`，捆绑 Chromium、无头模式 |
-| 候选工作区 | `codex/mengto-skills-showcase` 分支，代码候选 `43ef034d06f341f525740fbfd243a6d9aabc0b20` |
+| 候选工作区 | `codex/showcase-hub-onboarding` 分支，Task 9 基线 `97991ccbc33184aa6b01e0733e5917b5e76f7a34` |
 | 自动通关入口 | `/?fixture=fresh&seed=7481&reviewControls=1` |
 | 生产验证入口 | Vite `dist` 本地 preview；默认使用独占严格端口 `4184` |
 
-所有数字均来自同一候选提交。证据文档提交只增加或修正文档与文档契约，不改变被测产品代码。
+本轮新鲜 Ashfall 数字来自同一 Task 9 工作树状态；标为前序历史证据的行保留原候选记录，等待 Task 13 重跑。
 
 ## 自动化门槛与结果
 
 | 门槛 | 结果 |
 | --- | --- |
-| Ashfall 单元测试 | `15` 个文件，`308/308` 通过 |
-| Ashfall 开发服务浏览器全套 | 同一 `npm run test:browser` 门禁顺序启动两个独立 Playwright 进程：普通矩阵 `41/41`（约 `2.0m`），独占性能矩阵 `5/5`（约 `23.3s`），合计 `46/46` |
-| 根工作区测试 | `37` 个文件，`450/450` 通过 |
+| Ashfall onboarding 聚焦矩阵 | RED：`21` 项中 `15` 通过、`6` 按预期失败；GREEN：`21/21` 通过（`27.3s`） |
+| Ashfall 单元测试 | `16` 个文件，`312/312` 通过（`1.11s`） |
+| Ashfall 开发服务浏览器全套 | 严格串行启动两个独立 Playwright 进程：普通功能矩阵 `62/62`（`2.7m`），独占性能矩阵 `5/5`（`30.2s`），合计 `67/67` |
+| 根工作区测试 | 前序历史证据，本轮未重跑：`37` 个文件，`450/450` 通过 |
 | Ashfall 生产预览 | 先重新构建并检查包体预算，再以 `dist` 运行；`1/1` 通过 |
-| Skill 安装器回归 | `4/4` 通过：锁定引用与文本换行规范化、已安装副本漂移、脏子模块拒绝、二进制原始字节漂移 |
-| 根工作区构建 | 命令成功；Ashfall 无大分包警告，Monster Forge 已知警告见下文 |
-| 工作区契约 | `npm run validate` 通过 |
-| Skill 只读审计 | 批准的 `16/16` 项均存在可读 `SKILL.md` |
-| 依赖审计 | `npm audit`：`0 vulnerabilities` |
-| 差异检查 | `git diff --check` 通过 |
-| 候选提交 | 代码与测试已独立提交；本文件属于后续 evidence-only 文档提交 |
+| Skill 安装器回归 | 前序历史证据，本轮未重跑：`4/4` 通过 |
+| 根工作区构建 | 前序历史证据，本轮未重跑；本轮只执行 Ashfall production build |
+| 工作区契约 | 前序历史证据，本轮未重跑：`npm run validate` 通过 |
+| Skill 只读审计 | 前序历史证据，本轮未重跑：批准的 `16/16` 项均存在可读 `SKILL.md` |
+| 依赖审计 | 前序历史证据，本轮未重跑：`npm audit` 为 `0 vulnerabilities` |
+| 差异检查 | 本轮新鲜：`git diff --check` 与 staged diff-check 均通过 |
+| 候选提交 | 本轮代码、测试与本验证记录属于同一个 Task 9 提交；最终 SHA 见 Git 历史与 Task 9 报告 |
 
-主要命令从套件根目录 `mengto-skills-showcase` 执行：
+本轮实际验证命令从套件根目录 `mengto-skills-showcase` 或所示 Ashfall 目录严格串行执行：
 
 ```powershell
 npm test --workspace @showcase/ashfall-arena
 
-npm run test:browser --workspace @showcase/ashfall-arena
+cd apps/ashfall-arena
+$env:ASHFALL_PLAYWRIGHT_PORT='4194'
+npx playwright test --config playwright.config.ts onboarding-guide.spec.ts
+npx playwright test --config playwright.config.ts
+$env:ASHFALL_PERFORMANCE_PORT='4195'
+npx playwright test --config playwright.performance.config.ts
+cd ../..
 
 npm run test:preview --workspace @showcase/ashfall-arena
 
-npm test
-npm run build
-npm run validate
-node scripts/check-selected-skills.mjs
 git diff --check
 git status --porcelain=v1
 ```
 
-Playwright 的服务配置使用 `--strictPort` 且不复用已有服务。普通浏览器矩阵和 `release-performance.spec.ts` 由同一 npm 门禁顺序启动两个 Playwright 进程，各自创建新的浏览器与 Vite 服务；本轮成功运行使用 `4311` 和 `4312`，测试完成后服务退出。这样性能采样不承受前 41 项在长期浏览器/GPU 进程中的累积影响，所有既有性能阈值保持不变。
+Playwright 的服务配置使用 `--strictPort` 且不复用已有服务。普通浏览器矩阵和 `release-performance.spec.ts` 严格串行运行，各自创建新的浏览器与 Vite 服务；本轮成功运行使用 `4194` 和 `4195`，测试完成后服务退出。这样性能采样不承受前 `62` 项在长期浏览器/GPU 进程中的累积影响，所有既有性能阈值和超时保持不变。
+
+## Task 9 导览状态与生命周期证据
+
+- pause、upgrade、defeated、complete 四种既有 modal 均与产品导览排他：请求导览时页面始终只有一个打开的 dialog；恢复战斗、选择真实升级、从检查点重试或确认新开一局后，导览分别可手动打开或完成 pending 自动重试。
+- 连续 `5` 次关闭/重开导览后，深拷贝的可序列化 `GameState`、`ashfall-arena:v1` 原始保存字符串、listener registration 数均与之前完全相同；`.showcase-guide-dialog` 与 `.showcase-guide-trigger` 始终各只有 `1` 个。
+- `guideGateOpen` 为 true 时，`advanceInput`、`triggerCameraShake`、`queueEnemyMove`、`drivePlayerDodge`、`drivePlayerStrike`、`drivePlayerDefeat`、`retryLatestCheckpoint` 以及 `window.__review` 的 commit 路径都以 `guide gate is open` 拒绝；拒绝前后权威状态完全相同。只读 snapshot、`getSerializableState`、`resetPerformanceSamples` 和测试设置所需的 `setManualReviewClock` 保持可用。
+- localStorage getter 抛出 `SecurityError` 时，导览仍能自动打开、关闭并手动重开；返回能力展厅保持没有 `target` 的普通同标签页链接，并保留 `#product-ashfall-arena` 锚点。
+- WebGL fallback 在禁用旧游戏控件后创建独立导览；导览按钮、复选框和返回链接可用，而模拟、输入采样、RAF、音频上下文和表现时钟均未启动。诊断固定报告 information-fallback、`guideGateOpen=false`、`inputSampleCount=0`、`contextState=not-created`。
+- live 与 fallback 的 pagehide 都先销毁各自导览，再清理其余拥有的资源；disposal snapshot 报告 `disposed=true`、`guideGateOpen=false`、`recoveryFrames=0`，诊断 API 和导览 DOM 均已移除。销毁没有调用普通 close 恢复分支。
+- Task 8 的音频 trigger/gameplay 键矩阵由本轮完整功能浏览器套件继续覆盖：导览按钮、Escape 关闭和导航键保持音频中性；关闭后的真实 W/J、画布 Space 与 pointer 游戏手势仍可按既有契约解锁，重复游戏手势不重复创建 AudioContext。
+- 这些字段只存在于运行时 review diagnostics；本轮没有改变 `GameState`、保存 schema、`state.paused` 或 `stepGame()` 语义。
 
 ## 完整加速审阅旅程
 
@@ -83,7 +97,7 @@ Playwright 的服务配置使用 `--strictPort` 且不复用已有服务。普�
 - 减少动态效果：`prefers-reduced-motion: reduce` 独立关闭相机 shake 和粒子位移，但保留伤害闪光、盾环、字幕等语义反馈；它不被质量档位代替。
 - 音频恢复：第一次 `AudioContext.resume()` 被浏览器阻止后诊断为 blocked；第二次用户手势可以在同一上下文恢复到 `unlocked: true`。静音时等价视觉反馈仍存在。
 - 反馈字幕：优先级会跨多次事件消费持续到字幕 TTL 结束；高优先级受击不会被稍后的闪避起步覆盖，但治疗仍可更新当前受击提示，升级和通关提示可立即覆盖战斗字幕。
-- WebGL 不可用：浏览器用例让真实 `HTMLCanvasElement.getContext()` 返回 `null`，覆盖 `WebGLRenderer` 构造失败；画布会隐藏并显示中文静态信息模式，目标、阶段、生命与武器仍可读。该模式不创建输入或音频控制器、不启动 RAF/模拟、不改写存档，所有交互控件禁用；诊断中的帧、tick、renderer 资源保持为零，清理后监听器和资源也为零。
+- WebGL 不可用：浏览器用例让真实 `HTMLCanvasElement.getContext()` 返回 `null`，覆盖 `WebGLRenderer` 构造失败；画布会隐藏并显示中文静态信息模式，目标、阶段、生命与武器仍可读。该模式不创建输入或音频控制器、不启动 RAF/模拟、不改写存档；旧游戏交互控件禁用，而在禁用步骤后创建的独立导览与同标签返回链接保持可用。诊断中的帧、tick、renderer 资源保持为零，清理后监听器和资源也为零。
 - 运行健康：相关旅程检查 console error、page error 和未处理拒绝；生产预览还检查请求失败与 `4xx/5xx`，结果均为空。
 
 ## 性能诊断与自适应质量
@@ -132,12 +146,12 @@ Ashfall 使用真实代码分包，没有通过提高 Vite warning limit 隐藏�
 | --- | ---: | ---: |
 | `three-runtime-BF9wd6mB.js` | `335.79 KiB` | `80.94 KiB` |
 | `three-runtime-C-7BDurz.js` | `178.40 KiB` | `47.95 KiB` |
-| `index-B_VGzdkx.js` | `119.37 KiB` | `36.77 KiB` |
+| `index-DOnlx8nw.js` | `127.14 KiB` | `39.75 KiB` |
 | `game-assets-DS5U0l33.js` | `16.46 KiB` | `6.13 KiB` |
-| `index-XeHs61OF.css` | `12.06 KiB` | `3.37 KiB` |
+| `index-CKHNb0m9.css` | `14.54 KiB` | `3.91 KiB` |
 
-- JavaScript gzip 合计：`171.78 KiB / 190.00 KiB`
-- CSS gzip 合计：`3.37 KiB / 8.00 KiB`
+- JavaScript gzip 合计：`174.77 KiB / 190.00 KiB`
+- CSS gzip 合计：`3.91 KiB / 8.00 KiB`
 - 每个 Ashfall JavaScript 分包均小于 `500 KiB`，构建没有 Ashfall 大 chunk 警告。
 
 根工作区构建仍会报告 Monster Forge 单包 `564.22 kB` 的 Vite 警告。这是另一个产品的已知项，不属于 Ashfall 性能通过证据。
@@ -189,10 +203,11 @@ localStorage.removeItem("ashfall-arena:v1");
 localStorage.removeItem("ashfall-arena:audio-settings:v1");
 ```
 
-若需要撤销本轮代码候选，优先使用可审计、可恢复的提交：
+若需要撤销本轮代码候选，优先按精确提交信息定位后使用可审计、可恢复的 revert：
 
 ```powershell
-git revert 43ef034d06f341f525740fbfd243a6d9aabc0b20
+$task9Commit = git log --format=%H --grep="^test: close Ashfall onboarding state boundaries$" -n 1
+git revert $task9Commit
 ```
 
 不要使用 `git reset --hard`。证据文档提交与产品候选分离；若只需撤销文档，应只 revert 对应的 evidence-only 提交。
