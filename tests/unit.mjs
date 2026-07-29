@@ -577,6 +577,52 @@ test('music director reentrant loading callback coalesces unlock startup', async
   assert.equal(harness.director.getSnapshot().loopGeneration, 1);
 });
 
+test('music director prefetched callback receives the active prefetch promise', async () => {
+  const reader = createAssetReader();
+  let harness;
+  let reentered = false;
+  let reentrantPrefetch;
+  harness = createDirectorHarness({
+    reader,
+    onStateChange(snapshot) {
+      if (snapshot.assetState !== 'prefetched' || reentered) return;
+      reentered = true;
+      reentrantPrefetch = harness.director.prefetch();
+    },
+  });
+
+  const firstPrefetch = harness.director.prefetch();
+  assert.equal(await firstPrefetch, true);
+  assert.equal(reentrantPrefetch, firstPrefetch);
+  assert.equal(await reentrantPrefetch, true);
+  assert.equal(await harness.director.prefetch(), true);
+  assert.deepEqual(
+    assetUrls('ogg').map((url) => reader.counts.get(url)),
+    [1, 1, 1, 1],
+  );
+});
+
+test('music director playing callback receives the active unlock promise', async () => {
+  let harness;
+  let reentered = false;
+  let reentrantUnlock;
+  harness = createDirectorHarness({
+    onStateChange(snapshot) {
+      if (snapshot.playback !== 'playing' || reentered) return;
+      reentered = true;
+      reentrantUnlock = harness.director.unlock();
+    },
+  });
+
+  const firstUnlock = harness.director.unlock(harness.outputs);
+  assert.equal(await firstUnlock, true);
+  assert.equal(reentrantUnlock, firstUnlock);
+  assert.equal(await reentrantUnlock, true);
+  assert.equal(await harness.director.unlock(), true);
+  assert.equal(harness.context.sources.length, 2);
+  assert.equal(harness.director.getSnapshot().loopGeneration, 1);
+});
+
 test('music director dispose aborts deferred OGG fallback work', async (t) => {
   await t.test('fetch failure', async () => {
     const pendingOgg = new Map();

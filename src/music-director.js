@@ -150,13 +150,13 @@ export function createMusicDirector({
   function prefetch() {
     if (disposed) return Promise.resolve(false);
     if (unlockPromise && playback === 'loading') return unlockPromise;
+    if (prefetchPromise) return prefetchPromise;
     if (
       fetchedSet
       && (assetState === 'prefetched' || assetState === 'ready')
     ) {
       return Promise.resolve(true);
     }
-    if (prefetchPromise) return prefetchPromise;
 
     if (assetState === 'error') {
       clearLoadReferences();
@@ -351,10 +351,10 @@ export function createMusicDirector({
     stingerOutput,
   } = {}) {
     if (disposed) return Promise.resolve(false);
+    if (unlockPromise) return unlockPromise;
     if (playback === 'playing' && loopGeneration === 1) {
       return Promise.resolve(true);
     }
-    if (unlockPromise) return unlockPromise;
 
     contextRef = context ?? contextRef;
     musicOutputRef = musicOutput ?? musicOutputRef;
