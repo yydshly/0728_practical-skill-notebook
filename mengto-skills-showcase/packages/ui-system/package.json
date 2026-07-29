@@ -1,0 +1,9 @@
+{
+  "name": "@showcase/ui-system",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  }
+}

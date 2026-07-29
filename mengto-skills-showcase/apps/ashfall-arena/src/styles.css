@@ -1,0 +1,859 @@
+:root {
+  --ashfall-safe-top: env(safe-area-inset-top, 0px);
+  --ashfall-safe-right: env(safe-area-inset-right, 0px);
+  --ashfall-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ashfall-safe-left: env(safe-area-inset-left, 0px);
+  color: #f7eee2;
+  background: #0e0d11;
+  font-family:
+    Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui,
+    sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 72% -10%, rgb(127 56 40 / 28%), transparent 42%),
+    linear-gradient(150deg, #171219, #0c0d10 70%);
+}
+
+button {
+  color: inherit;
+  font: inherit;
+}
+
+.arena-shell {
+  display: grid;
+  grid-template-rows: auto minmax(620px, calc(100vh - 86px));
+  min-height: 100vh;
+}
+
+.arena-header {
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 86px;
+  padding: 14px clamp(18px, 4vw, 56px);
+  border-bottom: 1px solid rgb(255 210 155 / 14%);
+  background: rgb(16 14 17 / 88%);
+  backdrop-filter: blur(14px);
+}
+
+.arena-header h1 {
+  margin: 2px 0 0;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: clamp(25px, 3vw, 38px);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.eyebrow,
+.objective-card__kicker {
+  margin: 0;
+  color: #d89b5a;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+}
+
+.device-legend {
+  margin: 0;
+  color: #bdafa7;
+  font-size: 13px;
+}
+
+.game-stage {
+  position: relative;
+  min-height: 620px;
+  overflow: hidden;
+  isolation: isolate;
+  background: #121014;
+}
+
+[data-game-canvas] {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  touch-action: none;
+}
+
+[data-game-canvas]:focus-visible,
+.touch-actions button:focus-visible,
+.touch-stick:focus-visible {
+  outline: 3px solid #ffd28c;
+  outline-offset: 3px;
+}
+
+.hud {
+  position: absolute;
+  top: max(20px, var(--ashfall-safe-top));
+  left: max(20px, var(--ashfall-safe-left));
+  display: grid;
+  width: min(328px, calc(100% - 40px));
+  padding: 16px;
+  gap: 11px;
+  border: 1px solid rgb(255 210 155 / 18%);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgb(17 15 19 / 91%), rgb(39 26 28 / 82%));
+  box-shadow: 0 18px 45px rgb(0 0 0 / 30%);
+  pointer-events: none;
+}
+
+.hud__vitals {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 13px;
+}
+
+.hud__label {
+  color: #c7b8ae;
+}
+
+.hud__vitals strong {
+  justify-self: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud__meter {
+  grid-column: 1 / -1;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 10%);
+}
+
+.hud__meter i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #a83c3f, #f07855);
+}
+
+.hud__meter--stamina i {
+  background: linear-gradient(90deg, #b7873e, #f0c761);
+}
+
+.hud__loadout {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 3px;
+  color: #d8c8bd;
+  font-size: 12px;
+}
+
+.hud__progression {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+  color: #f0c98b;
+  font-size: 12px;
+}
+
+.target-panel {
+  position: absolute;
+  top: max(88px, calc(var(--ashfall-safe-top) + 72px));
+  right: max(20px, var(--ashfall-safe-right));
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  width: min(286px, calc(100% - 40px));
+  padding: 11px 13px;
+  gap: 6px 12px;
+  border: 1px solid rgb(255 184 105 / 34%);
+  border-radius: 12px;
+  background: rgb(29 19 20 / 88%);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.target-panel[hidden] {
+  display: none;
+}
+
+.target-panel__meter {
+  grid-column: 1 / -1;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 11%);
+}
+
+.target-panel__meter i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #8f3437, #f06c4f);
+}
+
+.objective-card {
+  position: absolute;
+  right: max(20px, var(--ashfall-safe-right));
+  bottom: max(24px, calc(var(--ashfall-safe-bottom) + 10px));
+  width: min(372px, calc(100% - 40px));
+  padding: 18px 20px;
+  border: 1px solid rgb(240 163 66 / 25%);
+  border-radius: 16px;
+  background: rgb(18 15 18 / 88%);
+  box-shadow: 0 18px 45px rgb(0 0 0 / 26%);
+  pointer-events: none;
+}
+
+.objective-card h2 {
+  margin: 6px 0;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.objective-card p:last-child {
+  margin: 0;
+  color: #c0b1a8;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.arena-status {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  padding: 8px 13px;
+  transform: translateX(-50%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  color: #d8c7b9;
+  background: rgb(17 15 18 / 72%);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.device-prompt {
+  position: absolute;
+  bottom: max(18px, calc(var(--ashfall-safe-bottom) + 8px));
+  left: max(20px, var(--ashfall-safe-left));
+  z-index: 5;
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  background: rgb(17 15 18 / 76%);
+  color: #d8c7b9;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.feedback-caption {
+  position: absolute;
+  top: 11.4rem;
+  left: 50%;
+  z-index: 9;
+  max-width: min(82vw, 34rem);
+  margin: 0;
+  padding: 0.5rem 0.9rem;
+  transform: translateX(-50%);
+  border: 1px solid rgb(255 229 188 / 40%);
+  border-radius: 0.7rem;
+  background: rgb(18 15 18 / 88%);
+  color: #fff0d7;
+  font-size: 0.8rem;
+  font-weight: 720;
+  text-align: center;
+  pointer-events: none;
+}
+
+.feedback-caption[hidden] {
+  display: none;
+}
+
+.damage-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border: 8px solid rgb(232 74 59 / 72%);
+  background:
+    radial-gradient(circle, transparent 48%, rgb(181 32 30 / 32%));
+  box-shadow: inset 0 0 80px rgb(185 35 31 / 44%);
+  pointer-events: none;
+}
+
+.damage-flash[hidden] {
+  display: none;
+}
+
+.audio-settings {
+  position: absolute;
+  top: 1.15rem;
+  right: 8.2rem;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, auto));
+  width: 244px;
+  margin: 0;
+  padding: 0.45rem 0.65rem 0.55rem;
+  gap: 0.3rem 0.65rem;
+  border: 1px solid rgb(255 218 167 / 18%);
+  border-radius: 0.75rem;
+  background: rgb(22 18 22 / 82%);
+  color: #d9c7ba;
+  font-size: 10px;
+}
+
+.audio-settings legend {
+  padding: 0 0.3rem;
+  color: #efbc79;
+  font-weight: 760;
+}
+
+.audio-settings label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.audio-settings input[type="range"] {
+  width: 72px;
+}
+
+.touch-controls {
+  position: absolute;
+  right: max(18px, var(--ashfall-safe-right));
+  bottom: max(150px, calc(var(--ashfall-safe-bottom) + 120px));
+  left: max(18px, var(--ashfall-safe-left));
+  z-index: 4;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.touch-stick {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  border: 1px solid rgb(255 221 177 / 25%);
+  border-radius: 50%;
+  background: rgb(19 16 20 / 45%);
+  box-shadow: inset 0 0 24px rgb(0 0 0 / 25%);
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.touch-stick__knob {
+  position: absolute;
+  top: 33px;
+  left: 33px;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgb(255 220 176 / 38%);
+  border-radius: 50%;
+  background: rgb(174 111 65 / 72%);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 30%);
+  pointer-events: none;
+}
+
+.touch-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 48px);
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.touch-actions button {
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  border: 1px solid rgb(255 218 167 / 26%);
+  border-radius: 50%;
+  background: rgb(28 22 26 / 76%);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 24%);
+  touch-action: none;
+}
+
+.touch-actions button[data-pressed="true"] {
+  border-color: #f0ae66;
+  background: rgb(154 83 48 / 90%);
+  transform: scale(0.94);
+}
+
+html[data-paused="true"] .arena-status::after {
+  content: " · 已暂停";
+  color: #ffd28c;
+}
+
+html[data-input-mode="gamepad"] .device-prompt {
+  border-color: rgb(142 216 255 / 48%);
+}
+
+html[data-input-mode="touch"] .device-prompt {
+  border-color: rgb(240 174 102 / 52%);
+}
+
+[data-game-canvas][hidden] {
+  display: none;
+}
+
+.runtime-fallback {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  width: min(520px, calc(100% - 32px));
+  padding: 24px;
+  border: 1px solid rgb(240 174 102 / 42%);
+  border-radius: 18px;
+  background: rgb(22 18 22 / 94%);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 45%);
+  transform: translate(-50%, -50%);
+}
+
+.runtime-fallback h2,
+.runtime-fallback p {
+  margin: 0;
+}
+
+.runtime-fallback h2 {
+  color: #ffd7a8;
+}
+
+.runtime-fallback p {
+  margin-top: 0.65rem;
+  color: #e8ded8;
+  line-height: 1.55;
+}
+
+.runtime-fallback dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 0.9rem;
+  margin: 1rem 0;
+}
+
+.runtime-fallback dt {
+  color: #b8aaa2;
+}
+
+.runtime-fallback dd {
+  margin: 0;
+  color: #fff4e7;
+}
+
+.runtime-fallback details {
+  color: #b8aaa2;
+}
+
+@media (hover: hover) and (pointer: fine) and (min-width: 900px) {
+  .touch-controls {
+    opacity: 0.5;
+  }
+}
+
+@media (max-width: 620px) {
+  .arena-shell {
+    grid-template-rows: auto minmax(700px, calc(100svh - 74px));
+  }
+
+  .arena-header {
+    min-height: 74px;
+    padding: 12px 16px;
+  }
+
+  .arena-header h1 {
+    font-size: 25px;
+  }
+
+  .device-legend {
+    max-width: 92px;
+    text-align: right;
+    font-size: 11px;
+  }
+
+  .game-stage {
+    min-height: 700px;
+  }
+
+  .hud {
+    top: max(12px, var(--ashfall-safe-top));
+    left: 12px;
+    width: calc(100% - 24px);
+    padding: 12px 14px;
+  }
+
+  .hud__loadout {
+    font-size: 11px;
+  }
+
+  .hud__progression {
+    font-size: 10px;
+  }
+
+  .arena-status {
+    top: 174px;
+    font-size: 11px;
+  }
+
+  .objective-card {
+    right: 12px;
+    bottom: max(12px, var(--ashfall-safe-bottom));
+    width: calc(100% - 24px);
+    padding: 13px 15px;
+  }
+
+  .objective-card h2 {
+    font-size: 17px;
+  }
+
+  .objective-card p:last-child {
+    font-size: 12px;
+  }
+
+  .touch-controls {
+    right: max(14px, var(--ashfall-safe-right));
+    bottom: max(144px, calc(var(--ashfall-safe-bottom) + 132px));
+    left: max(14px, var(--ashfall-safe-left));
+  }
+
+  .touch-stick {
+    width: 94px;
+    height: 94px;
+  }
+
+  .touch-stick__knob {
+    top: 27px;
+    left: 27px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .touch-actions {
+    grid-template-columns: repeat(4, 44px);
+    max-width: 200px;
+    gap: 6px;
+  }
+
+  .touch-actions button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .target-panel {
+    top: 213px;
+    right: auto;
+    left: 12px;
+    width: 168px;
+  }
+
+  .device-prompt {
+    bottom: max(266px, calc(var(--ashfall-safe-bottom) + 254px));
+    left: 12px;
+    max-width: calc(100% - 24px);
+  }
+
+  .feedback-caption {
+    top: 181px;
+  }
+
+  .audio-settings {
+    top: 210px;
+    right: 12px;
+    grid-template-columns: 1fr;
+    width: 174px;
+  }
+
+  .audio-settings input[type="range"] {
+    width: 76px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}
+
+.enemy-telegraph-banner {
+  position: absolute;
+  left: 50%;
+  top: 7.25rem;
+  z-index: 6;
+  max-width: min(78vw, 34rem);
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 189, 96, 0.78);
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  background: rgba(41, 21, 18, 0.88);
+  color: #ffe2a6;
+  font-size: 0.78rem;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  text-align: center;
+  pointer-events: none;
+}
+
+.enemy-telegraph-banner[hidden] {
+  display: none;
+}
+
+.save-notice {
+  position: absolute;
+  top: 4.2rem;
+  left: 50%;
+  z-index: 8;
+  max-width: min(78vw, 34rem);
+  margin: 0;
+  padding: 0.55rem 0.85rem;
+  transform: translateX(-50%);
+  border: 1px solid rgb(238 173 98 / 42%);
+  border-radius: 0.65rem;
+  background: rgb(27 20 22 / 92%);
+  color: #ffe0ad;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.new-run-button {
+  position: absolute;
+  right: 1.25rem;
+  top: 1.25rem;
+  z-index: 8;
+  min-height: 44px;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid rgb(255 218 167 / 28%);
+  border-radius: 999px;
+  background: rgb(28 22 26 / 82%);
+  color: #f2dfcf;
+}
+
+.progression-dialog {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 20;
+  width: min(92%, 31rem);
+  max-width: none;
+  margin: 0;
+  padding: 1.35rem;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgb(240 174 102 / 55%);
+  border-radius: 1rem;
+  background:
+    linear-gradient(150deg, rgb(51 34 31 / 98%), rgb(19 17 21 / 98%));
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 55%);
+  color: #f4e6da;
+}
+
+.save-notice[hidden] {
+  display: none;
+}
+
+.progression-dialog::backdrop {
+  background: rgb(7 5 8 / 72%);
+  backdrop-filter: blur(2px);
+}
+
+.progression-dialog h2 {
+  margin: 0.3rem 0 0.55rem;
+  font: 500 1.65rem/1.15 Georgia, "Songti SC", serif;
+}
+
+.progression-dialog > p:not(.progression-dialog__kicker) {
+  margin: 0 0 1rem;
+  color: #cdbdb1;
+  line-height: 1.55;
+}
+
+.progression-dialog__kicker {
+  margin: 0;
+  color: #f0ae66;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.progression-dialog__actions {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.progression-dialog button {
+  min-height: 48px;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgb(255 218 167 / 30%);
+  border-radius: 0.7rem;
+  background: rgb(116 65 45 / 72%);
+  color: #fff4e5;
+  font: inherit;
+  text-align: left;
+}
+
+.progression-dialog button:focus-visible,
+.new-run-button:focus-visible {
+  outline: 3px solid #ffd28c;
+  outline-offset: 3px;
+}
+
+@media (max-width: 620px) {
+  .new-run-button {
+    top: 10.9rem;
+    right: 0.75rem;
+  }
+
+  .save-notice {
+    top: 16.5rem;
+  }
+
+  .progression-dialog {
+    width: calc(100% - 1.5rem);
+    padding: 1rem;
+  }
+
+  .progression-dialog button {
+    min-height: 52px;
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .arena-shell {
+    grid-template-rows: 100svh;
+  }
+
+  .arena-header {
+    display: none;
+  }
+
+  .game-stage {
+    min-height: 100svh;
+  }
+
+  .hud {
+    top: max(8px, var(--ashfall-safe-top));
+    left: max(8px, var(--ashfall-safe-left));
+    width: 218px;
+    padding: 8px 10px;
+    gap: 5px;
+  }
+
+  .hud__vitals {
+    grid-template-columns: 42px 1fr;
+    gap: 2px 7px;
+    font-size: 10px;
+  }
+
+  .hud__loadout,
+  .hud__progression {
+    font-size: 9px;
+  }
+
+  .arena-status {
+    top: 8px;
+  }
+
+  .target-panel {
+    top: 115px;
+    right: auto;
+    left: max(8px, var(--ashfall-safe-left));
+    width: 218px;
+  }
+
+  .objective-card {
+    top: 145px;
+    right: max(8px, var(--ashfall-safe-right));
+    bottom: auto;
+    width: 224px;
+    padding: 8px 10px;
+  }
+
+  .objective-card h2 {
+    margin: 3px 0;
+    font-size: 14px;
+  }
+
+  .objective-card p:last-child {
+    display: none;
+  }
+
+  .touch-controls {
+    right: max(10px, var(--ashfall-safe-right));
+    bottom: max(8px, var(--ashfall-safe-bottom));
+    left: max(10px, var(--ashfall-safe-left));
+  }
+
+  .touch-stick {
+    width: 84px;
+    height: 84px;
+  }
+
+  .touch-stick__knob {
+    top: 23px;
+    left: 23px;
+    width: 38px;
+    height: 38px;
+  }
+
+  .touch-actions {
+    grid-template-columns: repeat(4, 44px);
+  }
+
+  .touch-actions button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .device-prompt {
+    right: 234px;
+    bottom: max(10px, var(--ashfall-safe-bottom));
+    left: auto;
+    max-width: 230px;
+  }
+
+  .audio-settings {
+    top: 8px;
+    right: max(8px, var(--ashfall-safe-right));
+    grid-template-columns: repeat(2, 1fr);
+    width: 224px;
+    padding: 0.3rem 0.5rem;
+  }
+
+  .new-run-button {
+    top: 88px;
+    right: max(8px, var(--ashfall-safe-right));
+    min-height: 44px;
+  }
+
+  .enemy-telegraph-banner {
+    top: 3.5rem;
+  }
+
+  .feedback-caption {
+    top: 6.4rem;
+  }
+
+  .save-notice {
+    top: 3.5rem;
+  }
+}

@@ -1,0 +1,72 @@
+import { arenaContent } from "../content/arena-content";
+import type { GameState } from "./types";
+
+export function createInitialState(seed: number): GameState {
+  if (!Number.isSafeInteger(seed) || Object.is(seed, -0)) {
+    throw new TypeError("seed must be a finite safe integer other than -0");
+  }
+
+  return {
+    version: 1,
+    seed,
+    tick: 0,
+    status: "playing",
+    paused: false,
+    player: {
+      id: "player",
+      position: { ...arenaContent.arena.playerSpawn },
+      facingRadians: 0,
+      health: 105,
+      maxHealth: 105,
+      stamina: 100,
+      maxStamina: 100,
+      action: "idle",
+      actionTime: 0,
+      collisionLayer: "player",
+      weaponId: "oathblade",
+      healingCharges: 3,
+      souls: 0,
+      powerMultiplier: 1,
+      upgradeId: null,
+      lockTargetId: null,
+    },
+    enemies: {},
+    encounter: {
+      phase: "training",
+      gateOpen: false,
+      trainingSpawned: false,
+      trainingAttackSeen: false,
+      trainingGuardSeen: false,
+      spawnedIds: [],
+      completedIds: [],
+      bossThresholds: { 65: false, 30: false },
+      pendingSummons: [],
+      completedSummons: [],
+      consumedSummonAttackIds: [],
+      trainingAiEnabled: true,
+      phaseEntryTick: 0,
+    },
+    enemyAi: {
+      meleeSlotOwner: null,
+      rangedWindow: -1,
+      rangedSlotOwner: null,
+      rangedWindowUsed: false,
+      supportSlotOwner: null,
+    },
+    drops: [],
+    rewardedEnemyIds: [],
+    claimedDropIds: [],
+    combat: {
+      attackSequence: 0,
+      activeAttack: null,
+      projectiles: [],
+      enemyProjectiles: [],
+      spawnedEnemyAttackIds: [],
+      receivedAttackIds: [],
+      attackInputHeld: false,
+      switchInputHeld: false,
+      guardReleaseTicks: 0,
+      playerHitRecoveryTicks: 0,
+    },
+  };
+}

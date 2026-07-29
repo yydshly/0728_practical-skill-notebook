@@ -1,0 +1,13 @@
+:root {
+  --showcase-color-canvas: #0f1115;
+  --showcase-color-surface: #1a1e26;
+  --showcase-color-text: #f4f7fb;
+  --showcase-color-accent: #7de2d1;
+  --showcase-font-body: Inter, "Noto Sans SC", sans-serif;
+  --showcase-font-display: "Noto Serif SC", Georgia, serif;
+  --showcase-space-1: 0.25rem;
+  --showcase-space-3: 1rem;
+  --showcase-focus-ring: 0 0 0 3px color-mix(in srgb, var(--showcase-color-accent) 55%, transparent);
+  --showcase-motion-fast: 120ms;
+  --showcase-motion-standard: 220ms;
+}

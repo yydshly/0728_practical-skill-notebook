@@ -1,0 +1,23 @@
+{
+  "name": "@showcase/monster-forge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4173",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "test:preview": "playwright test --config playwright.production.config.ts",
+    "capture:catalog": "node scripts/capture-catalog-previews.mjs"
+  },
+  "dependencies": {
+    "@showcase/game-assets": "*",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "@types/pngjs": "^6.0.5",
+    "@types/three": "^0.185.1",
+    "pngjs": "^7.0.0"
+  }
+}
