@@ -300,6 +300,91 @@ try {
     throw new Error('Expected protagonist home wall to block player movement');
   }
 
+  const poleMovements = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    const posts = game.actorColliders.filter(
+      ({ id }) => /^road_lantern_[ab]_body$/.test(id),
+    );
+    const approaches = [
+      {
+        id: 'north',
+        start: [0, 1],
+        direct: [0, -0.5],
+        diagonal: [0.2, -0.5],
+        expectedSlide: [0.2, 1],
+      },
+      {
+        id: 'south',
+        start: [0, -1],
+        direct: [0, 0.5],
+        diagonal: [0.2, 0.5],
+        expectedSlide: [0.2, -1],
+      },
+      {
+        id: 'east',
+        start: [1, 0],
+        direct: [-0.5, 0],
+        diagonal: [-0.5, 0.2],
+        expectedSlide: [1, 0.2],
+      },
+      {
+        id: 'west',
+        start: [-1, 0],
+        direct: [0.5, 0],
+        diagonal: [0.5, 0.2],
+        expectedSlide: [-1, 0.2],
+      },
+    ];
+    const results = [];
+
+    for (const post of posts) {
+      for (const approach of approaches) {
+        const start = [
+          post.x + approach.start[0],
+          post.z + approach.start[1],
+        ];
+        game.setPlayerForTest(...start);
+        game.moveForTest(...approach.direct);
+        const blocked = [game.player.position.x, game.player.position.z];
+
+        game.setPlayerForTest(...start);
+        game.moveForTest(...approach.diagonal);
+        const sliding = [game.player.position.x, game.player.position.z];
+
+        results.push({
+          postId: post.id,
+          approachId: approach.id,
+          start,
+          blocked,
+          sliding,
+          expectedSlide: [
+            post.x + approach.expectedSlide[0],
+            post.z + approach.expectedSlide[1],
+          ],
+        });
+      }
+    }
+    game.setPlayerForTest(-8, 33);
+    return { postCount: posts.length, results };
+  });
+  if (poleMovements.postCount !== 2) {
+    throw new Error(`Expected two road-lantern colliders: ${JSON.stringify(poleMovements)}`);
+  }
+  for (const result of poleMovements.results) {
+    if (
+      Math.abs(result.blocked[0] - result.start[0]) > 0.001
+      || Math.abs(result.blocked[1] - result.start[1]) > 0.001
+    ) {
+      throw new Error(`Expected ${result.postId}/${result.approachId} to block: ${JSON.stringify(result)}`);
+    }
+    if (
+      Math.abs(result.sliding[0] - result.expectedSlide[0]) > 0.001
+      || Math.abs(result.sliding[1] - result.expectedSlide[1]) > 0.001
+    ) {
+      throw new Error(`Expected ${result.postId}/${result.approachId} to slide: ${JSON.stringify(result)}`);
+    }
+  }
+
   await page.evaluate(() => {
     const game = window.__RURAL_ESCAPE__;
     game.setPlayerForTest(-8, 33);
@@ -511,6 +596,53 @@ try {
       `Expected readable player-pursuer spacing, got min ${pursuerContact.minimumDistance} `
       + `and final ${pursuerContact.distance}`,
     );
+  }
+
+  const polePursuits = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    const posts = game.actorColliders.filter(
+      ({ id }) => /^road_lantern_[ab]_body$/.test(id),
+    );
+    const results = [];
+
+    for (const post of posts) {
+      game.pursuer.reset();
+      game.pursuer.object.position.set(post.x, 0, post.z + 2);
+      game.setPlayerForTest(post.x, post.z - 4);
+      let minimumDistance = Infinity;
+      let minimumPlayerDistance = Infinity;
+      for (let index = 0; index < 180; index += 1) {
+        game.updatePursuerForTest(1 / 60);
+        minimumDistance = Math.min(
+          minimumDistance,
+          Math.hypot(
+            game.pursuer.object.position.x - post.x,
+            game.pursuer.object.position.z - post.z,
+          ),
+        );
+        minimumPlayerDistance = Math.min(
+          minimumPlayerDistance,
+          game.pursuer.object.position.distanceTo(game.player.position),
+        );
+      }
+      results.push({
+        postId: post.id,
+        minimumDistance,
+        minimumPlayerDistance,
+        position: game.pursuer.object.position.toArray(),
+      });
+    }
+    game.pursuer.reset();
+    game.setPlayerForTest(-8, 33);
+    return results;
+  });
+  for (const result of polePursuits) {
+    if (result.minimumDistance < 0.62 - 0.001) {
+      throw new Error(`Expected pursuer to avoid ${result.postId}: ${JSON.stringify(result)}`);
+    }
+    if (result.minimumPlayerDistance < 2.2 - 0.001) {
+      throw new Error(`Expected pursuer to retain player separation: ${JSON.stringify(result)}`);
+    }
   }
 
   await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-11.2, 32.8));
@@ -1022,7 +1154,7 @@ try {
 
   console.log(
     'Smoke test passed: guidance, traversal, story, pursuit, mute, viewports, reduced motion, '
-    + 'console health, and camera.',
+    + 'console health, camera, and pole collision.',
   );
 } catch (error) {
   testError = error;

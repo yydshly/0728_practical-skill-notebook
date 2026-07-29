@@ -334,6 +334,9 @@ window.__RURAL_ESCAPE__ = {
   pursuer,
   get guidance() { return { ...guidanceSnapshot }; },
   get danger() { return { ...dangerSnapshot }; },
+  get actorColliders() {
+    return village.actorColliders.map((collider) => ({ ...collider }));
+  },
   audio,
   rendererPixelRatio: renderer.getPixelRatio(),
   interactForTest: storyDirector.interact,
