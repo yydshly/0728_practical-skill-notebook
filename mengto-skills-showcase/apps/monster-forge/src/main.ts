@@ -1,4 +1,9 @@
 import { createProceduralMonster, monsters } from "@showcase/game-assets";
+import {
+  createProductGuide,
+  resolveProductHubHref,
+  type ProductGuideController,
+} from "@showcase/showcase-guide";
 import { createInspectorStore } from "./state/inspector-store";
 import {
   createInspectorScene,
@@ -10,6 +15,9 @@ import {
 import { renderCatalog } from "./ui/render-catalog";
 import { renderFallback, type FallbackReason } from "./ui/render-fallback";
 import { renderInspector } from "./ui/render-inspector";
+import { MONSTER_FORGE_GUIDE } from "./showcase/guide-content";
+import { resolveMonsterForgeHubHref } from "./showcase/resolve-hub-href";
+import "@showcase/showcase-guide/styles.css";
 import "./styles.css";
 
 declare global { interface Window { __monsterForgeDiagnostics?: () => InspectorSceneDiagnostics | undefined; } }
@@ -44,6 +52,20 @@ const inspector = renderInspector(
   () => store.restartAction(),
   (name) => store.toggleOverlay(name),
 );
+let guide: ProductGuideController | null = null;
+if (!captureMode) {
+  const hubHref = import.meta.env.DEV
+    ? resolveMonsterForgeHubHref(import.meta.env, window.location.href)
+    : resolveProductHubHref(
+      import.meta.env.VITE_SHOWCASE_HUB_URL ?? "/",
+      "monster-forge",
+      window.location.href,
+    );
+  guide = createProductGuide(app, {
+    ...MONSTER_FORGE_GUIDE,
+    hubHref,
+  });
+}
 
 type SceneStatus = "loading" | "ready" | "unavailable";
 let sceneStatus: SceneStatus = "loading";
@@ -145,4 +167,8 @@ refreshStatus = render;
 initializeScene();
 render();
 const unsubscribe = store.subscribe(render);
-window.addEventListener("pagehide", () => { unsubscribe(); scene?.dispose(); }, { once: true });
+window.addEventListener("pagehide", () => {
+  guide?.destroy();
+  unsubscribe();
+  scene?.dispose();
+}, { once: true });

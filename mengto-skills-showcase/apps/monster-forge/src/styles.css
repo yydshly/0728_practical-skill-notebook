@@ -1,6 +1,7 @@
 :root { color-scheme: dark; font-family: Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif; background: #111114; color: #f2ede6; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 0; background: radial-gradient(circle at 78% 8%, #4a32282e, transparent 36rem), #111114; }
+#app { --showcase-guide-accent: #f59e5b; --showcase-guide-surface: #191713; }
 button { font: inherit; }
 button:focus-visible { outline: 3px solid #d9a36d; outline-offset: 3px; }
 .forge-shell { width: min(1480px, 100%); margin: 0 auto; padding: clamp(1.25rem, 3vw, 3.75rem); overflow: hidden; }

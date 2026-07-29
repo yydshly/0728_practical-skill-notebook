@@ -1,5 +1,33 @@
 # Monster Forge｜怪物铸造所：验证记录
 
+## 2026-07-29 中文导览与返回展厅验证
+
+- 本轮候选基于 `d9ef199d646e12f235c56a7833c4b04208efba62`，最终候选 SHA 以本轮 `feat: onboard Monster Forge visitors` 提交及配套 Task 6 报告为准。
+- 版本 1 中文导览覆盖首访自动打开、开始体验、持久“这是什么？”入口、Escape 关闭后焦点恢复，以及 `localStorage` getter 抛出 `SecurityError` 时的可用降级。
+- “返回能力展厅”不设置 `target`，始终在当前标签返回 `#product-monster-forge`。URL 单元测试覆盖 DEV `4172`、PROD 同域根路径和显式 `VITE_SHOWCASE_HUB_URL="../"`。
+- `?capture=1` 不创建导览入口或 dialog；普通审阅和 `?reviewControls=1&forceWebglFailure=1` 保留导览与返回链接。
+- 可观察小成功点为选择 `Glass Crawler`、勾选“显示骨架”后，目录卡保持 `aria-pressed="true"`、检查器标题与骨架状态同步，且页面仍只有一个实时 canvas。
+- 导览与现有 store/scene 共用原有单一 `pagehide` 销毁路径；controller、订阅和 Three.js 场景均在该 handler 中释放。
+
+本轮新鲜命令证据：
+
+```powershell
+npm test --workspace @showcase/monster-forge -- showcase-hub-url
+# 1 file；3/3
+npm run test:browser --workspace @showcase/monster-forge -- guide
+# 6/6
+npm test --workspace @showcase/monster-forge
+# 6 files；18/18
+npm run test:browser --workspace @showcase/monster-forge
+# 22/22
+npm run test:preview --workspace @showcase/monster-forge
+# 1/1
+npm run build --workspace @showcase/monster-forge
+# PASS；Vite 保留既有 >500 kB chunk 提示
+rg -n -i '127\.0\.0\.1|localhost|\[::1\]' apps/monster-forge/dist
+# 无匹配
+```
+
 ## 验证对象与边界
 
 - 当前套件代码候选：`43ef034d06f341f525740fbfd243a6d9aabc0b20`。本轮重新执行了覆盖 Monster Forge 源码的根测试、根构建、工作区契约和 Skill 只读审计，但没有重跑 Monster Forge 专项浏览器矩阵或生产预览。
