@@ -15,9 +15,62 @@ import { resolveCircleMove } from '../src/collision.js';
 import { nearestInteraction } from '../src/interactions.js';
 import * as buildings from '../src/world/buildings.js';
 import { addPropCluster } from '../src/world/props.js';
+import {
+  OBJECTIVE_DEFINITIONS,
+  getObjectiveDefinition,
+  resolveObjectiveTarget,
+  validateObjectiveDefinitions,
+} from '../src/objectives.js';
+import { createStoryDirector } from '../src/story.js';
 
 const { computeThirdPersonPose } = cameraMath;
 const { buildVillageGate } = buildings;
+
+test('objective definitions map the four story stages to stable village anchors', () => {
+  assert.deepEqual(
+    ['leave_home', 'visit_courtyard', 'reach_granary', 'escape_south_gate']
+      .map((id) => {
+        const objective = getObjectiveDefinition(id);
+        return [objective.step, objective.total, objective.anchorId, objective.interactionKind];
+      }),
+    [
+      [1, 4, 'radio', 'radio'],
+      [2, 4, 'neighbour', 'neighbour'],
+      [3, 4, 'flashlight', 'flashlight'],
+      [4, 4, 'south_gate', null],
+    ],
+  );
+  assert.deepEqual(
+    validateObjectiveDefinitions(OBJECTIVE_DEFINITIONS, new Set([
+      'radio', 'neighbour', 'flashlight', 'south_gate',
+    ])),
+    [],
+  );
+});
+
+test('objective target resolution fails closed when an anchor is missing', () => {
+  const radio = new THREE.Vector3(-11.2, 0, 32.8);
+  assert.equal(resolveObjectiveTarget('leave_home', { radio }), radio);
+  assert.equal(resolveObjectiveTarget('visit_courtyard', { radio }), null);
+  assert.equal(resolveObjectiveTarget('complete', { radio }), null);
+});
+
+test('story transitions emit each completion and start event exactly once', () => {
+  const events = [];
+  const ui = {
+    setObjective() {},
+    showSubtitle() {},
+  };
+  const director = createStoryDirector({ ui, onEvent: (event) => events.push(event) });
+
+  director.interact('radio');
+  director.interact('radio');
+
+  assert.deepEqual(events, [
+    { type: 'objective-completed', objectiveId: 'leave_home', nextObjectiveId: 'visit_courtyard' },
+    { type: 'objective-started', objectiveId: 'visit_courtyard' },
+  ]);
+});
 
 test('third-person pose starts above ground and behind its target', () => {
   const pose = computeThirdPersonPose({
