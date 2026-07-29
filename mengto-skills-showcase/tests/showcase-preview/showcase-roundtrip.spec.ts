@@ -82,6 +82,15 @@ async function normalRoundTrip(
   await returnFromGuide(page, context, product);
 }
 
+async function expectLiveAshfallRuntime(page: Page): Promise<void> {
+  await expect(page.locator("[data-runtime-fallback]")).toHaveCount(0);
+  await expect(page.locator("html")).not.toHaveAttribute(
+    "data-render-mode",
+    "information-fallback",
+  );
+  await expect(page.locator("[data-game-canvas]")).toBeVisible();
+}
+
 async function installAshfallLifecycleProbe(
   page: Page,
   samples: LifecycleSample[],
@@ -220,6 +229,7 @@ for (const product of products) {
       await installAshfallLifecycleProbe(page, samples);
 
       await enterProduct(page, context, product);
+      await expectLiveAshfallRuntime(page);
       await expect(page).not.toHaveURL(/[?&](reviewControls|guideReview)=/);
       await expect(page.locator("html")).toHaveAttribute(
         "data-guide-scroll-lock",
