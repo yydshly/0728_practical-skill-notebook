@@ -63,6 +63,309 @@ async function waitForServer() {
   throw new Error('Vite test server did not start');
 }
 
+async function assertPoleAcceptance(page, viewportLabel) {
+  const acceptance = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    const posts = game.actorColliders.filter(
+      ({ id }) => /^road_lantern_[ab]_body$/.test(id),
+    );
+    const approaches = [
+      {
+        id: 'north',
+        start: [0, 1],
+        direct: [0, -0.5],
+        diagonal: [0.2, -0.5],
+        expectedSlide: [0.2, 1],
+      },
+      {
+        id: 'south',
+        start: [0, -1],
+        direct: [0, 0.5],
+        diagonal: [0.2, 0.5],
+        expectedSlide: [0.2, -1],
+      },
+      {
+        id: 'east',
+        start: [1, 0],
+        direct: [-0.5, 0],
+        diagonal: [-0.5, 0.2],
+        expectedSlide: [1, 0.2],
+      },
+      {
+        id: 'west',
+        start: [-1, 0],
+        direct: [0.5, 0],
+        diagonal: [0.5, 0.2],
+        expectedSlide: [-1, 0.2],
+      },
+    ];
+    const movements = [];
+    const pursuits = [];
+    const storyBefore = {
+      objective: game.story.objective,
+      flags: { ...game.story.flags },
+    };
+
+    for (const post of posts) {
+      for (const approach of approaches) {
+        const start = [
+          post.x + approach.start[0],
+          post.z + approach.start[1],
+        ];
+        game.setPlayerForTest(...start);
+        game.moveForTest(...approach.direct);
+        const blocked = [game.player.position.x, game.player.position.z];
+
+        game.setPlayerForTest(...start);
+        game.moveForTest(...approach.diagonal);
+        const sliding = [game.player.position.x, game.player.position.z];
+
+        movements.push({
+          postId: post.id,
+          approachId: approach.id,
+          start,
+          blocked,
+          sliding,
+          expectedSlide: [
+            post.x + approach.expectedSlide[0],
+            post.z + approach.expectedSlide[1],
+          ],
+        });
+      }
+
+      game.pursuer.reset();
+      game.pursuer.object.position.set(post.x, 0, post.z + 2);
+      game.setPlayerForTest(post.x, post.z - 4);
+      let minimumDistance = Infinity;
+      let minimumPlayerDistance = Infinity;
+      for (let index = 0; index < 180; index += 1) {
+        game.updatePursuerForTest(1 / 60);
+        minimumDistance = Math.min(
+          minimumDistance,
+          Math.hypot(
+            game.pursuer.object.position.x - post.x,
+            game.pursuer.object.position.z - post.z,
+          ),
+        );
+        minimumPlayerDistance = Math.min(
+          minimumPlayerDistance,
+          game.pursuer.object.position.distanceTo(game.player.position),
+        );
+      }
+      pursuits.push({
+        postId: post.id,
+        minimumDistance,
+        minimumPlayerDistance,
+        position: game.pursuer.object.position.toArray(),
+      });
+    }
+
+    game.pursuer.reset();
+    game.setPlayerForTest(-8, 33);
+    return {
+      postCount: posts.length,
+      movements,
+      pursuits,
+      reset: {
+        player: game.player.position.toArray(),
+        pursuerState: game.pursuer.state,
+        story: {
+          objective: game.story.objective,
+          flags: { ...game.story.flags },
+        },
+      },
+      storyBefore,
+    };
+  });
+
+  if (
+    acceptance.postCount !== 2
+    || acceptance.movements.length !== 8
+    || acceptance.pursuits.length !== 2
+  ) {
+    throw new Error(
+      `[${viewportLabel}] Expected two road-lantern colliders and eight movement cases: `
+      + `${JSON.stringify(acceptance)}`,
+    );
+  }
+  for (const result of acceptance.movements) {
+    if (
+      Math.abs(result.blocked[0] - result.start[0]) > 0.001
+      || Math.abs(result.blocked[1] - result.start[1]) > 0.001
+    ) {
+      throw new Error(
+        `[${viewportLabel}] Expected ${result.postId}/${result.approachId} to block: `
+        + `${JSON.stringify(result)}`,
+      );
+    }
+    if (
+      Math.abs(result.sliding[0] - result.expectedSlide[0]) > 0.001
+      || Math.abs(result.sliding[1] - result.expectedSlide[1]) > 0.001
+    ) {
+      throw new Error(
+        `[${viewportLabel}] Expected ${result.postId}/${result.approachId} to slide: `
+        + `${JSON.stringify(result)}`,
+      );
+    }
+  }
+  for (const result of acceptance.pursuits) {
+    if (result.minimumDistance < 0.62 - 0.001) {
+      throw new Error(
+        `[${viewportLabel}] Expected pursuer to avoid ${result.postId}: `
+        + `${JSON.stringify(result)}`,
+      );
+    }
+    if (result.minimumPlayerDistance < 2.2 - 0.001) {
+      throw new Error(
+        `[${viewportLabel}] Expected pursuer to retain player separation at ${result.postId}: `
+        + `${JSON.stringify(result)}`,
+      );
+    }
+  }
+  if (
+    Math.hypot(acceptance.reset.player[0] + 8, acceptance.reset.player[2] - 33) > 0.001
+    || acceptance.reset.pursuerState !== 'patrol'
+    || JSON.stringify(acceptance.reset.story) !== JSON.stringify(acceptance.storyBefore)
+  ) {
+    throw new Error(
+      `[${viewportLabel}] Expected pole acceptance to restore player, pursuer, and story: `
+      + `${JSON.stringify(acceptance.reset)}`,
+    );
+  }
+}
+
+async function assertFullViewportAcceptance(page, testPort, viewport) {
+  const viewportLabel = `${viewport.width}x${viewport.height}`;
+  await page.setViewportSize(viewport);
+  await page.goto(`http://127.0.0.1:${testPort}/`, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    game.setStoryStateForTest(
+      { radio: false, neighbour: false, flashlight: false },
+      'leave_home',
+    );
+    game.pursuer.reset();
+    game.setPlayerForTest(-8, 33);
+    game.completeIntroForTest();
+  });
+
+  await assertPoleAcceptance(page, viewportLabel);
+
+  const routeSteps = [
+    {
+      id: 'radio',
+      position: [-9, 32.8],
+      expectedObjective: 'visit_courtyard',
+      waitForToast: true,
+    },
+    {
+      id: 'neighbour',
+      position: [10.4, 24.4],
+      expectedObjective: 'reach_granary',
+      waitForToast: true,
+    },
+    {
+      id: 'flashlight',
+      position: [13.2, -4.6],
+      expectedObjective: 'escape_south_gate',
+      waitForToast: false,
+    },
+  ];
+  for (const routeStep of routeSteps) {
+    const promptVisible = await page.evaluate(([x, z]) => {
+      window.__RURAL_ESCAPE__.setPlayerForTest(x, z);
+      return !document.querySelector('#interaction').hidden;
+    }, routeStep.position);
+    if (!promptVisible) {
+      throw new Error(
+        `[${viewportLabel}] Expected ${routeStep.id} interaction prompt on canonical route`,
+      );
+    }
+
+    await page.keyboard.press('KeyE');
+    const objective = await page.evaluate(() => window.__RURAL_ESCAPE__.story.objective);
+    if (objective !== routeStep.expectedObjective) {
+      throw new Error(
+        `[${viewportLabel}] Expected ${routeStep.id} objective `
+        + `${routeStep.expectedObjective}, got ${objective}`,
+      );
+    }
+    if (routeStep.waitForToast) {
+      await page.waitForFunction(() => document.querySelector('#completion-toast').hidden);
+    }
+  }
+
+  const completedObjective = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    game.setPlayerForTest(0, -34);
+    game.updateStoryForTest();
+    return game.story.objective;
+  });
+  if (completedObjective !== 'complete') {
+    throw new Error(
+      `[${viewportLabel}] Expected south-gate route completion, got ${completedObjective}`,
+    );
+  }
+
+  await page.goto(
+    `http://127.0.0.1:${testPort}/?evidence=contact`,
+    { waitUntil: 'domcontentloaded' },
+  );
+  await page.waitForFunction(() => {
+    const { renderCalls, renderTriangles } = document.querySelector('.game-shell').dataset;
+    return Number(renderCalls) > 0 && Number(renderTriangles) > 0;
+  });
+  const renderEvidence = await page.evaluate(() => {
+    const { renderCalls, renderTriangles } = document.querySelector('.game-shell').dataset;
+    return { calls: Number(renderCalls), triangles: Number(renderTriangles) };
+  });
+  if (
+    !Number.isFinite(renderEvidence.calls)
+    || renderEvidence.calls <= 0
+    || !Number.isFinite(renderEvidence.triangles)
+    || renderEvidence.triangles <= 0
+  ) {
+    throw new Error(
+      `[${viewportLabel}] Expected positive renderer evidence: `
+      + `${JSON.stringify(renderEvidence)}`,
+    );
+  }
+
+  await page.goto(`http://127.0.0.1:${testPort}/`, { waitUntil: 'domcontentloaded' });
+  const reset = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    game.setStoryStateForTest(
+      { radio: false, neighbour: false, flashlight: false },
+      'leave_home',
+    );
+    game.pursuer.reset();
+    game.setPlayerForTest(-8, 33);
+    return {
+      viewport: [window.innerWidth, window.innerHeight],
+      player: game.player.position.toArray(),
+      pursuerState: game.pursuer.state,
+      objective: game.story.objective,
+      flags: { ...game.story.flags },
+    };
+  });
+  if (
+    reset.viewport[0] !== viewport.width
+    || reset.viewport[1] !== viewport.height
+    || Math.hypot(reset.player[0] + 8, reset.player[2] - 33) > 0.001
+    || reset.pursuerState !== 'patrol'
+    || reset.objective !== 'leave_home'
+    || reset.flags.radio
+    || reset.flags.neighbour
+    || reset.flags.flashlight
+  ) {
+    throw new Error(
+      `[${viewportLabel}] Expected full acceptance reset invariants: ${JSON.stringify(reset)}`,
+    );
+  }
+
+  return renderEvidence;
+}
+
 try {
   await waitForServer();
   browser = await chromium.launch({ headless: true });
@@ -300,90 +603,7 @@ try {
     throw new Error('Expected protagonist home wall to block player movement');
   }
 
-  const poleMovements = await page.evaluate(() => {
-    const game = window.__RURAL_ESCAPE__;
-    const posts = game.actorColliders.filter(
-      ({ id }) => /^road_lantern_[ab]_body$/.test(id),
-    );
-    const approaches = [
-      {
-        id: 'north',
-        start: [0, 1],
-        direct: [0, -0.5],
-        diagonal: [0.2, -0.5],
-        expectedSlide: [0.2, 1],
-      },
-      {
-        id: 'south',
-        start: [0, -1],
-        direct: [0, 0.5],
-        diagonal: [0.2, 0.5],
-        expectedSlide: [0.2, -1],
-      },
-      {
-        id: 'east',
-        start: [1, 0],
-        direct: [-0.5, 0],
-        diagonal: [-0.5, 0.2],
-        expectedSlide: [1, 0.2],
-      },
-      {
-        id: 'west',
-        start: [-1, 0],
-        direct: [0.5, 0],
-        diagonal: [0.5, 0.2],
-        expectedSlide: [-1, 0.2],
-      },
-    ];
-    const results = [];
-
-    for (const post of posts) {
-      for (const approach of approaches) {
-        const start = [
-          post.x + approach.start[0],
-          post.z + approach.start[1],
-        ];
-        game.setPlayerForTest(...start);
-        game.moveForTest(...approach.direct);
-        const blocked = [game.player.position.x, game.player.position.z];
-
-        game.setPlayerForTest(...start);
-        game.moveForTest(...approach.diagonal);
-        const sliding = [game.player.position.x, game.player.position.z];
-
-        results.push({
-          postId: post.id,
-          approachId: approach.id,
-          start,
-          blocked,
-          sliding,
-          expectedSlide: [
-            post.x + approach.expectedSlide[0],
-            post.z + approach.expectedSlide[1],
-          ],
-        });
-      }
-    }
-    game.setPlayerForTest(-8, 33);
-    return { postCount: posts.length, results };
-  });
-  if (poleMovements.postCount !== 2) {
-    throw new Error(`Expected two road-lantern colliders: ${JSON.stringify(poleMovements)}`);
-  }
-  for (const result of poleMovements.results) {
-    if (
-      Math.abs(result.blocked[0] - result.start[0]) > 0.001
-      || Math.abs(result.blocked[1] - result.start[1]) > 0.001
-    ) {
-      throw new Error(`Expected ${result.postId}/${result.approachId} to block: ${JSON.stringify(result)}`);
-    }
-    if (
-      Math.abs(result.sliding[0] - result.expectedSlide[0]) > 0.001
-      || Math.abs(result.sliding[1] - result.expectedSlide[1]) > 0.001
-    ) {
-      throw new Error(`Expected ${result.postId}/${result.approachId} to slide: ${JSON.stringify(result)}`);
-    }
-  }
+  await assertPoleAcceptance(page, '1280x720');
 
   await page.evaluate(() => {
     const game = window.__RURAL_ESCAPE__;
@@ -596,53 +816,6 @@ try {
       `Expected readable player-pursuer spacing, got min ${pursuerContact.minimumDistance} `
       + `and final ${pursuerContact.distance}`,
     );
-  }
-
-  const polePursuits = await page.evaluate(() => {
-    const game = window.__RURAL_ESCAPE__;
-    const posts = game.actorColliders.filter(
-      ({ id }) => /^road_lantern_[ab]_body$/.test(id),
-    );
-    const results = [];
-
-    for (const post of posts) {
-      game.pursuer.reset();
-      game.pursuer.object.position.set(post.x, 0, post.z + 2);
-      game.setPlayerForTest(post.x, post.z - 4);
-      let minimumDistance = Infinity;
-      let minimumPlayerDistance = Infinity;
-      for (let index = 0; index < 180; index += 1) {
-        game.updatePursuerForTest(1 / 60);
-        minimumDistance = Math.min(
-          minimumDistance,
-          Math.hypot(
-            game.pursuer.object.position.x - post.x,
-            game.pursuer.object.position.z - post.z,
-          ),
-        );
-        minimumPlayerDistance = Math.min(
-          minimumPlayerDistance,
-          game.pursuer.object.position.distanceTo(game.player.position),
-        );
-      }
-      results.push({
-        postId: post.id,
-        minimumDistance,
-        minimumPlayerDistance,
-        position: game.pursuer.object.position.toArray(),
-      });
-    }
-    game.pursuer.reset();
-    game.setPlayerForTest(-8, 33);
-    return results;
-  });
-  for (const result of polePursuits) {
-    if (result.minimumDistance < 0.62 - 0.001) {
-      throw new Error(`Expected pursuer to avoid ${result.postId}: ${JSON.stringify(result)}`);
-    }
-    if (result.minimumPlayerDistance < 2.2 - 0.001) {
-      throw new Error(`Expected pursuer to retain player separation: ${JSON.stringify(result)}`);
-    }
   }
 
   await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-11.2, 32.8));
@@ -1056,6 +1229,7 @@ try {
   for (const viewport of [
     { width: 1280, height: 720 },
     { width: 1440, height: 900 },
+    { width: 390, height: 844 },
   ]) {
     await page.setViewportSize(viewport);
     await page.goto(
@@ -1100,6 +1274,22 @@ try {
     if (overlaps(hudRects['#interaction'], hudRects['#tutorial-hint'])) {
       throw new Error(`Interaction prompt overlaps tutorial hint at ${viewport.width}x${viewport.height}`);
     }
+  }
+
+  const portraitPageErrorStart = pageErrors.length;
+  const portraitConsoleErrorStart = consoleErrors.length;
+  await assertFullViewportAcceptance(page, port, { width: 390, height: 844 });
+  const portraitPageErrors = pageErrors.slice(portraitPageErrorStart);
+  const portraitConsoleErrors = consoleErrors.slice(portraitConsoleErrorStart);
+  if (portraitPageErrors.length) {
+    throw new Error(
+      `Expected zero 390x844 page errors, got ${portraitPageErrors.join(' | ')}`,
+    );
+  }
+  if (portraitConsoleErrors.length) {
+    throw new Error(
+      `Expected zero 390x844 console errors, got ${portraitConsoleErrors.join(' | ')}`,
+    );
   }
 
   if (guidanceHud.compassLive !== null) {
