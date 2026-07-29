@@ -29,9 +29,41 @@ import {
 } from '../src/guidance.js';
 import { createWorldObjectiveMarker } from '../src/world-marker.js';
 import { createTutorialTracker } from '../src/tutorial.js';
+import { createDangerController } from '../src/danger.js';
+import { createAudioFeedback } from '../src/audio-feedback.js';
 
 const { computeThirdPersonPose } = cameraMath;
 const { buildVillageGate } = buildings;
+
+test('danger controller distinguishes chase, close threat, recovery, and safety', () => {
+  const danger = createDangerController({ recoverySeconds: 1.2 });
+  assert.equal(danger.update(0.016, 'patrol', 20).mode, 'safe');
+  const chase = danger.update(0.016, 'chase', 8);
+  assert.deepEqual([chase.mode, chase.label], ['chase', '宸茶鍙戠幇']);
+  const threat = danger.update(0.016, 'threaten', 2.4);
+  assert.equal(threat.mode, 'threaten');
+  assert.ok(threat.heartbeatBpm > chase.heartbeatBpm);
+  assert.equal(danger.update(0.4, 'patrol', 18).mode, 'recover');
+  assert.equal(danger.update(0.81, 'patrol', 18).mode, 'safe');
+});
+
+test('audio feedback remains safe without an AudioContext implementation', async () => {
+  const audio = createAudioFeedback({ AudioContextCtor: null });
+  assert.equal(await audio.unlock(), false);
+  assert.equal(audio.unlocked, false);
+  assert.doesNotThrow(() => audio.handleStoryEvent({
+    type: 'objective-completed',
+    objectiveId: 'leave_home',
+  }));
+  assert.doesNotThrow(() => audio.updateDanger({
+    mode: 'threaten',
+    heartbeatBpm: 110,
+    intensity: 1,
+  }));
+  audio.setMuted(true);
+  assert.equal(audio.muted, true);
+  audio.dispose();
+});
 
 test('tutorial tracker reveals each control once in authored order', () => {
   const changes = [];
