@@ -1,5 +1,14 @@
 import { expect, it } from "vitest";
-import { resolveProductHubHref } from "../src/index";
+import * as guide from "../src/index";
+
+it("keeps the root entry limited to the three product guide contract", () => {
+  expect(guide.PRODUCT_IDS).toEqual([
+    "monster-forge",
+    "ashfall-arena",
+    "mech-atelier",
+  ]);
+  expect("createGuidePreferenceAccess" in guide).toBe(false);
+});
 
 it.each([
   [
@@ -23,6 +32,6 @@ it.each([
 ] as const)(
   "resolves %s for %s",
   (base, productId, currentHref, expected) => {
-    expect(resolveProductHubHref(base, productId, currentHref)).toBe(expected);
+    expect(guide.resolveProductHubHref(base, productId, currentHref)).toBe(expected);
   },
 );
