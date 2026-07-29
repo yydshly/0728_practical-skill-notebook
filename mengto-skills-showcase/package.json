@@ -18,7 +18,8 @@
     "test:browser": "playwright test",
     "build": "npm run build --workspaces --if-present",
     "build:showcase": "node scripts/build-showcase.mjs",
-    "preview:showcase": "vite preview --config vite.showcase-preview.config.ts"
+    "preview:showcase": "vite preview --config vite.showcase-preview.config.ts",
+    "test:showcase-preview": "playwright test --config playwright.showcase-preview.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",
