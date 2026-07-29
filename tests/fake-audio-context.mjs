@@ -68,6 +68,7 @@ class FakeConnectableNode {
     this.context = context;
     this.connections = [];
     this.disconnections = [];
+    this.disconnectPlan = null;
   }
 
   connect(target) {
@@ -79,6 +80,7 @@ class FakeConnectableNode {
   disconnect(target) {
     this.disconnections.push(target ?? null);
     this.context.events.push({ type: 'disconnect', node: this, target: target ?? null });
+    return this.disconnectPlan?.();
   }
 }
 
@@ -98,6 +100,7 @@ export class FakeBufferSourceNode extends FakeConnectableNode {
     this.loopEnd = 0;
     this.startCalls = [];
     this.stopCalls = [];
+    this.stopPlan = null;
     this.onended = null;
   }
 
@@ -114,6 +117,7 @@ export class FakeBufferSourceNode extends FakeConnectableNode {
   stop(...args) {
     this.stopCalls.push(args);
     this.context.events.push({ type: 'source-stop', source: this, args });
+    return this.stopPlan?.();
   }
 }
 
@@ -123,6 +127,7 @@ export class FakeOscillatorNode extends FakeConnectableNode {
     this.frequency = new FakeAudioParam(440, (event) => context.events.push(event));
     this.startCalls = [];
     this.stopCalls = [];
+    this.stopPlan = null;
     this.onended = null;
   }
 
@@ -134,6 +139,7 @@ export class FakeOscillatorNode extends FakeConnectableNode {
   stop(...args) {
     this.stopCalls.push(args);
     this.context.events.push({ type: 'oscillator-stop', oscillator: this, args });
+    return this.stopPlan?.();
   }
 }
 

@@ -119,15 +119,32 @@ export function createMusicDirector({
     try {
       return { codec: 'ogg', buffers: await fetchCodecSet('ogg') };
     } catch (error) {
+      if (disposed) return null;
       warnOnce('ogg-fetch', error);
+      if (disposed) return null;
     }
 
+    if (disposed) return null;
     try {
       return { codec: 'mp3', buffers: await fetchCodecSet('mp3') };
     } catch (error) {
+      if (disposed) return null;
       enterFailure('mp3-fetch', error);
       return null;
     }
+  }
+
+  async function loadAndStorePreferredSet() {
+    if (disposed) return false;
+    const loaded = await loadPreferredCodecSet();
+    if (!loaded || disposed) return false;
+    selectedCodec = loaded.codec;
+    fetchedSet = loaded.buffers;
+    decodedSet = null;
+    assetState = 'prefetched';
+    if (playback === 'error') playback = 'locked';
+    publish();
+    return !disposed;
   }
 
   function prefetch() {
@@ -146,24 +163,21 @@ export function createMusicDirector({
       if (playback === 'error') playback = 'locked';
     }
     assetState = 'loading';
-    publish();
 
-    const operation = (async () => {
-      const loaded = await loadPreferredCodecSet();
-      if (!loaded || disposed) return false;
-      selectedCodec = loaded.codec;
-      fetchedSet = loaded.buffers;
-      decodedSet = null;
-      assetState = 'prefetched';
-      if (playback === 'error') playback = 'locked';
-      publish();
-      return true;
-    })();
-
-    prefetchPromise = operation.finally(() => {
-      prefetchPromise = null;
+    let resolveOperation;
+    const operation = new Promise((resolve) => {
+      resolveOperation = resolve;
     });
-    return prefetchPromise;
+    let trackedPromise;
+    trackedPromise = operation.finally(() => {
+      if (prefetchPromise === trackedPromise) prefetchPromise = null;
+    });
+    prefetchPromise = trackedPromise;
+    publish();
+    void loadAndStorePreferredSet()
+      .catch((error) => enterFailure('prefetch', error))
+      .then(resolveOperation);
+    return trackedPromise;
   }
 
   async function decodeCodecSet(buffers, context) {
@@ -215,16 +229,24 @@ export function createMusicDirector({
   }
 
   async function obtainValidatedSet(context) {
-    if (!fetchedSet && !(await prefetch())) return null;
+    if (!fetchedSet) {
+      const loaded = prefetchPromise
+        ? await prefetchPromise
+        : await loadAndStorePreferredSet();
+      if (!loaded) return null;
+    }
     if (disposed) return null;
 
     if (selectedCodec === 'ogg') {
       try {
         return await decodeCodecSet(fetchedSet, context);
       } catch (error) {
+        if (disposed) return null;
         warnOnce('ogg-decode-or-spec', error);
+        if (disposed) return null;
         clearLoadReferences();
         try {
+          if (disposed) return null;
           fetchedSet = await fetchCodecSet('mp3');
           if (disposed) {
             clearLoadReferences();
@@ -233,16 +255,20 @@ export function createMusicDirector({
           selectedCodec = 'mp3';
           assetState = 'prefetched';
           publish();
+          if (disposed) return null;
         } catch (mp3FetchError) {
+          if (disposed) return null;
           enterFailure('mp3-fetch', mp3FetchError);
           return null;
         }
       }
     }
 
+    if (disposed) return null;
     try {
       return await decodeCodecSet(fetchedSet, context);
     } catch (error) {
+      if (disposed) return null;
       enterFailure('mp3-decode-or-spec', error);
       return null;
     }
@@ -337,10 +363,11 @@ export function createMusicDirector({
     if (assetState === 'error' || playback === 'error') {
       clearLoadReferences();
     }
+    if (!fetchedSet) assetState = 'loading';
     playback = 'loading';
-    publish();
 
-    const operation = (async () => {
+    const runUnlock = async () => {
+      if (disposed) return false;
       if (!contextRef || !musicOutputRef || !stingerOutputRef) {
         return enterFailure(
           'unlock-input',
@@ -360,13 +387,23 @@ export function createMusicDirector({
       assetState = 'ready';
       playback = 'playing';
       publish();
-      return true;
-    })().catch((error) => enterFailure('unlock', error));
+      return !disposed;
+    };
 
-    unlockPromise = operation.finally(() => {
-      unlockPromise = null;
+    let resolveOperation;
+    const operation = new Promise((resolve) => {
+      resolveOperation = resolve;
     });
-    return unlockPromise;
+    let trackedPromise;
+    trackedPromise = operation.finally(() => {
+      if (unlockPromise === trackedPromise) unlockPromise = null;
+    });
+    unlockPromise = trackedPromise;
+    publish();
+    void runUnlock()
+      .catch((error) => enterFailure('unlock', error))
+      .then(resolveOperation);
+    return trackedPromise;
   }
 
   function handleStoryEvent() {
