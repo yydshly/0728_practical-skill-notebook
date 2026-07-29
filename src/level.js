@@ -35,11 +35,9 @@ function runtimePropColliders(clusterDefinitions) {
   return clusterDefinitions.flatMap((cluster) => {
     if (!cluster.collider) return [];
     return [{
-      id: cluster.collider.id,
+      ...cluster.collider,
       x: cluster.x + (cluster.collider.offsetX ?? 0),
       z: cluster.z + (cluster.collider.offsetZ ?? 0),
-      halfX: cluster.collider.halfX,
-      halfZ: cluster.collider.halfZ,
     }];
   });
 }

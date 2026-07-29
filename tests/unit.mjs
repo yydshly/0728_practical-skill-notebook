@@ -12,7 +12,10 @@ import { createVillage } from '../src/level.js';
 import { createCameraController } from '../src/camera.js';
 import { createCameraPointerInput } from '../src/camera-pointer-input.js';
 import { createAtmosphere } from '../src/atmosphere.js';
-import { resolveCircleMove } from '../src/collision.js';
+import {
+  circleColliderPenetration,
+  resolveCircleMove,
+} from '../src/collision.js';
 import { nearestInteraction } from '../src/interactions.js';
 import * as buildings from '../src/world/buildings.js';
 import { addPropCluster } from '../src/world/props.js';
@@ -894,10 +897,93 @@ test('circle movement stops outside a house collider', () => {
     { x: 1.3, z: 0 },
     0.4,
     { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
-    [{ x: 2, z: 0, halfX: 0.5, halfZ: 2 }],
+    [{
+      shape: 'box',
+      x: 2,
+      z: 0,
+      halfX: 0.5,
+      halfZ: 2,
+      blocksActors: true,
+      blocksCamera: true,
+    }],
   );
   assert.equal(next.x, 0);
   assert.equal(next.z, 0);
+});
+
+test('circle actor stops at a circle post and slides on the free axis', () => {
+  const bounds = { minX: -10, maxX: 10, minZ: -10, maxZ: 10 };
+  const post = {
+    id: 'test_post',
+    shape: 'circle',
+    x: 0,
+    z: 0,
+    radius: 0.16,
+    blocksActors: true,
+    blocksCamera: false,
+  };
+
+  const blocked = resolveCircleMove(
+    { x: 0, z: 1 },
+    { x: 0, z: -0.5 },
+    0.42,
+    bounds,
+    [post],
+  );
+  assert.deepEqual(blocked, { x: 0, z: 1 });
+
+  const sliding = resolveCircleMove(
+    { x: 0, z: 1 },
+    { x: 0.2, z: -0.5 },
+    0.42,
+    bounds,
+    [post],
+  );
+  assert.equal(sliding.x, 0.2);
+  assert.equal(sliding.z, 1);
+});
+
+test('actor starting in a post can move only when penetration decreases', () => {
+  const bounds = { minX: -10, maxX: 10, minZ: -10, maxZ: 10 };
+  const post = {
+    id: 'test_post',
+    shape: 'circle',
+    x: 0,
+    z: 0,
+    radius: 0.16,
+    blocksActors: true,
+    blocksCamera: false,
+  };
+
+  const escaping = resolveCircleMove(
+    { x: 0, z: 0.5 },
+    { x: 0, z: 0.04 },
+    0.42,
+    bounds,
+    [post],
+  );
+  assert.equal(escaping.z, 0.54);
+
+  const worsening = resolveCircleMove(
+    { x: 0, z: 0.5 },
+    { x: 0, z: -0.1 },
+    0.42,
+    bounds,
+    [post],
+  );
+  assert.equal(worsening.z, 0.5);
+});
+
+test('collision math rejects an unknown collider shape', () => {
+  assert.throws(
+    () => circleColliderPenetration(0, 0, 0.42, {
+      id: 'bad',
+      shape: 'capsule',
+      x: 0,
+      z: 0,
+    }),
+    /Unknown collider shape: capsule/,
+  );
 });
 
 test('interaction selects only a nearby candidate', () => {
@@ -913,7 +999,15 @@ test('player movement uses village colliders', () => {
   const player = createPlayer(
     new THREE.Scene(),
     new THREE.Vector3(),
-    [{ x: 2, z: 0, halfX: 0.5, halfZ: 2 }],
+    [{
+      shape: 'box',
+      x: 2,
+      z: 0,
+      halfX: 0.5,
+      halfZ: 2,
+      blocksActors: true,
+      blocksCamera: true,
+    }],
   );
   player.moveDirect(
     1.3,
