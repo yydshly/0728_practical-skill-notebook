@@ -111,6 +111,9 @@ export function renderShowcase(
     article.dataset.productCard = product.id;
     article.dataset.accent = product.accent;
 
+    const preview = document.createElement("div");
+    preview.className = "product-preview";
+
     const image = document.createElement("img");
     image.src = resolvePreviewHref(
       assetBaseUrl,
@@ -119,6 +122,21 @@ export function renderShowcase(
     image.alt = product.card.previewAlt;
     image.width = 1440;
     image.height = 900;
+
+    const fallback = document.createElement("p");
+    fallback.dataset.previewFallback = "";
+    fallback.hidden = true;
+    fallback.textContent = "预览暂时不可用，仍可查看说明或进入体验。";
+    image.addEventListener(
+      "error",
+      () => {
+        image.hidden = true;
+        fallback.hidden = false;
+        article.dataset.previewState = "failed";
+      },
+      { once: true },
+    );
+    preview.append(image, fallback);
 
     const cardBody = document.createElement("div");
     cardBody.className = "product-card-body";
@@ -160,7 +178,7 @@ export function renderShowcase(
     actions.append(explain, enter);
 
     cardBody.append(heading, summary, facts, actions);
-    article.append(image, cardBody);
+    article.append(preview, cardBody);
     productGrid.append(article);
   }
 
