@@ -502,6 +502,72 @@ async function completeStoryRoute(page) {
   await page.waitForFunction(() => window.__RURAL_ESCAPE__.story.objective === 'complete');
 }
 
+async function assertTrustedNonButtonUnlocks(browserInstance, testPort) {
+  const cases = [
+    {
+      label: 'keydown',
+      activate: (page) => page.keyboard.press('KeyW'),
+    },
+    {
+      label: 'canvas pointer/click',
+      activate: (page) => page.click('#game', { position: { x: 20, y: 20 } }),
+    },
+  ];
+  for (const acceptanceCase of cases) {
+    const context = await browserInstance.newContext({
+      viewport: { width: 1280, height: 720 },
+    });
+    const page = await context.newPage();
+    const navigationLog = createNavigationLog(page);
+    try {
+      navigationLog.start();
+      await page.goto(
+        `http://127.0.0.1:${testPort}/?evidence=birth`,
+        { waitUntil: 'domcontentloaded' },
+      );
+      await page.waitForFunction(() => Boolean(window.__RURAL_ESCAPE__));
+      const initial = await page.evaluate(() => ({
+        contextState: window.__RURAL_ESCAPE__.audio.contextState,
+        playback: window.__RURAL_ESCAPE__.audio.musicState.playback,
+        audioState: document.querySelector('#mute-toggle').dataset.audioState,
+      }));
+      if (
+        initial.audioState !== 'locked'
+        || initial.playback === 'playing'
+        || initial.contextState === 'running'
+      ) {
+        throw new Error(
+          `Expected fresh ${acceptanceCase.label} context to begin locked: `
+          + `${JSON.stringify(initial)}`,
+        );
+      }
+      await acceptanceCase.activate(page);
+      await waitForPlayingAudio(page);
+      const unlocked = await page.evaluate(() => ({
+        contextState: window.__RURAL_ESCAPE__.audio.contextState,
+        playback: window.__RURAL_ESCAPE__.audio.musicState.playback,
+        audioState: document.querySelector('#mute-toggle').dataset.audioState,
+      }));
+      if (
+        unlocked.audioState !== 'playing'
+        || unlocked.playback !== 'playing'
+        || unlocked.contextState !== 'running'
+      ) {
+        throw new Error(
+          `Expected first trusted ${acceptanceCase.label} to unlock: `
+          + `${JSON.stringify(unlocked)}`,
+        );
+      }
+      assertNoBrowserErrors(
+        navigationLog.freeze(),
+        `${acceptanceCase.label} audio navigation`,
+      );
+    } finally {
+      await context.close();
+    }
+  }
+}
+
 async function assertAudioAcceptance(browserInstance, testPort) {
   const context = await browserInstance.newContext({
     viewport: { width: 1280, height: 720 },
@@ -703,20 +769,46 @@ async function assertAudioAcceptance(browserInstance, testPort) {
       window.__RURAL_ESCAPE__.audio.musicState.mode === 'safe'
       && window.__RURAL_ESCAPE__.audio.activeVoices === 0
     ), null, { timeout: 10000 });
-    await page.evaluate(() => {
+    const revealStartedAt = await page.evaluate(() => {
       const game = window.__RURAL_ESCAPE__;
       game.setStoryStateForTest(
         { radio: true, neighbour: true, flashlight: false },
         'reach_granary',
       );
       game.interactForTest('flashlight');
+      return performance.now();
     });
-    await page.waitForFunction(() => window.__RURAL_ESCAPE__.audio.activeVoices > 0);
-    await page.waitForFunction(
-      () => window.__RURAL_ESCAPE__.audio.activeVoices === 0,
-      null,
-      { timeout: 10000 },
-    );
+    await page.waitForFunction((startedAt) => (
+      performance.now() - startedAt >= 500
+      || window.__RURAL_ESCAPE__.audio.activeVoices === 0
+    ), revealStartedAt);
+    const sustainedReveal = await page.evaluate((startedAt) => ({
+      activeVoices: window.__RURAL_ESCAPE__.audio.activeVoices,
+      elapsed: performance.now() - startedAt,
+    }), revealStartedAt);
+    if (sustainedReveal.elapsed < 500 || sustainedReveal.activeVoices <= 0) {
+      throw new Error(
+        `Expected reveal stinger beyond oscillator window: ${JSON.stringify(sustainedReveal)}`,
+      );
+    }
+    await page.waitForFunction((startedAt) => (
+      window.__RURAL_ESCAPE__.audio.activeVoices === 0
+      || performance.now() - startedAt >= 4000
+    ), revealStartedAt);
+    const completedReveal = await page.evaluate((startedAt) => ({
+      activeVoices: window.__RURAL_ESCAPE__.audio.activeVoices,
+      elapsed: performance.now() - startedAt,
+    }), revealStartedAt);
+    if (
+      completedReveal.activeVoices !== 0
+      || completedReveal.elapsed < 2500
+      || completedReveal.elapsed >= 4000
+    ) {
+      throw new Error(
+        `Expected reveal stinger to finish in its bounded window: `
+        + `${JSON.stringify(completedReveal)}`,
+      );
+    }
 
     const beforeFreeze = await page.evaluate(() => ({
       activeVoices: window.__RURAL_ESCAPE__.audio.activeVoices,
@@ -792,6 +884,9 @@ async function assertPortraitAudioAcceptance(browserInstance, testPort) {
               ? 'playing'
               : 'locked';
       return {
+        ariaBusy: button.getAttribute('aria-busy'),
+        ariaLabel: button.getAttribute('aria-label'),
+        ariaPressed: button.getAttribute('aria-pressed'),
         audioState: button.dataset.audioState,
         expectedState,
         pointerEvents: getComputedStyle(button).pointerEvents,
@@ -809,6 +904,13 @@ async function assertPortraitAudioAcceptance(browserInstance, testPort) {
       && left.top < right.bottom
       && left.bottom > right.top
     );
+    const expectedAria = {
+      locked: { label: '开启声音', pressed: 'false', busy: 'false' },
+      loading: { label: '正在加载声音', pressed: 'false', busy: 'true' },
+      playing: { label: '关闭声音', pressed: 'false', busy: 'false' },
+      muted: { label: '开启声音', pressed: 'true', busy: 'false' },
+      error: { label: '重试声音', pressed: 'false', busy: 'false' },
+    }[portrait.expectedState];
     if (
       !portrait.button
       || portrait.button.width < 44
@@ -819,6 +921,9 @@ async function assertPortraitAudioAcceptance(browserInstance, testPort) {
       || portrait.button.bottom > portrait.viewport[1]
       || portrait.pointerEvents === 'none'
       || portrait.audioState !== portrait.expectedState
+      || portrait.ariaLabel !== expectedAria?.label
+      || portrait.ariaPressed !== expectedAria?.pressed
+      || portrait.ariaBusy !== expectedAria?.busy
       || overlaps(portrait.button, portrait.tutorial)
       || overlaps(portrait.button, portrait.interaction)
     ) {
@@ -907,6 +1012,7 @@ try {
   await waitForServer();
   browser = await chromium.launch({ headless: true });
   await assertAudioAcceptance(browser, port);
+  await assertTrustedNonButtonUnlocks(browser, port);
   await assertPortraitAudioAcceptance(browser, port);
   await assertMissingAudioAcceptance(browser, port);
   const page = await browser.newPage({
