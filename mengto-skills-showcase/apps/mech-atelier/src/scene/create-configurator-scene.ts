@@ -22,6 +22,7 @@ import {
   TorusGeometry,
   Vector2,
   Vector3,
+  WebGLRenderTarget,
   WebGLRenderer,
   type Object3D,
 } from "three";
@@ -29,9 +30,14 @@ import {
   createMechAssembly,
   type MechAssembly,
   type MechEnvironment,
+  type MechModuleSlot,
   type MechVisualConfiguration,
 } from "@showcase/game-assets";
 import type { MechConfiguration } from "../configuration/types";
+import {
+  createExplodedView,
+  type ExplodedViewSnapshot,
+} from "./create-exploded-view";
 
 export interface CameraDebugSnapshot {
   yaw: number;
@@ -53,12 +59,30 @@ export interface ConfiguratorSceneSnapshot {
   environment: MechEnvironment;
   camera: CameraDebugSnapshot;
   rendererSize: { width: number; height: number };
+  exploded: ExplodedViewSnapshot;
+}
+
+export interface HotspotProjection {
+  readonly x: number;
+  readonly y: number;
+  readonly visible: boolean;
+  readonly hiddenReason: "visible" | "behind-camera" | "offscreen" | "invalid";
+}
+
+export interface ProductCapture {
+  readonly width: number;
+  readonly height: number;
+  readonly pixels: Uint8ClampedArray;
 }
 
 export interface ConfiguratorSceneController {
   readonly canvas: HTMLCanvasElement;
   readonly assembly: MechAssembly;
   updateConfiguration(config: MechConfiguration): void;
+  setExploded(exploded: boolean): void;
+  projectHotspot(slot: MechModuleSlot): HotspotProjection;
+  onFrame(listener: () => void): () => void;
+  captureProduct(width: number, height: number): Promise<ProductCapture>;
   resetView(): void;
   snapshot(): ConfiguratorSceneSnapshot;
   nonEmptyPixelCount(): number;
@@ -138,6 +162,12 @@ export function createConfiguratorScene(
   const camera = new PerspectiveCamera(35, 1, 0.1, 100);
   const assembly = createMechAssembly(toVisualConfiguration(initial));
   scene.add(assembly.root);
+  const reducedMotionQuery = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  );
+  const explodedView = createExplodedView(assembly, {
+    reducedMotion: reducedMotionQuery.matches,
+  });
 
   const stage = createStage();
   scene.add(stage.root);
@@ -160,6 +190,12 @@ export function createConfiguratorScene(
   let raf = 0;
   let renderWidth = 1;
   let renderHeight = 1;
+  let previousFrameTime = performance.now();
+  let previousExplodedProgress = 0;
+  const frameListeners = new Set<() => void>();
+  const hotspotWorld = new Vector3();
+  const hotspotView = new Vector3();
+  const hotspotNdc = new Vector3();
 
   const ids = new WeakMap<object, number>();
   let nextId = 1;
@@ -328,24 +364,185 @@ export function createConfiguratorScene(
   canvas.addEventListener("pointercancel", pointerUp);
   canvas.addEventListener("wheel", wheel, { passive: false });
 
-  function renderFrame(): void {
+  const reducedMotionChanged = (event: MediaQueryListEvent): void => {
+    explodedView.setReducedMotion(event.matches);
+    computeFit();
+  };
+  reducedMotionQuery.addEventListener("change", reducedMotionChanged);
+
+  function renderFrame(timestamp: number): void {
     if (disposed) return;
+    const deltaSeconds = Math.min(
+      Math.max((timestamp - previousFrameTime) / 1000, 0),
+      0.1,
+    );
+    previousFrameTime = timestamp;
+    explodedView.update(deltaSeconds);
+    const explodedProgress = explodedView.snapshot().progress;
+    if (explodedProgress !== previousExplodedProgress) {
+      previousExplodedProgress = explodedProgress;
+      computeFit();
+    }
     renderer.render(scene, camera);
+    for (const listener of frameListeners) listener();
     raf = requestAnimationFrame(renderFrame);
   }
 
   applyEnvironment(environment);
   resize();
   computeFit();
-  renderFrame();
+  renderFrame(performance.now());
 
   return {
     canvas,
     assembly,
     updateConfiguration(config) {
       assembly.updateConfiguration(toVisualConfiguration(config));
+      explodedView.rebind();
       applyEnvironment(config.finish.environment);
       computeFit();
+    },
+    setExploded(exploded) {
+      explodedView.setExploded(exploded);
+      if (reducedMotionQuery.matches) computeFit();
+    },
+    projectHotspot(slot) {
+      const hotspot = assembly.hotspots.get(slot);
+      if (!hotspot || disposed) {
+        return {
+          x: 0,
+          y: 0,
+          visible: false,
+          hiddenReason: "invalid",
+        };
+      }
+      assembly.root.updateWorldMatrix(true, true);
+      hotspot.getWorldPosition(hotspotWorld);
+      hotspotView.copy(hotspotWorld).applyMatrix4(camera.matrixWorldInverse);
+      hotspotNdc.copy(hotspotWorld).project(camera);
+      if (
+        !Number.isFinite(hotspotNdc.x) ||
+        !Number.isFinite(hotspotNdc.y) ||
+        !Number.isFinite(hotspotNdc.z)
+      ) {
+        return {
+          x: 0,
+          y: 0,
+          visible: false,
+          hiddenReason: "invalid",
+        };
+      }
+      const x = (hotspotNdc.x * 0.5 + 0.5) * renderWidth;
+      const y = (-hotspotNdc.y * 0.5 + 0.5) * renderHeight;
+      const behindCamera = hotspotView.z >= 0;
+      const offscreen =
+        hotspotNdc.x < -1 ||
+        hotspotNdc.x > 1 ||
+        hotspotNdc.y < -1 ||
+        hotspotNdc.y > 1 ||
+        hotspotNdc.z < -1 ||
+        hotspotNdc.z > 1;
+      return {
+        x: MathUtils.clamp(x, 0, renderWidth),
+        y: MathUtils.clamp(y, 0, renderHeight),
+        visible: !behindCamera && !offscreen,
+        hiddenReason: behindCamera
+          ? "behind-camera"
+          : offscreen
+            ? "offscreen"
+            : "visible",
+      };
+    },
+    onFrame(listener) {
+      if (disposed) return () => undefined;
+      frameListeners.add(listener);
+      listener();
+      return () => frameListeners.delete(listener);
+    },
+    async captureProduct(width, height) {
+      if (disposed) throw new Error("三维预览已关闭，请刷新页面后重试。");
+      if (
+        !Number.isInteger(width) ||
+        !Number.isInteger(height) ||
+        width < 1 ||
+        height < 1 ||
+        width > 2048 ||
+        height > 2048
+      ) {
+        throw new Error("海报渲染尺寸无效，请刷新页面后重试。");
+      }
+
+      const renderTarget = new WebGLRenderTarget(width, height);
+      renderTarget.texture.colorSpace = SRGBColorSpace;
+      const captureCamera = camera.clone();
+      const captureBounds = new Box3().setFromObject(assembly.root);
+      const captureSize = captureBounds.getSize(new Vector3());
+      const captureCenter = captureBounds.getCenter(new Vector3());
+      const radius = Math.max(captureSize.length() / 2, 1);
+      captureCamera.aspect = width / height;
+      const verticalHalfAngle = MathUtils.degToRad(captureCamera.fov / 2);
+      const horizontalHalfAngle = Math.atan(
+        Math.tan(verticalHalfAngle) * captureCamera.aspect,
+      );
+      const captureDistance =
+        (radius / Math.sin(Math.min(verticalHalfAngle, horizontalHalfAngle))) *
+        1.16;
+      const horizontal = Math.cos(pitch) * captureDistance;
+      captureCamera.position.set(
+        captureCenter.x + Math.sin(yaw) * horizontal,
+        captureCenter.y + Math.sin(pitch) * captureDistance,
+        captureCenter.z + Math.cos(yaw) * horizontal,
+      );
+      captureCamera.near = Math.max(0.05, captureDistance - radius * 2.5);
+      captureCamera.far = captureDistance + radius * 6;
+      captureCamera.lookAt(captureCenter);
+      captureCamera.updateProjectionMatrix();
+
+      const previousTarget = renderer.getRenderTarget();
+      const previousBackground = scene.background;
+      const previousFog = scene.fog;
+      const previousStageVisibility = stage.root.visible;
+      const previousClearColor = renderer.getClearColor(new Color()).clone();
+      const previousClearAlpha = renderer.getClearAlpha();
+      const source = new Uint8Array(width * height * 4);
+      try {
+        stage.root.visible = false;
+        scene.background = null;
+        scene.fog = null;
+        renderer.setRenderTarget(renderTarget);
+        renderer.setClearColor(0x000000, 0);
+        renderer.clear(true, true, true);
+        renderer.render(scene, captureCamera);
+        renderer.readRenderTargetPixels(
+          renderTarget,
+          0,
+          0,
+          width,
+          height,
+          source,
+        );
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`无法读取当前机甲画面：${detail}`);
+      } finally {
+        renderer.setRenderTarget(previousTarget);
+        renderer.setClearColor(previousClearColor, previousClearAlpha);
+        stage.root.visible = previousStageVisibility;
+        scene.background = previousBackground;
+        scene.fog = previousFog;
+        renderTarget.dispose();
+      }
+
+      const pixels = new Uint8ClampedArray(source.length);
+      const rowSize = width * 4;
+      for (let y = 0; y < height; y += 1) {
+        const sourceStart = (height - 1 - y) * rowSize;
+        pixels.set(
+          source.subarray(sourceStart, sourceStart + rowSize),
+          y * rowSize,
+        );
+      }
+      return { width, height, pixels };
     },
     resetView() {
       yaw = defaultYaw;
@@ -380,6 +577,7 @@ export function createConfiguratorScene(
           width: renderWidth,
           height: renderHeight,
         },
+        exploded: explodedView.snapshot(),
       };
     },
     nonEmptyPixelCount() {
@@ -411,12 +609,15 @@ export function createConfiguratorScene(
       if (disposed) return;
       disposed = true;
       cancelAnimationFrame(raf);
+      frameListeners.clear();
+      reducedMotionQuery.removeEventListener("change", reducedMotionChanged);
       observer.disconnect();
       canvas.removeEventListener("pointerdown", pointerDown);
       canvas.removeEventListener("pointermove", pointerMove);
       canvas.removeEventListener("pointerup", pointerUp);
       canvas.removeEventListener("pointercancel", pointerUp);
       canvas.removeEventListener("wheel", wheel);
+      explodedView.dispose();
       assembly.dispose();
       stage.dispose();
       lights.root.clear();

@@ -135,7 +135,11 @@ function renderSelectionGroup(
   config: MechConfiguration,
 ): string {
   return `
-    <fieldset class="option-group" data-option-group="${group.field}">
+    <fieldset
+      class="option-group"
+      id="option-group-${group.field}"
+      data-option-group="${group.field}"
+    >
       <legend><span>${group.sequence}</span>${group.legend}</legend>
       <div class="option-list">
         ${group.options

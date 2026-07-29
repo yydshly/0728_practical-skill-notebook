@@ -1,4 +1,6 @@
 import "./styles.css";
+import type { MechModuleSlot } from "@showcase/game-assets";
+import { calculateSummary } from "./configuration/calculate-summary";
 import { catalog, defaultConfiguration } from "./content/catalog";
 import {
   hasConfigurationQuery,
@@ -19,17 +21,21 @@ import {
   createConfiguratorScene,
   type ConfiguratorSceneSnapshot,
 } from "./scene/create-configurator-scene";
+import {
+  createProductPoster,
+  type ProductPosterMetadata,
+} from "./export/create-product-poster";
+import { renderHotspots } from "./ui/render-hotspots";
 import { renderOptionGroups } from "./ui/render-option-groups";
 import { renderSummary } from "./ui/render-summary";
 
-declare global {
-  interface Window {
-    __MECH_ATELIER_DEBUG__?: {
-      snapshot(): ConfiguratorSceneSnapshot;
-      nonEmptyPixelCount(): number;
-    };
-  }
-}
+type DebugWindow = typeof window & {
+  __MECH_ATELIER_DEBUG__?: {
+    snapshot(): ConfiguratorSceneSnapshot;
+    nonEmptyPixelCount(): number;
+    lastPosterMetadata(): ProductPosterMetadata | null;
+  };
+};
 
 type SelectionField =
   | "chassisId"
@@ -93,13 +99,19 @@ app.innerHTML = `
     </header>
 
     <div class="workspace">
-      <section class="product-stage" data-product-stage aria-label="机甲三维预览">
+      <section
+        class="product-stage"
+        data-product-stage
+        data-exploded-state="assembled"
+        aria-label="机甲三维预览"
+      >
         <canvas
           data-product-canvas
           aria-label="可拖拽旋转和缩放的机甲概念模型"
           tabindex="0"
         ></canvas>
         <div class="stage-vignette" aria-hidden="true"></div>
+        <div class="part-hotspots" data-part-hotspots aria-label="机甲部件热点"></div>
         <div class="stage-heading">
           <p class="section-kicker">CONFIGURATION / ACTIVE</p>
           <h1>机甲定制工坊</h1>
@@ -116,6 +128,9 @@ app.innerHTML = `
         </div>
         <div class="stage-controls">
           <p>拖拽旋转 · 滚轮 / 双指缩放</p>
+          <button type="button" data-toggle-exploded>
+            <span aria-hidden="true">↗</span> 分解视图
+          </button>
           <button type="button" data-reset-view>
             <span aria-hidden="true">↺</span> 重置视图
           </button>
@@ -148,10 +163,17 @@ app.innerHTML = `
           <div class="sharing-actions">
             <button type="button" data-copy-link>复制配置链接</button>
             <button type="button" data-reset-config>恢复默认配置</button>
+            <button type="button" data-export-poster>导出产品海报</button>
           </div>
           <p
             class="share-status"
             data-share-status
+            role="status"
+            aria-live="polite"
+          ></p>
+          <p
+            class="share-status poster-status"
+            data-poster-status
             role="status"
             aria-live="polite"
           ></p>
@@ -184,6 +206,11 @@ const stageEnvironment = requiredElement<HTMLElement>(
   "[data-stage-environment]",
 );
 const resetViewButton = requiredElement<HTMLButtonElement>("[data-reset-view]");
+const productStage = requiredElement<HTMLElement>("[data-product-stage]");
+const hotspotContainer = requiredElement<HTMLElement>("[data-part-hotspots]");
+const toggleExplodedButton = requiredElement<HTMLButtonElement>(
+  "[data-toggle-exploded]",
+);
 const copyLinkButton = requiredElement<HTMLButtonElement>("[data-copy-link]");
 const resetConfigurationButton = requiredElement<HTMLButtonElement>(
   "[data-reset-config]",
@@ -192,6 +219,10 @@ const shareStatus = requiredElement<HTMLElement>("[data-share-status]");
 const shareFallback = requiredElement<HTMLInputElement>(
   "[data-share-fallback]",
 );
+const exportPosterButton = requiredElement<HTMLButtonElement>(
+  "[data-export-poster]",
+);
+const posterStatus = requiredElement<HTMLElement>("[data-poster-status]");
 
 const search = new URLSearchParams(window.location.search);
 const hasExplicitConfiguration = hasConfigurationQuery(search);
@@ -206,18 +237,27 @@ let configuration = initial.config;
 const persistence = createSavedConfigurationController();
 
 const productScene = createConfiguratorScene(canvas, configuration);
+const hotspotController = renderHotspots(
+  hotspotContainer,
+  productScene,
+  focusConfigurationSlot,
+);
+let exploded = false;
+let lastPosterMetadata: ProductPosterMetadata | null = null;
 renderInterface();
 renderAnnouncement(initial.messages);
 if (hasExplicitConfiguration) replaceCurrentConfigurationUrl();
 
-delete window.__MECH_ATELIER_DEBUG__;
+const debugWindow = window as DebugWindow;
+delete debugWindow.__MECH_ATELIER_DEBUG__;
 if (
   (!hasExplicitConfiguration && knownReview) ||
   search.get("reviewControls") === "1"
 ) {
-  window.__MECH_ATELIER_DEBUG__ = {
+  debugWindow.__MECH_ATELIER_DEBUG__ = {
     snapshot: () => productScene.snapshot(),
     nonEmptyPixelCount: () => productScene.nonEmptyPixelCount(),
+    lastPosterMetadata: () => lastPosterMetadata,
   };
 }
 
@@ -265,6 +305,14 @@ optionsContainer.addEventListener("change", (event) => {
 });
 
 resetViewButton.addEventListener("click", () => productScene.resetView());
+toggleExplodedButton.addEventListener("click", () => {
+  exploded = !exploded;
+  productScene.setExploded(exploded);
+  productStage.dataset.explodedState = exploded ? "exploded" : "assembled";
+  toggleExplodedButton.innerHTML = exploded
+    ? '<span aria-hidden="true">↙</span> 重新组装'
+    : '<span aria-hidden="true">↗</span> 分解视图';
+});
 copyLinkButton.addEventListener("click", async () => {
   const link = canonicalAbsoluteUrl();
   shareFallback.hidden = true;
@@ -289,6 +337,54 @@ copyLinkButton.addEventListener("click", async () => {
     shareFallback.select();
   }
 });
+exportPosterButton.addEventListener("click", async () => {
+  exportPosterButton.disabled = true;
+  posterStatus.textContent = "正在生成当前配置海报…";
+  lastPosterMetadata = null;
+  try {
+    const chassis = catalog.chassis.find(
+      (candidate) => candidate.id === configuration.chassisId,
+    );
+    const head = findPart(configuration.headId);
+    const moduleNames = [
+      head?.name ?? configuration.headId,
+      findPart(configuration.armorId)?.name ?? configuration.armorId,
+      findPart(configuration.leftWeaponId)?.name ??
+        configuration.leftWeaponId,
+      findPart(configuration.rightWeaponId)?.name ??
+        configuration.rightWeaponId,
+      findPart(configuration.rearModuleId)?.name ??
+        configuration.rearModuleId,
+    ];
+    const blob = await createProductPoster({
+      configuration,
+      summary: calculateSummary(configuration, catalog),
+      chassisName: chassis?.name ?? configuration.chassisId,
+      configurationName: `${chassis?.name ?? configuration.chassisId} · ${head?.name ?? configuration.headId}方案`,
+      moduleNames,
+      canonicalUrl: canonicalAbsoluteUrl(),
+      captureProduct: (width, height) =>
+        productScene.captureProduct(width, height),
+    });
+    lastPosterMetadata = blob.debugMetadata;
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = posterFilename(configuration);
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+    posterStatus.textContent = "产品海报已导出。";
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    posterStatus.textContent =
+      `海报导出失败：${detail} 请保持配置器开启并重试。`;
+  } finally {
+    exportPosterButton.disabled = false;
+  }
+});
 resetConfigurationButton.addEventListener("click", () => {
   if (!window.confirm("确定恢复默认配置吗？当前选择将被替换。")) return;
   applyConfiguration(cloneConfiguration(defaultConfiguration), {
@@ -304,8 +400,9 @@ window.addEventListener(
   () => {
     persistence.flush();
     persistence.dispose();
+    hotspotController.dispose();
     productScene.dispose();
-    delete window.__MECH_ATELIER_DEBUG__;
+    delete debugWindow.__MECH_ATELIER_DEBUG__;
   },
   { once: true },
 );
@@ -335,6 +432,24 @@ function applyConfiguration(
   renderInterface(activeName);
   replaceCurrentConfigurationUrl();
   persistence.schedule(configuration);
+}
+
+function focusConfigurationSlot(
+  _slot: MechModuleSlot,
+  controlsId: string,
+): void {
+  const fieldset = document.getElementById(controlsId);
+  if (!(fieldset instanceof HTMLFieldSetElement)) return;
+  fieldset.scrollIntoView({
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth",
+    block: "center",
+  });
+  const firstAvailable = fieldset.querySelector<HTMLInputElement>(
+    'input[type="radio"]:not(:disabled)',
+  );
+  firstAvailable?.focus({ preventScroll: true });
 }
 
 function renderInterface(focusGroup: string | null = null): void {
@@ -500,6 +615,12 @@ function canonicalAbsoluteUrl(): string {
     serializeConfiguration(configuration),
     window.location.origin,
   ).href;
+}
+
+function posterFilename(config: MechConfiguration): string {
+  const safeChassis = config.chassisId.replace(/[^a-z0-9-]/g, "");
+  const safeHead = config.headId.replace(/[^a-z0-9-]/g, "");
+  return `mech-atelier-${safeChassis}-${safeHead}.png`;
 }
 
 function replaceCurrentConfigurationUrl(): void {

@@ -174,6 +174,58 @@ input:focus-visible + span {
     radial-gradient(circle at center, transparent 38%, rgb(0 0 0 / 40%) 100%);
 }
 
+.part-hotspots {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.part-hotspot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px 6px 7px;
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 999px;
+  background: rgb(8 9 10 / 86%);
+  color: #f0e8df;
+  box-shadow: 0 7px 24px rgb(0 0 0 / 35%);
+  pointer-events: auto;
+  cursor: pointer;
+  will-change: transform;
+}
+
+.part-hotspot[hidden] {
+  display: none;
+}
+
+.part-hotspot > span {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #f0a176;
+  border-radius: 50%;
+  background: #4b2419;
+  box-shadow: 0 0 0 4px rgb(232 109 61 / 14%);
+}
+
+.part-hotspot strong {
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+
+.part-hotspot:hover,
+.part-hotspot:focus-visible {
+  border-color: rgb(232 109 61 / 82%);
+  background: rgb(31 20 16 / 94%);
+}
+
 .stage-heading {
   position: absolute;
   z-index: 2;
@@ -619,6 +671,23 @@ input:checked + .option-indicator {
   background: rgb(232 109 61 / 10%);
 }
 
+.sharing-actions button[data-export-poster] {
+  grid-column: 1 / -1;
+  border-color: rgb(116 169 255 / 48%);
+  background:
+    linear-gradient(90deg, rgb(116 169 255 / 9%), transparent),
+    rgb(255 255 255 / 3%);
+}
+
+.sharing-actions button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.poster-status {
+  color: #9db9d7;
+}
+
 .sharing-actions button:hover {
   border-color: var(--ember);
   color: white;
@@ -818,6 +887,19 @@ input:checked + .option-indicator {
 
   .stage-controls p {
     max-width: 130px;
+  }
+
+  .stage-controls {
+    gap: 8px;
+  }
+
+  .stage-controls button {
+    min-height: 38px;
+    padding-inline: 10px;
+  }
+
+  .part-hotspot strong {
+    font-size: 8px;
   }
 
   .panel-intro,
