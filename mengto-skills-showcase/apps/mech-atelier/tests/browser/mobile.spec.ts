@@ -34,6 +34,30 @@ test("mobile keeps the product, bottom-sheet options, summary, and controls reac
   await expect(option).toBeChecked();
 });
 
+test("native CDP touch drag rotates the canvas without scrolling the portrait page", async ({ page }) => {
+  await page.goto("/?reviewControls=1&reviewHotspots=off");
+  const canvas = page.locator("[data-product-canvas]");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("missing canvas touch surface");
+  const before = await page.evaluate(() => ({
+    scrollY: window.scrollY,
+    yaw: (window as unknown as { __MECH_ATELIER_DEBUG__: { snapshot(): { camera: { yaw: number } } } })
+      .__MECH_ATELIER_DEBUG__.snapshot().camera.yaw,
+  }));
+  const cdp = await page.context().newCDPSession(page);
+  const start = { x: box.x + box.width * 0.42, y: box.y + box.height * 0.46, id: 1 };
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [start] });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [{ ...start, x: start.x + 74, y: start.y + 18 }],
+  });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await expect.poll(() => page.evaluate(() => (
+    window as unknown as { __MECH_ATELIER_DEBUG__: { snapshot(): { camera: { yaw: number } } } }
+  ).__MECH_ATELIER_DEBUG__.snapshot().camera.yaw)).not.toBe(before.yaw);
+  expect(await page.evaluate(() => window.scrollY)).toBe(before.scrollY);
+});
+
 test("landscape touch keeps the stage and sticky configure action available", async ({
   page,
 }) => {
@@ -80,6 +104,29 @@ test("mobile option, palette, segment, and action targets are at least 44px", as
       expect(box.height, `${selector} height`).toBeGreaterThanOrEqual(44);
     }
   }
+});
+
+test("review safe-area inset changes mobile action and sheet geometry through CSS variables", async ({ page }) => {
+  const measure = async (url: string) => {
+    await page.goto(url);
+    const configure = page.getByRole("button", { name: "开始配置" });
+    const box = await configure.boundingBox();
+    if (!box) throw new Error("missing configure action");
+    await configure.click();
+    return page.evaluate(({ x, y }) => {
+      const sheet = document.querySelector<HTMLElement>(".configuration-panel");
+      return {
+        right: innerWidth - x - document.querySelector<HTMLElement>("[data-open-config]")!.getBoundingClientRect().width,
+        bottom: innerHeight - y - document.querySelector<HTMLElement>("[data-open-config]")!.getBoundingClientRect().height,
+        sheetPaddingBottom: sheet ? Number.parseFloat(getComputedStyle(sheet).paddingBottom) : -1,
+      };
+    }, { x: box.x, y: box.y });
+  };
+  const baseline = await measure("/?reviewControls=1");
+  const simulated = await measure("/?reviewControls=1&reviewSafeInset=24");
+  expect(simulated.right).toBeGreaterThan(baseline.right);
+  expect(simulated.bottom).toBeGreaterThan(baseline.bottom);
+  expect(simulated.sheetPaddingBottom).toBeGreaterThan(baseline.sheetPaddingBottom);
 });
 
 test("390px control profile records CPU submission and scheduler samples", async ({

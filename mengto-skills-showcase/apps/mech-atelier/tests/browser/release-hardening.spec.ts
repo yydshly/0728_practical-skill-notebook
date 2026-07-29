@@ -75,6 +75,29 @@ test("keyboard controls and invalid links retain accessible feedback", async ({ 
   }
 });
 
+test("Tab and Shift+Tab follow the complete keyboard journey without scripted focus", async ({ page }) => {
+  await page.goto("/?reviewControls=1&reviewHotspots=off");
+  const expected = [
+    page.locator(".wordmark"),
+    page.locator("[data-product-canvas]"),
+    page.getByRole("button", { name: "分解视图" }),
+    page.getByRole("button", { name: "重置视图" }),
+    ...["底盘", "头部", "装甲", "左侧武器", "右侧武器", "背部模块", "涂装", "金属度", "粗糙度", "环境"].map(
+      (name) => page.getByRole("group", { name }).getByRole("radio", { checked: true }),
+    ),
+    page.locator("[data-summary]"),
+    page.getByRole("button", { name: "复制配置链接" }),
+    page.getByRole("button", { name: "恢复默认配置" }),
+    page.getByRole("button", { name: "导出产品海报" }),
+  ];
+  for (const target of expected) {
+    await page.keyboard.press("Tab");
+    await expect(target).toBeFocused();
+  }
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.getByRole("button", { name: "恢复默认配置" })).toBeFocused();
+});
+
 test("review control profile is explicit and keeps a same-page low-cost renderer baseline", async ({ page }) => {
   await page.goto("/?review=default&reviewPerformance=control");
   await expect.poll(() => page.evaluate(() => (

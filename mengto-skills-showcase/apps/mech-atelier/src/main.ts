@@ -160,7 +160,7 @@ app.innerHTML = `
           aria-atomic="true"
         ></div>
         <form class="configuration-form" data-option-groups></form>
-        <section class="summary-panel" data-summary aria-label="配置摘要"></section>
+        <section class="summary-panel" data-summary aria-label="配置摘要" tabindex="0"></section>
         <section class="sharing-panel" aria-label="保存与分享">
           <div>
             <p class="section-kicker">SAVE / SHARE</p>
@@ -256,6 +256,10 @@ const reviewQuality =
 const reviewPixelRatio = isReviewMode
   ? parseReviewPixelRatio(search.get("reviewDpr"))
   : undefined;
+const reviewSafeInset = isReviewMode && search.get("reviewSafeInset") === "24"
+  ? "24"
+  : undefined;
+if (reviewSafeInset) document.documentElement.dataset.reviewSafeInset = reviewSafeInset;
 const reviewHotspotsEnabled = !(
   isReviewMode && search.get("reviewHotspots") === "off"
 );

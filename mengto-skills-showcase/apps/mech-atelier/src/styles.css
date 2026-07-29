@@ -12,8 +12,19 @@
   --ember-soft: #f2a06f;
   --panel: #111315;
   --panel-raised: #17191c;
+  --safe-area-top: env(safe-area-inset-top);
+  --safe-area-right: env(safe-area-inset-right);
+  --safe-area-bottom: env(safe-area-inset-bottom);
+  --safe-area-left: env(safe-area-inset-left);
   background: #08090a;
   color: var(--ink);
+}
+
+html[data-review-safe-inset="24"] {
+  --safe-area-top: 24px;
+  --safe-area-right: 24px;
+  --safe-area-bottom: 24px;
+  --safe-area-left: 24px;
 }
 
 * {
@@ -1001,7 +1012,7 @@ input:checked + .option-indicator {
 
   .topbar {
     min-height: 58px;
-    padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
+    padding: calc(8px + var(--safe-area-top)) max(16px, var(--safe-area-right)) 8px max(16px, var(--safe-area-left));
   }
 
   .wordmark small,
@@ -1037,8 +1048,8 @@ input:checked + .option-indicator {
   .mobile-configure {
     position: fixed;
     z-index: 30;
-    right: max(16px, env(safe-area-inset-right));
-    bottom: max(16px, env(safe-area-inset-bottom));
+    right: max(16px, var(--safe-area-right));
+    bottom: max(16px, var(--safe-area-bottom));
     display: inline-flex;
     min-width: 132px;
     min-height: 48px;
@@ -1059,7 +1070,7 @@ input:checked + .option-indicator {
     left: 0;
     display: block;
     max-height: min(78svh, 680px);
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: var(--safe-area-bottom);
     border: 1px solid var(--line-strong);
     border-bottom: 0;
     border-radius: 18px 18px 0 0;
@@ -1100,7 +1111,7 @@ input:checked + .option-indicator {
   .product-stage { height: calc(100svh - 48px); min-height: 0; }
   .stage-heading { top: 12px; }
   .stage-heading h1 { font-size: 25px; }
-  .mobile-configure { bottom: max(10px, env(safe-area-inset-bottom)); }
+  .mobile-configure { bottom: max(10px, var(--safe-area-bottom)); }
   .configuration-panel { max-height: 92svh; }
 }
 
