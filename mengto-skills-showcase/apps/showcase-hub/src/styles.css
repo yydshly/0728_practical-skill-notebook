@@ -419,7 +419,7 @@ details li {
   }
 
   .product-dialog-panel {
-    max-block-size: 100dvh;
+    max-block-size: calc(100dvh - 2rem - 2px);
     padding-block-end: max(24px, env(safe-area-inset-bottom));
   }
 }

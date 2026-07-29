@@ -22,6 +22,49 @@ test("390px and 320px keep all actions operable without horizontal scroll", asyn
   }
 });
 
+test("mobile product dialog has one scroll owner and fully visible actions", async ({
+  page,
+}) => {
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/");
+    await page.locator("[data-explain-product='monster-forge']").click();
+
+    const geometry = await page.locator("dialog.product-dialog").evaluate(
+      (dialog) => {
+        const panel = dialog.querySelector(".product-dialog-panel");
+        const actions = [
+          ...dialog.querySelectorAll(
+            ".product-dialog-actions a, .product-dialog-actions button",
+          ),
+        ];
+        if (!(panel instanceof HTMLElement)) {
+          throw new Error("missing product dialog panel");
+        }
+        const dialogRect = dialog.getBoundingClientRect();
+        const panelRect = panel.getBoundingClientRect();
+        return {
+          outerHasSecondScroll: dialog.scrollHeight > dialog.clientHeight,
+          panelFitsDialog: panelRect.bottom <= dialogRect.bottom,
+          visibleActionHeights: actions.map((action) => {
+            const rect = action.getBoundingClientRect();
+            return Math.max(
+              0,
+              Math.min(rect.bottom, innerHeight) - Math.max(rect.top, 0),
+            );
+          }),
+        };
+      },
+    );
+
+    expect(geometry.outerHasSecondScroll).toBe(false);
+    expect(geometry.panelFitsDialog).toBe(true);
+    expect(
+      geometry.visibleActionHeights.every((height) => height >= 44),
+    ).toBe(true);
+  }
+});
+
 test("a 720px reflow proxy remains operable without claiming browser zoom", async ({
   page,
 }) => {
