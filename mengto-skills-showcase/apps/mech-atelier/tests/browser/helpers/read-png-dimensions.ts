@@ -48,4 +48,3 @@ export async function readPngEvidence(path: string): Promise<PngEvidence> {
     productEdgePixels,
   };
 }
-
