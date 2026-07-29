@@ -88,22 +88,34 @@ function parseStartTag(source) {
   return { tagName, attributes, ambiguous };
 }
 
-function findRawTextCloseStart(html, lowerHtml, tagName, start) {
-  const needle = `</${tagName}`;
-  let closeStart = lowerHtml.indexOf(needle, start);
+function hasAsciiTagNameAt(html, start, tagName) {
+  for (let offset = 0; offset < tagName.length; offset += 1) {
+    const character = html.charCodeAt(start + offset);
+    const lowercase = tagName.charCodeAt(offset);
+    if (character !== lowercase && character !== lowercase - 32) return false;
+  }
+  return true;
+}
+
+function findRawTextCloseStart(html, tagName, start) {
+  let closeStart = html.indexOf("<", start);
   while (closeStart >= 0) {
-    const following = html[closeStart + needle.length];
-    if (ASCII_WHITESPACE.test(following ?? "") || following === "/" || following === ">") {
+    const nameStart = closeStart + 2;
+    const following = html[nameStart + tagName.length];
+    if (
+      html[closeStart + 1] === "/"
+      && hasAsciiTagNameAt(html, nameStart, tagName)
+      && (ASCII_WHITESPACE.test(following ?? "") || following === "/" || following === ">")
+    ) {
       return closeStart;
     }
-    closeStart = lowerHtml.indexOf(needle, closeStart + needle.length);
+    closeStart = html.indexOf("<", closeStart + 1);
   }
   return -1;
 }
 
 function showcaseMetaContents(html) {
   const contents = [];
-  const lowerHtml = html.toLowerCase();
   let index = 0;
   while (index < html.length) {
     const tagStart = html.indexOf("<", index);
@@ -124,7 +136,6 @@ function showcaseMetaContents(html) {
     if (!closing && ["script", "style"].includes(parsed.tagName)) {
       const closeStart = findRawTextCloseStart(
         html,
-        lowerHtml,
         parsed.tagName,
         tag.end,
       );

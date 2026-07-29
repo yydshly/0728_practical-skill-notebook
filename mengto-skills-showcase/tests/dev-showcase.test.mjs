@@ -227,6 +227,44 @@ describe("semantic readiness", () => {
     await preflightPorts([service]);
   });
 
+  it.each([
+    "script-unicode-prefixed-close",
+    "style-unicode-prefixed-close",
+  ])("does not accept a raw-text marker after %s", async (bodyMode) => {
+    const service = await fixtureTreeService(bodyMode, {
+      id: "expected-app",
+      bodyMode,
+      spawnGrandchild: false,
+    });
+    await expect(startShowcaseProcesses({
+      services: [service],
+      deadlineMs: 250,
+      writeLine: () => {},
+    })).rejects.toThrow(/readiness deadline.*expected-app/);
+    await expectPidFileTreeStopped(service.pidFile);
+    await preflightPorts([service]);
+  });
+
+  it.each([
+    "script-unicode-real-close-then-marker",
+    "style-unicode-real-close-then-marker",
+  ])("accepts a real marker after %s", async (bodyMode) => {
+    const service = await fixtureTreeService(bodyMode, {
+      id: "expected-app",
+      bodyMode,
+      spawnGrandchild: false,
+    });
+    const supervisor = await startShowcaseProcesses({
+      services: [service],
+      deadlineMs: 1_500,
+      writeLine: () => {},
+    });
+    await supervisor.stop("test-complete");
+    await expect(supervisor.done).resolves.toBeUndefined();
+    await expectPidFileTreeStopped(service.pidFile);
+    await preflightPorts([service]);
+  });
+
   it("probes other pending services while one response remains held open", async () => {
     const directory = await import("node:fs/promises").then(({ mkdtemp }) =>
       mkdtemp(join(tmpdir(), "showcase-probe-hit-")));

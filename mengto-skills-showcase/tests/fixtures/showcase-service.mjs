@@ -85,6 +85,14 @@ function htmlFor(options) {
       return `<!doctype html><script>const marker = "</scriptx>${exact}";</script>${exact}`;
     case "style-prefixed-close-then-real-marker":
       return `<!doctype html><style>x::after{content:"</stylex>${exact}"}</style>${exact}`;
+    case "script-unicode-prefixed-close":
+      return `<!doctype html><script>const marker = "\u0130</scriptx>${exact}";</script>`;
+    case "style-unicode-prefixed-close":
+      return `<!doctype html><style>x::after{content:"\u0130</stylex>${exact}"}</style>`;
+    case "script-unicode-real-close-then-marker":
+      return `<!doctype html><script>const marker = "\u0130";</script>${exact}`;
+    case "style-unicode-real-close-then-marker":
+      return `<!doctype html><style>x::after{content:"\u0130"}</style>${exact}`;
     case "text":
       return `<!doctype html><p>${exact.replaceAll("<", "&lt;")}</p>`;
     case "json":
