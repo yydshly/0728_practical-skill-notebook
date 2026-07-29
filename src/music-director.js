@@ -53,6 +53,16 @@ export function createMusicDirector({
   let stingerOutputRef = null;
   let layerGains = [];
   let loopSources = [];
+  let latestDangerSnapshot = { mode: 'safe', intensity: 0 };
+  let lastScheduledMode = null;
+  let lastScheduledIntensity = null;
+  let recoveryEndsAt = null;
+  let terminalComplete = false;
+
+  const playedStoryStingers = new Set();
+  const startingStoryStingers = new Set();
+  const activeStingers = new Set();
+  const pendingStoryStingers = new Set();
 
   const warnedFailures = new Set();
 
@@ -289,12 +299,274 @@ export function createMusicDirector({
     for (const source of loopSources) {
       cleanupResult(() => source.stop(), 'loop-stop');
       cleanupResult(() => source.disconnect(), 'loop-disconnect');
+      cleanupResult(() => {
+        source.buffer = null;
+      }, 'loop-buffer-clear');
     }
     for (const gain of layerGains) {
       cleanupResult(() => gain.disconnect(), 'layer-disconnect');
     }
     loopSources = [];
     layerGains = [];
+  }
+
+  function holdAndRamp(param, target, durationSeconds) {
+    const now = contextRef.currentTime;
+    if (typeof param.cancelAndHoldAtTime === 'function') {
+      param.cancelAndHoldAtTime(now);
+    } else {
+      const currentValue = param.value;
+      param.cancelScheduledValues(now);
+      param.setValueAtTime(currentValue, now);
+    }
+    param.linearRampToValueAtTime(target, now + durationSeconds);
+  }
+
+  function clamp(value, minimum, maximum) {
+    const finiteValue = Number.isFinite(value) ? value : minimum;
+    return Math.max(minimum, Math.min(maximum, finiteValue));
+  }
+
+  function normalizeDangerSnapshot(snapshot = {}) {
+    const supportedModes = new Set(['safe', 'chase', 'threaten', 'recover']);
+    const normalizedMode = supportedModes.has(snapshot.mode) ? snapshot.mode : 'safe';
+    if (normalizedMode === 'chase') {
+      return {
+        mode: normalizedMode,
+        intensity: clamp(snapshot.intensity, 0.3, 0.68),
+      };
+    }
+    if (normalizedMode === 'threaten') {
+      return {
+        mode: normalizedMode,
+        intensity: clamp(snapshot.intensity, 0.72, 1),
+      };
+    }
+    return {
+      mode: normalizedMode,
+      intensity: clamp(snapshot.intensity, 0, 1),
+    };
+  }
+
+  function mixForSnapshot(snapshot) {
+    if (snapshot.mode === 'chase') {
+      return {
+        exploration: 0.794328,
+        danger: 0.35 + (((snapshot.intensity - 0.3) / 0.38) * 0.37),
+        duration: 2,
+      };
+    }
+    if (snapshot.mode === 'threaten') {
+      return {
+        exploration: 0.707946,
+        danger: 0.75 + (((snapshot.intensity - 0.72) / 0.28) * 0.25),
+        duration: 0.8,
+      };
+    }
+    if (snapshot.mode === 'recover') {
+      return { exploration: 1, danger: 0, duration: 4 };
+    }
+    return { exploration: 1, danger: 0, duration: 2 };
+  }
+
+  function settleCompletedRecovery() {
+    if (
+      disposed
+      || terminalComplete
+      || mode !== 'recover'
+      || recoveryEndsAt === null
+      || !contextRef
+      || contextRef.currentTime < recoveryEndsAt
+    ) {
+      return false;
+    }
+    mode = 'safe';
+    dangerMix = 0;
+    recoveryEndsAt = null;
+    lastScheduledMode = 'safe';
+    lastScheduledIntensity = 0;
+    return true;
+  }
+
+  function scheduleMix(snapshot, { initial = false, publishChange = true } = {}) {
+    if (terminalComplete || layerGains.length !== 2 || !contextRef) return false;
+    settleCompletedRecovery();
+
+    if (
+      snapshot.mode === 'safe'
+      && mode === 'recover'
+      && recoveryEndsAt !== null
+      && contextRef.currentTime < recoveryEndsAt
+    ) {
+      return false;
+    }
+
+    const mix = mixForSnapshot(snapshot);
+    const sameDangerMode = (
+      snapshot.mode === lastScheduledMode
+      && (snapshot.mode === 'chase' || snapshot.mode === 'threaten')
+    );
+    if (sameDangerMode) {
+      const intensityDelta = Math.abs(snapshot.intensity - lastScheduledIntensity);
+      if ((intensityDelta + Number.EPSILON) < intensityThreshold) return false;
+      try {
+        holdAndRamp(layerGains[1].gain, mix.danger, mix.duration);
+      } catch (error) {
+        warnOnce('mix-automation', error);
+        return false;
+      }
+      lastScheduledIntensity = snapshot.intensity;
+      dangerMix = mix.danger;
+      if (publishChange) publish();
+      return true;
+    }
+
+    if (snapshot.mode === 'recover' && lastScheduledMode === 'recover') {
+      return false;
+    }
+    if (snapshot.mode === 'safe' && lastScheduledMode === 'safe' && !initial) {
+      return false;
+    }
+
+    try {
+      holdAndRamp(layerGains[0].gain, mix.exploration, mix.duration);
+      holdAndRamp(layerGains[1].gain, mix.danger, mix.duration);
+    } catch (error) {
+      warnOnce('mix-automation', error);
+      return false;
+    }
+
+    mode = snapshot.mode;
+    dangerMix = mix.danger;
+    lastScheduledMode = snapshot.mode;
+    lastScheduledIntensity = snapshot.intensity;
+    recoveryEndsAt = snapshot.mode === 'recover'
+      ? contextRef.currentTime + 4
+      : null;
+    if (publishChange) publish();
+    return true;
+  }
+
+  function scheduleCompleteMix({ publishChange = true } = {}) {
+    terminalComplete = true;
+    mode = 'complete';
+    dangerMix = 0;
+    recoveryEndsAt = null;
+    if (layerGains.length === 2 && contextRef) {
+      try {
+        holdAndRamp(layerGains[0].gain, 0, 5);
+        holdAndRamp(layerGains[1].gain, 0, 5);
+        lastScheduledMode = 'complete';
+        lastScheduledIntensity = 0;
+      } catch (error) {
+        warnOnce('mix-automation', error);
+      }
+    }
+    if (publishChange) publish();
+  }
+
+  function cleanupStinger(record, { stop = false, publishChange = true } = {}) {
+    if (!record || record.cleaned) return;
+    record.cleaned = true;
+    activeStingers.delete(record);
+    activeVoices = activeStingers.size;
+
+    if (stop && record.source) {
+      cleanupResult(() => record.source.stop(), 'stinger-stop');
+    }
+    if (record.source) {
+      cleanupResult(
+        () => record.source.disconnect(),
+        'stinger-source-disconnect',
+      );
+      cleanupResult(() => {
+        record.source.buffer = null;
+      }, 'stinger-buffer-clear');
+    }
+    if (record.gain) {
+      cleanupResult(() => record.gain.disconnect(), 'stinger-gain-disconnect');
+    }
+    if (publishChange) publish();
+  }
+
+  function stopActiveStingers(role = null, { publishChange = true } = {}) {
+    for (const record of [...activeStingers]) {
+      if (role && record.role !== role) continue;
+      cleanupStinger(record, { stop: true, publishChange });
+    }
+  }
+
+  function playStoryStinger(role) {
+    if (
+      disposed
+      || transientsSuspended
+      || playedStoryStingers.has(role)
+      || startingStoryStingers.has(role)
+      || !decodedSet
+      || playback !== 'playing'
+      || !contextRef
+      || !stingerOutputRef
+    ) {
+      return false;
+    }
+    if (role === 'reveal' && terminalComplete) return false;
+    if (
+      role === 'reveal'
+      && [...activeStingers].some((record) => record.role === 'escape')
+    ) {
+      return false;
+    }
+    startingStoryStingers.add(role);
+    try {
+      if (role === 'escape') stopActiveStingers('reveal');
+
+      let source = null;
+      let voiceGain = null;
+      let record = null;
+      try {
+        source = contextRef.createBufferSource();
+        voiceGain = contextRef.createGain();
+        record = {
+          role,
+          source,
+          gain: voiceGain,
+          cleaned: false,
+        };
+        source.buffer = decodedSet[role];
+        voiceGain.gain.setValueAtTime(1, contextRef.currentTime);
+        source.connect(voiceGain);
+        voiceGain.connect(stingerOutputRef);
+        source.onended = () => cleanupStinger(record);
+        activeStingers.add(record);
+        activeVoices = activeStingers.size;
+        source.start(contextRef.currentTime);
+        playedStoryStingers.add(role);
+        publish();
+        return true;
+      } catch (error) {
+        if (!record) {
+          record = {
+            role,
+            source,
+            gain: voiceGain,
+            cleaned: false,
+          };
+        }
+        cleanupStinger(record, { stop: Boolean(source) });
+        warnOnce('stinger-start', error);
+        return false;
+      }
+    } finally {
+      startingStoryStingers.delete(role);
+    }
+  }
+
+  function flushPendingStoryStingers() {
+    if (disposed || transientsSuspended || playback !== 'playing') return;
+    for (const role of ['escape', 'reveal']) {
+      if (!pendingStoryStingers.delete(role)) continue;
+      playStoryStinger(role);
+    }
   }
 
   function startLoopGeneration(context, musicOutput, buffers) {
@@ -330,6 +602,14 @@ export function createMusicDirector({
       loopSources = [explorationSource, dangerSource];
       startedAt = synchronizedStart;
       loopGeneration = 1;
+      if (terminalComplete) {
+        scheduleCompleteMix({ publishChange: false });
+      } else {
+        scheduleMix(latestDangerSnapshot, {
+          initial: true,
+          publishChange: false,
+        });
+      }
       return true;
     } catch (error) {
       for (const source of [explorationSource, dangerSource]) {
@@ -386,6 +666,7 @@ export function createMusicDirector({
 
       assetState = 'ready';
       playback = 'playing';
+      flushPendingStoryStingers();
       publish();
       return !disposed;
     };
@@ -406,17 +687,61 @@ export function createMusicDirector({
     return trackedPromise;
   }
 
-  function handleStoryEvent() {
-    // Story-driven stingers are implemented by the next director task.
+  function handleStoryEvent(event = {}) {
+    if (disposed) return;
+    let role = null;
+    if (
+      event.type === 'objective-started'
+      && event.objectiveId === 'escape_south_gate'
+    ) {
+      role = 'reveal';
+    } else if (
+      event.type === 'chapter-completed'
+      && event.objectiveId === 'complete'
+    ) {
+      role = 'escape';
+      if (!terminalComplete) scheduleCompleteMix();
+    }
+    if (!role || playedStoryStingers.has(role)) return;
+    if (role === 'reveal' && terminalComplete) return;
+    if (transientsSuspended) return;
+
+    if (!playStoryStinger(role)) {
+      if (!decodedSet || playback !== 'playing') pendingStoryStingers.add(role);
+    }
   }
 
-  function updateDanger() {
-    // Danger automation is implemented by the next director task.
+  function updateDanger(snapshot = {}) {
+    if (disposed || terminalComplete) return;
+    const normalizedSnapshot = normalizeDangerSnapshot(snapshot);
+    latestDangerSnapshot = normalizedSnapshot;
+    const recoverySettled = settleCompletedRecovery();
+
+    if (layerGains.length !== 2 || playback !== 'playing') {
+      if (
+        !(
+          normalizedSnapshot.mode === 'safe'
+          && mode === 'recover'
+          && recoveryEndsAt !== null
+          && contextRef
+          && contextRef.currentTime < recoveryEndsAt
+        )
+      ) {
+        mode = normalizedSnapshot.mode;
+        dangerMix = mixForSnapshot(normalizedSnapshot).danger;
+      }
+      publish();
+      return;
+    }
+    const scheduled = scheduleMix(normalizedSnapshot);
+    if (recoverySettled && !scheduled) publish();
   }
 
   async function suspendTransientVoices() {
     if (disposed) return false;
     transientsSuspended = true;
+    pendingStoryStingers.clear();
+    stopActiveStingers();
     return true;
   }
 
@@ -430,6 +755,8 @@ export function createMusicDirector({
     if (disposed) return;
     disposed = true;
     transientsSuspended = true;
+    pendingStoryStingers.clear();
+    stopActiveStingers(null, { publishChange: false });
     cleanupLoopNodes();
     clearLoadReferences();
     contextRef = null;
@@ -443,10 +770,6 @@ export function createMusicDirector({
     activeVoices = 0;
     publish();
   }
-
-  // Kept in this task's signature for the complete director API; Task 4
-  // consumes it when danger automation is introduced.
-  void intensityThreshold;
 
   return {
     prefetch,

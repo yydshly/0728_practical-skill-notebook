@@ -119,6 +119,11 @@ export class FakeBufferSourceNode extends FakeConnectableNode {
     this.context.events.push({ type: 'source-stop', source: this, args });
     return this.stopPlan?.();
   }
+
+  emitEnded() {
+    this.context.events.push({ type: 'source-ended', source: this });
+    this.onended?.();
+  }
 }
 
 export class FakeOscillatorNode extends FakeConnectableNode {
@@ -239,6 +244,15 @@ export class FakeAudioContext {
     this.oscillators.push(oscillator);
     this.events.push({ type: 'create-oscillator', oscillator });
     return oscillator;
+  }
+
+  advanceTime(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      throw new RangeError('fake audio time must advance by a finite non-negative amount');
+    }
+    this.currentTime += seconds;
+    this.events.push({ type: 'advance-time', currentTime: this.currentTime });
+    return this.currentTime;
   }
 
   async resume() {
