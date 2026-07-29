@@ -2,7 +2,7 @@
 
 ## 验证对象与边界
 
-- 最终候选验证提交：`075be10fb3355c00da2e9d32a9d1cf26a70eadba`。该提交已在干净工作区完成开发服务与生产预览两条浏览器路径、全仓测试、构建、工作区契约、Skill 审计、资源配对和独立最终审查；独立审查结论为 **Ready**，整体审查提出的 3 项 Important 均已修复，production preview 问题已关闭，遗留 open 项为 0。
+- 最终候选验证提交：`b560d636eed004c7b09e88f34ad7c5e17adb44e9`（`fix: harden showcase release boundaries`）。该提交已完成开发服务与生产预览两条浏览器路径、全仓测试、构建、工作区契约和 Skill 只读审计。
 - 本地运行入口：在套件根目录执行 `npm run dev:forge`，默认地址为 `http://127.0.0.1:4173`。
 - 确定性审阅入口：`/?review=ash-warden`；其他 ID 为 `glass-crawler`、`bell-knight`、`mire-hound`。`?capture=1` 仅用于生成目录预览。
 - 本记录不代表已部署：本任务没有发布、托管或外部服务连接。
@@ -27,11 +27,11 @@
 - 键盘：原生 Tab 顺序覆盖四张卡、五个动作、暂停、重新播放、骨架/碰撞体/挂点三个复选框。焦点使用 `:focus-visible` 3px 描边；选中卡同步 `aria-pressed` 与 `aria-current`，状态区域以 `aria-live="polite"` 播报。
 - 移动端：Playwright 在 `390 × 844` 竖屏与 `844 × 390` 横屏验证了无横向溢出、44 CSS px 最小控制目标和画布 `touch-action: none`。390 宽度使用 Chromium 的 `Input.dispatchTouchEvent` 真实触控事件路径：单指 down/move/up 会改变只读相机 yaw（radius 不变），双指 pinch 会在 `1.2–10` 的 clamp 内改变 radius；两种手势均保持 `scrollY` 不变，结束后 `activePointerCount` 和 `pinchDistance` 都归零。
 - 减少动态效果：`prefers-reduced-motion: reduce` 模拟中，卡片的 CSS 过渡被压缩至 `0.01ms`；实时相机本来就采用即时定位，诊断值为 `cameraEasing: "none"`，因此没有在减少动态效果模式下伪造一个额外的相机动画开关。
-- WebGL 回退：当 WebGL 被禁用或渲染器/模型创建失败时，仍显示同一 PNG、名称、来源、尺寸、动作、具体原因与“重试 3D 预览”按钮；重试不会新增 canvas。
+- 回退：当 WebGL 被禁用、模型创建失败或已启动的帧循环发生运行时异常时，仍显示同一 PNG、名称、来源、尺寸、动作、具体原因与“重试 3D 预览”按钮；重试会安全重建场景，页面不会新增 canvas。
 
 ## 资源、控制台与性能采样
 
-代表性场景为生产构建经 Vite preview 提供的 Ash Warden（`1440 × 900`、DPR `1`、`Idle`、默认叠加关闭）。在实时画布就绪后等待 250ms 取得首个样本，并在约 1 秒后再次采样：帧计数从 `52` 到 `116`，即样本期间新增 `64` 帧。两次诊断均为 `hasRendered: true`、`lastError: null`、一个 canvas、一个场景根，回退层保持隐藏；console error 与 page error 均为 0。
+代表性场景为生产构建经 Vite preview 提供的 Ash Warden（`1440 × 900`、DPR `1`、`Idle`、默认叠加关闭）。生产 smoke 断言实时画布已经绘制、后续采样的帧计数继续增加、只有一个 canvas 和一个场景根、回退层保持隐藏；console error 与 page error 均为 0。
 
 | 指标 | 采样值 |
 | --- | --- |
@@ -42,8 +42,8 @@
 | textures | 1 |
 | device pixel ratio | 1 |
 | 生产 CSS | 6.16 kB raw / 2.04 kB gzip |
-| 生产 JavaScript | 563.30 kB raw / 144.82 kB gzip |
-| 生产 HTML | 0.47 kB raw / 0.35 kB gzip |
+| 生产 JavaScript | 564.22 kB raw / 145.23 kB gzip |
+| 生产 HTML | 0.47 kB raw / 0.36 kB gzip |
 
 回归浏览器测试会先让一次完整替换序列稳定，再执行 20 轮四资产切换（80 次选择），并断言：仅 1 个 canvas、仅 1 个场景根、仅 1 个叠加根、纹理数不增长、几何数不增长、RAF 帧计数继续前进、console/page error 均为 0。Three.js 的 `renderer.info.memory` 会在后续帧清理已释放几何体，因此该断言以“不会增长”而不是一次性临时计数的完全相等来判断资源没有累计泄漏。
 
@@ -51,7 +51,7 @@
 
 ## 自动化验证命令
 
-最终候选 `075be10fb3355c00da2e9d32a9d1cf26a70eadba` 在干净工作区执行了下列门槛：
+最终候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9` 执行了下列门槛：
 
 ```powershell
 npm test --workspace @showcase/monster-forge
@@ -65,15 +65,16 @@ npm ls three
 git diff --check
 ```
 
-结果为：Monster Forge 单元测试 `15/15`，开发服务 Playwright `15/15`，生产预览 smoke `1/1`，全仓测试 `83/83`；全仓 build、workspace validate、16 项 Skill 只读审计和 `git diff --check` 全部通过。`npm ls three` 只解析到一个 `three@0.185.1`，生产预览正常显示实时 canvas，没有进入 fallback，也没有 console error 或 page error。四张目录 PNG 分别以 `build-vesperfall-review-assets/scripts/validate_pair.py <png> <model-source>` 对当前程序化模型源码完成四对配对校验，结果全部通过。
+结果为：Monster Forge 单元测试 `15/15`，开发服务 Playwright `16/16`，生产预览 smoke `1/1`，全仓测试 `37` 个文件、`447/447`；全仓 build、workspace validate、16 项 Skill 只读审计和 `git diff --check` 全部通过。生产预览正常显示实时 canvas，没有进入 fallback，也没有 console error 或 page error。四张目录 PNG 与当前程序化模型源码的配对校验保持通过。
 
-## 最终审查修复：目录重捕获与模型创建故障
+## 最终审查修复：目录重捕获与三类故障边界
 
 - 四张目录 PNG 已从当前程序化运行时重新捕获；使用各自 `?review=<id>&capture=1` 路由、固定 Idle 姿态、相机、灯光和透明背景。路径与名称不变，均为 `512 × 512` RGBA，并保留透明角。
 - manifest 与运行时 provenance 现在都记录为 `delivered-captured`：目录 PNG 来自同一程序化模型的当前运行时捕获，不再标记为等待重捕获。
-- `?forceModelFailure=1` 是一次性、确定性的模型构建故障夹具。首次真实模型工厂调用抛错并进入 `model-creation-failed` 边界；回退显示同一资产的 PNG、名称、程序化来源、尺寸、动作和中文具体原因。
-- 故障状态下切换目录卡会同步更新回退元数据。点击“重试 3D 预览”会消费故障并复用同一渲染场景恢复真实 3D：回退隐藏、像素非空、选中资产正确，页面始终只有一个 canvas。`forceWebglFailure=1` 的独立回退旅程继续通过。
-- 最终候选 `075be10fb3355c00da2e9d32a9d1cf26a70eadba` 已包含上述修复，并通过生产预览 smoke；独立最终复核结论为 **Ready**。
+- `?reviewControls=1&forceModelFailure=1` 是一次性、确定性的模型构建故障夹具。首次真实模型工厂调用抛错并进入 `model-creation-failed` 边界；回退显示同一资产的 PNG、名称、程序化来源、尺寸、动作和中文具体原因。
+- `?reviewControls=1&forceRuntimeFailure=1` 会让已启动场景的首次实例更新抛错并进入独立的 `runtime-failed` 边界。点击“重试 3D 预览”会释放失败场景、重建实时场景并恢复持续增长的帧诊断。
+- 故障状态下切换目录卡会同步更新回退元数据。模型故障与 `?reviewControls=1&forceWebglFailure=1` 的旅程均继续通过；三个强制故障参数在普通 URL 上都不会生效。
+- 最终候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9` 已包含上述修复，并通过开发浏览器全套与生产预览 smoke。
 
 ## 已批准的非目标
 

@@ -5,7 +5,7 @@
 ## 来源与锁定记录
 
 - 上游仓库：`https://github.com/MengTo/Skills.git`
-- 分支：`main`
+- 上游记录分支：`main`（仅作来源说明；安装时不跟随分支头）
 - 本地源代码位置：`mengto-skills-showcase/skills-source/MengTo-Skills`
 - 当前锁定提交：`93da48f13fb1b91bdbf4718d0f49df1a469edb45`
 - 锁定记录文件：`config/skill-source-lock.json`（字段为 `repository`、`branch`、`commit`、`recordedAt`）
@@ -42,7 +42,21 @@ powershell -ExecutionPolicy Bypass -File scripts/install-selected-skills.ps1
 node scripts/check-selected-skills.mjs
 ```
 
-安装包装脚本只把缺失的技能传给官方 `install-skill-from-github.py`，并固定使用 `MengTo/Skills` 的 `main` 分支。若某个目标目录已有 `SKILL.md`，脚本会报告并跳过；若目录存在却不完整，脚本会报错而不是覆盖、删除或替换它。第二条命令是只读审计，会为每个选定技能输出 `name`、`installed` 和 `installPath`；任何一项缺失都会返回非零状态。
+安装包装脚本只把缺失的技能传给官方 `install-skill-from-github.py`，并以 `--ref 93da48f13fb1b91bdbf4718d0f49df1a469edb45` 安装锁定提交，绝不使用浮动的 `main` 作为安装引用。执行任何安装前，它会同时确认：
+
+- `config/skill-source-lock.json` 的仓库与完整 40 位提交格式有效；
+- 本地子模块 HEAD 等于锁定提交；
+- 父仓库记录的 Git 子模块指针也等于同一锁定提交；
+- 每个批准来源目录都包含 `SKILL.md`。
+
+对已安装副本，脚本会按“相对路径 + 每个文件的 SHA-256”计算完整目录指纹，并与锁定来源逐项比较：
+
+- 完全一致：报告已匹配，不重复安装。
+- 有漂移：明确警告，保留现有目录且不覆盖，最终返回非零状态。
+- 目录存在但缺少 `SKILL.md`：报告不完整并返回非零状态，不删除、不替换。
+- 目录缺失：才调用官方安装器；安装完成后再次校验完整目录指纹。
+
+第二条命令是只读存在性审计，会为每个选定技能输出 `name`、`installed` 和 `installPath`；任何一项缺失都会返回非零状态。锁定引用和漂移保护由候选提交 `b560d636eed004c7b09e88f34ad7c5e17adb44e9` 的自动化回归 `2/2` 覆盖。
 
 ## 更新流程（先审查，再替换）
 

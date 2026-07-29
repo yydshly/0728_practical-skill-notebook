@@ -244,13 +244,13 @@ describe("showcase workspace", () => {
     );
 
     expect(validation).toContain(
-      "d93291a8882f7e2dbb7562f7c779db5f36b7fbab",
+      "b560d636eed004c7b09e88f34ad7c5e17adb44e9",
     );
     expect(validation).toContain(
       "发布候选 / 自动验收通过，人工可用性门槛未关闭",
     );
-    expect(validation).toContain("47.482s");
-    expect(validation).toContain("50.809s");
+    expect(validation).toContain("submittedFrames=0");
+    expect(validation).toContain("GPU 完成时间仍是未测边界");
     expect(validation).toContain("不是人工游戏时长");
     expect(validation.match(/`7`/g)?.length).toBeGreaterThanOrEqual(3);
     expect(validation.match(/未开始/g)?.length).toBeGreaterThanOrEqual(3);
@@ -260,7 +260,7 @@ describe("showcase workspace", () => {
     expect(validation).toContain("8–12 分钟首次人工完成门槛");
     expect(validation).toContain("ashfall-arena:v1");
     expect(validation).toContain("ashfall-arena:audio-settings:v1");
-    expect(validation).toContain("Monster Forge 已有单包 `563.30 kB`");
+    expect(validation).toContain("Monster Forge 单包 `564.22 kB`");
     expect(validation).not.toContain("独立最终复核结论为 **Ready**");
   });
 
