@@ -6,7 +6,6 @@ import {
   SCORE_ASSETS,
   SCORE_FORMAT,
   analyzePcm16,
-  encodePcm16Wav,
   inspectPcm16Wav,
   renderScoreAsset,
   sha256,
@@ -260,9 +259,9 @@ test('escape resolution widens stereo while its low opening stays centered', () 
   assert.ok(rmsRatio >= 0.9 && rmsRatio <= 1.1, `resolution RMS ratio ${rmsRatio}`);
 });
 
-test('rendered source hashes match the rendered-stage provenance manifest', () => {
+test('encoded manifest preserves deterministic rendered-source provenance', () => {
   assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.pipelineStage, 'rendered');
+  assert.equal(manifest.pipelineStage, 'encoded');
   assert.equal(
     manifest.provenance.source,
     'original procedural composition for rural-mutation-escape',
@@ -275,38 +274,200 @@ test('rendered source hashes match the rendered-stage provenance manifest', () =
   }
 });
 
-test('committed WAV masters are exact PCM16 renders with stable file hashes', async () => {
+test('encoded manifest records the reproducible encoder contract', () => {
+  assert.deepEqual(manifest.encoder.normalization, {
+    mode: 'measured-constant-gain',
+    measurement: 'loudnorm JSON, TP=-2, LRA=7',
+    output: 'pcm_s16le, 48000 Hz, stereo, exact declared frames',
+  });
+  assert.equal(manifest.encoder.ogg.codec, 'libvorbis');
+  assert.equal(manifest.encoder.ogg.quality, 4);
+  assert.equal(manifest.encoder.ogg.bitExact, true);
+  assert.equal(manifest.encoder.ogg.serialOffset, 0);
+  assert.equal(manifest.encoder.ogg.metadata, 'stripped');
+  assert.ok(Array.isArray(manifest.encoder.ogg.argv));
+  assert.equal(manifest.encoder.mp3.codec, 'libmp3lame');
+  assert.equal(manifest.encoder.mp3.bitrate, '96k');
+  assert.equal(manifest.encoder.mp3.bitExact, true);
+  assert.equal(manifest.encoder.mp3.writeXing, true);
+  assert.equal(manifest.encoder.mp3.id3v1, false);
+  assert.equal(manifest.encoder.mp3.id3v2, false);
+  assert.equal(manifest.encoder.mp3.metadata, 'stripped');
+  assert.ok(Array.isArray(manifest.encoder.mp3.argv));
+});
+
+test('encoded verification rejects phantom assets and false normalization provenance', async () => {
+  const {
+    validateNormalizationProvenance,
+    validateScoreManifestAssets,
+  } = await import('../scripts/encode-rural-score.mjs');
+
+  assert.equal(typeof validateScoreManifestAssets, 'function');
+  assert.doesNotThrow(() => validateScoreManifestAssets(manifest.assets));
+  assert.throws(
+    () =>
+      validateScoreManifestAssets([
+        ...manifest.assets,
+        { ...manifest.assets[0] },
+      ]),
+    /exactly 4 assets/,
+  );
+  assert.throws(
+    () =>
+      validateScoreManifestAssets([
+        ...manifest.assets.slice(0, 3),
+        { ...manifest.assets[0], role: 'escape' },
+      ]),
+    /unique asset IDs/,
+  );
+
+  assert.equal(typeof validateNormalizationProvenance, 'function');
+  const reveal = manifest.assets.find(
+    ({ id }) => id === 'mutation-reveal-stinger',
+  );
+  assert.deepEqual(
+    validateNormalizationProvenance(reveal, {
+      integratedLufs: -25.44,
+      truePeakDbtp: -11.78,
+    }),
+    {
+      gainDb: 7.44,
+      predictedTruePeakDbtp: -4.34,
+    },
+  );
+  assert.throws(
+    () =>
+      validateNormalizationProvenance(
+        {
+          ...reveal,
+          files: {
+            ...reveal.files,
+            wav: {
+              ...reveal.files.wav,
+              normalizationGainDb: 7.43,
+            },
+          },
+        },
+        {
+          integratedLufs: -25.44,
+          truePeakDbtp: -11.78,
+        },
+      ),
+    /normalization gain/,
+  );
+});
+
+test('committed encoded files match manifest hashes, sizes, format, duration, and mix limits', async () => {
+  const compressedFiles = [];
+
   for (const [rendered] of renderPairs) {
     const asset = manifest.assets.find(({ id }) => id === rendered.definition.id);
+    assert.ok(asset, rendered.definition.id);
+    assert.equal(asset.sourcePcmSha256, rendered.sourcePcmSha256, asset.id);
+
+    for (const codec of ['wav', 'ogg', 'mp3']) {
+      const fileRecord = asset.files[codec];
+      assert.ok(fileRecord, `${asset.id} ${codec}`);
+      const file = await readFile(new URL(fileRecord.path, projectRoot));
+      assert.equal(fileRecord.bytes, file.byteLength, `${asset.id} ${codec} bytes`);
+      assert.equal(sha256(file), fileRecord.sha256, `${asset.id} ${codec} hash`);
+      assert.equal(fileRecord.sampleRate, SCORE_FORMAT.sampleRate, `${asset.id} ${codec}`);
+      assert.equal(fileRecord.channels, SCORE_FORMAT.channels, `${asset.id} ${codec}`);
+      assert.ok(
+        Math.abs(fileRecord.integratedLufs - asset.targetLufs) <= 1,
+        `${asset.id} ${codec} loudness ${fileRecord.integratedLufs}`,
+      );
+      assert.ok(
+        fileRecord.truePeakDbtp <= (codec === 'wav' ? -2 : -1),
+        `${asset.id} ${codec} peak ${fileRecord.truePeakDbtp}`,
+      );
+
+      const durationDriftSamples =
+        Math.abs(fileRecord.durationSeconds - asset.durationSeconds) *
+        SCORE_FORMAT.sampleRate;
+      assert.ok(
+        durationDriftSamples <= (codec === 'mp3' ? 1_152 : 1) + 1e-9,
+        `${asset.id} ${codec} duration drift ${durationDriftSamples} samples`,
+      );
+
+      if (codec !== 'wav') {
+        compressedFiles.push(fileRecord);
+      }
+    }
+
     const wav = await readFile(new URL(asset.files.wav.path, projectRoot));
     const inspected = inspectPcm16Wav(wav);
-
     assert.equal(wav.toString('ascii', 0, 4), 'RIFF', asset.id);
     assert.equal(inspected.audioFormat, 1, asset.id);
     assert.equal(inspected.bitDepth, SCORE_FORMAT.bitDepth, asset.id);
     assert.equal(inspected.channels, SCORE_FORMAT.channels, asset.id);
     assert.equal(inspected.sampleRate, SCORE_FORMAT.sampleRate, asset.id);
     assert.equal(inspected.sampleFrames, asset.sampleFrames, asset.id);
+    assert.equal(asset.files.wav.sampleFrames, asset.sampleFrames, asset.id);
     assert.equal(inspected.durationSeconds, asset.durationSeconds, asset.id);
-    assert.equal(asset.files.wav.bytes, wav.byteLength, asset.id);
-    assert.equal(sha256(wav), asset.files.wav.sha256, asset.id);
-    assert.deepEqual(inspected.pcm, rendered.pcm, asset.id);
-    assert.deepEqual(
-      encodePcm16Wav({
-        pcm: rendered.pcm,
-        sampleRate: SCORE_FORMAT.sampleRate,
-        channels: SCORE_FORMAT.channels,
-      }),
-      wav,
-      asset.id,
+    if (asset.kind === 'loop') {
+      assert.ok(asset.files.wav.seamDelta <= 0.02, asset.id);
+    }
+  }
+
+  const compressedBytes = compressedFiles.reduce(
+    (total, file) => total + file.bytes,
+    0,
+  );
+  assert.ok(compressedBytes <= 4_000_000, `${compressedBytes} compressed bytes`);
+});
+
+test('decoded codec sets stay within their independent Web Audio memory budgets', () => {
+  const loopAssets = manifest.assets.filter(({ kind }) => kind === 'loop');
+
+  for (const codec of ['ogg', 'mp3']) {
+    assert.equal(
+      loopAssets[0].files[codec].decodedSampleFrames,
+      loopAssets[1].files[codec].decodedSampleFrames,
+      `${codec} loop decoded frames`,
     );
+    assert.equal(
+      loopAssets[0].files[codec].decodedSampleFrames,
+      2_304_000,
+      `${codec} loop length`,
+    );
+
+    const decodedBytes = manifest.assets.reduce(
+      (total, asset) =>
+        total +
+        asset.files[codec].decodedSampleFrames *
+          asset.files[codec].channels *
+          4,
+      0,
+    );
+    assert.equal(manifest.decodedBytesByCodec[codec], decodedBytes, codec);
+    assert.ok(decodedBytes <= 42_000_000, `${codec} ${decodedBytes} decoded bytes`);
   }
 });
 
-test('decoded Web Audio PCM stays within the authored memory budget', () => {
-  const decodedBytes = SCORE_ASSETS.reduce(
-    (total, asset) => total + asset.sampleFrames * SCORE_FORMAT.channels * 4,
-    0,
+test('codec peak measurements prove the phase-independent maximum-runtime mix bound', () => {
+  const byRole = Object.fromEntries(
+    manifest.assets.map((asset) => [asset.role, asset]),
   );
-  assert.ok(decodedBytes <= 42_000_000, `${decodedBytes} decoded bytes`);
+
+  for (const codec of ['ogg', 'mp3']) {
+    const linearPeak = (role) =>
+      10 ** (byRole[role].files[codec].truePeakDbtp / 20);
+    const upperBound =
+      0.28 *
+      (linearPeak('danger') +
+        linearPeak('exploration') * 0.707946 +
+        Math.max(linearPeak('reveal'), linearPeak('escape')) +
+        8 * 0.08);
+    const upperBoundDbfs = 20 * Math.log10(upperBound);
+
+    assert.ok(
+      Math.abs(
+        manifest.runtimeMixAnalysis.upperBoundDbfsByCodec[codec] -
+          upperBoundDbfs,
+      ) <= 0.000_001,
+      `${codec} recorded runtime bound`,
+    );
+    assert.ok(upperBoundDbfs <= -1, `${codec} runtime bound ${upperBoundDbfs}`);
+  }
 });

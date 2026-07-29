@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "audio:render": "node scripts/render-rural-score.mjs",
+    "audio:encode": "node scripts/encode-rural-score.mjs",
+    "audio:build": "npm run audio:render && npm run audio:encode",
+    "audio:verify": "node scripts/encode-rural-score.mjs --verify-only",
     "dev": "vite",
     "build": "vite build",
     "test:audio": "node --test tests/audio-assets.mjs",
     "test:unit": "node --test tests/unit.mjs",
-    "test": "npm run test:unit && node tests/smoke.mjs"
+    "test": "npm run test:unit && npm run test:audio && node tests/smoke.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"
