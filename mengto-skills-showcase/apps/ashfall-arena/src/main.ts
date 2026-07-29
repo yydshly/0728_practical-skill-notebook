@@ -2,6 +2,10 @@ import {
   createProceduralMonster,
   createVesperKnight,
 } from "@showcase/game-assets";
+import {
+  createProductGuide,
+  type ProductGuideController,
+} from "@showcase/showcase-guide";
 import { PerspectiveCamera, Vector3 } from "three";
 import { arenaContent } from "./content/arena-content";
 import { createAudioFeedback } from "./feedback/create-audio";
@@ -51,6 +55,9 @@ import {
   createHudController,
   type HudController,
 } from "./ui/render-hud";
+import { ASHFALL_GUIDE } from "./showcase/guide-content";
+import { resolveAshfallHubHref } from "./showcase/resolve-hub-href";
+import "@showcase/showcase-guide/styles.css";
 import "./styles.css";
 
 interface AshfallSnapshot {
@@ -67,6 +74,21 @@ interface AshfallSnapshot {
   tick: number;
   droppedSeconds: number;
   manualReviewClock: boolean;
+  guideGateOpen: boolean;
+  guideOpen: boolean;
+  inputSampleCount: number;
+  presentationSeconds: {
+    entitySync: number;
+    vfx: number;
+    hud: number;
+    camera: number;
+  };
+  audio: {
+    paused: boolean;
+    contextState: AudioContextState | "not-created" | "unavailable";
+    contextCreateCount: number;
+    playedCueCount: number;
+  };
   paused: boolean;
   preserveDrawingBuffer: boolean;
   input: GameIntent;
@@ -530,6 +552,21 @@ if (arena.renderer === null) {
     tick: state.tick,
     droppedSeconds: 0,
     manualReviewClock: false,
+    guideGateOpen: false,
+    guideOpen: false,
+    inputSampleCount: 0,
+    presentationSeconds: {
+      entitySync: 0,
+      vfx: 0,
+      hud: 0,
+      camera: 0,
+    },
+    audio: {
+      paused: true,
+      contextState: "unavailable",
+      contextCreateCount: 0,
+      playedCueCount: 0,
+    },
     paused: state.paused,
     preserveDrawingBuffer: arena.getDiagnostics().preserveDrawingBuffer,
     input: { ...neutralInput },
@@ -659,11 +696,23 @@ const cameraController = createGameCamera(camera, {
     return result.distance;
   },
 });
+let guideGateOpen = false;
+let inputSampleCount = 0;
+let guide: ProductGuideController | null = null;
+const presentationSeconds = {
+  entitySync: 0,
+  vfx: 0,
+  hud: 0,
+  camera: 0,
+};
+const guideEnabled =
+  !reviewControls || query.get("guideReview") === "1";
 const input = createInputAdapter(canvas, stage);
 const audio = createAudioFeedback({
   storage: saveStorage,
   gestureTarget: window,
   visibilityDocument: document,
+  canUnlock: () => !guideGateOpen,
 });
 const accumulator = new FixedStepAccumulator(1 / 60, 5, 0.25);
 const performanceSampler = reviewControls
@@ -801,6 +850,31 @@ hud = createHudController(app, {
 }, audio.getSettings());
 hud.setSaveNotice(saveNoticeMessage);
 
+if (guideEnabled) {
+  guide = createProductGuide(app, {
+    ...ASHFALL_GUIDE,
+    hubHref: resolveAshfallHubHref(import.meta.env, window.location.href),
+    canOpen: () =>
+      state.status === "playing" &&
+      !state.paused &&
+      !hud?.hasOpenDialog(),
+    onOpen() {
+      guideGateOpen = true;
+      input.clear();
+      accumulator.reset();
+      previousTimestamp = null;
+      audio.setPaused(true);
+    },
+    onClose() {
+      guideGateOpen = false;
+      input.clear();
+      accumulator.reset();
+      previousTimestamp = null;
+      audio.setPaused(state.paused || state.status === "upgrade");
+    },
+  });
+}
+
 const dispatchPresentationEvent = (event: PresentationEvent) => {
   presentationEvents.push(event);
 };
@@ -889,24 +963,30 @@ synchronizer.sync(state);
 arena.setGateOpen(state.encounter.gateOpen);
 arena.render(camera);
 
+const routeDialogInput = (intent: GameIntent): boolean => {
+  const axis =
+    Math.abs(intent.moveY) >= Math.abs(intent.moveX)
+      ? intent.moveY
+      : intent.moveX;
+  const nextLatch = axis > 0.55 ? -1 : axis < -0.55 ? 1 : 0;
+  if (nextLatch !== 0 && menuAxisLatch === 0) {
+    hud?.moveDialogFocus(nextLatch);
+  }
+  menuAxisLatch = nextLatch;
+  if (intent.attackPressed) {
+    hud?.activateFocusedAction();
+    input.clear();
+    return false;
+  }
+  return state.paused && intent.pausePressed;
+};
+
 const step = (fixedDelta: number) => {
+  if (guideGateOpen) return;
+  inputSampleCount += 1;
   const intent = input.sample();
   if (hud?.hasOpenDialog()) {
-    const axis =
-      Math.abs(intent.moveY) >= Math.abs(intent.moveX)
-        ? intent.moveY
-        : intent.moveX;
-    const nextLatch = axis > 0.55 ? -1 : axis < -0.55 ? 1 : 0;
-    if (nextLatch !== 0 && menuAxisLatch === 0) {
-      hud.moveDialogFocus(nextLatch);
-    }
-    menuAxisLatch = nextLatch;
-    if (intent.attackPressed) {
-      hud.activateFocusedAction();
-      input.clear();
-      return;
-    }
-    if (!(state.paused && intent.pausePressed)) return;
+    if (!routeDialogInput(intent)) return;
   } else {
     menuAxisLatch = 0;
   }
@@ -927,6 +1007,15 @@ const consumePresentationEvents = () => {
 
 const frame = (timestamp: number) => {
   if (disposed) return;
+  guide?.retryAutoOpen();
+  if (guideGateOpen) {
+    previousTimestamp = null;
+    arena.render(camera);
+    renderSubmissionCount += 1;
+    frameCount += 1;
+    frameRequest = requestAnimationFrame(frame);
+    return;
+  }
   const frameDelta =
     previousTimestamp === null
       ? 0
@@ -947,16 +1036,20 @@ const frame = (timestamp: number) => {
       accumulator.advance(frameDelta, step);
     }
     synchronizer.sync(state, frameDelta);
+    presentationSeconds.entitySync += frameDelta;
     vfx.sync(state);
     const presentationPaused =
       state.paused || state.status === "upgrade";
     vfx.update(frameDelta, presentationPaused);
+    presentationSeconds.vfx += frameDelta;
     hud?.updatePresentation(frameDelta, presentationPaused);
+    presentationSeconds.hud += frameDelta;
     arena.setGateOpen(state.encounter.gateOpen);
     playerTarget.set(state.player.position.x, 0, state.player.position.y);
     cameraController.setLockTarget(currentLockTarget());
     consumePresentationEvents();
     cameraController.update(playerTarget, frameDelta);
+    presentationSeconds.camera += frameDelta;
     const entityDiagnostics = synchronizer.getDiagnostics();
     hud?.render(state, {
       deviceMode: input.getDeviceMode(),
@@ -1138,6 +1231,9 @@ if (reviewControls) {
       input.clear();
     },
     advanceInput(intent, ticks = 1) {
+      if (guideGateOpen) {
+        throw new Error("guide gate is open");
+      }
       if (!manualReviewClock) {
         throw new Error(
           "review input requires the manual review clock",
@@ -1208,6 +1304,16 @@ if (reviewControls) {
         tick: state.tick,
         droppedSeconds: accumulator.getDiagnostics().droppedSeconds,
         manualReviewClock,
+        guideGateOpen,
+        guideOpen: guide?.isOpen() ?? false,
+        inputSampleCount,
+        presentationSeconds: { ...presentationSeconds },
+        audio: {
+          paused: audio.getDiagnostics().paused,
+          contextState: audio.getDiagnostics().contextState,
+          contextCreateCount: audio.getDiagnostics().contextCreateCount,
+          playedCueCount: audio.getDiagnostics().playedCueCount,
+        },
         paused: state.paused,
         preserveDrawingBuffer: arenaDiagnostics.preserveDrawingBuffer,
         input: input.getDiagnostics(),
@@ -1496,6 +1602,9 @@ const dispose = () => {
   document.removeEventListener("visibilitychange", onVisibility);
   reducedMotion.removeEventListener("change", onReducedMotion);
   reviewApi.dispose();
+  guide?.destroy();
+  guide = null;
+  guideGateOpen = false;
   hud?.dispose();
   audio.dispose();
   vfx.dispose();

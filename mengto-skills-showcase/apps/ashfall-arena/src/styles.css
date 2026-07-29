@@ -24,6 +24,15 @@ body,
   overflow-x: hidden;
 }
 
+#app {
+  --showcase-guide-accent: #ef6557;
+  --showcase-guide-surface: #1d1515;
+}
+
+.showcase-guide-trigger {
+  z-index: 70;
+}
+
 body {
   min-height: 100vh;
   background:

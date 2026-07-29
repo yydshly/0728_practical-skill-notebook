@@ -251,6 +251,7 @@ export function createInputAdapter(
 
   const onKeyDown = (event: KeyboardEvent) => {
     const edges: Partial<Record<string, EdgeIntent>> = {
+      KeyJ: "attackPressed",
       Space: "dodgePressed",
       KeyQ: "lockPressed",
       KeyE: "healPressed",

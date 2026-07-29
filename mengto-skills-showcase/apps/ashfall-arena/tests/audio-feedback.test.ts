@@ -101,6 +101,34 @@ const settlePromises = async () => {
 };
 
 describe("recoverable browser audio feedback", () => {
+  it("rejects trusted guide gestures until gameplay owns the next gesture", () => {
+    let guideGateOpen = true;
+    const gestures = new ListenerTarget();
+    const visibility = new VisibilityTarget();
+    const context = new RecoveringAudioContext([true]);
+    let factoryCalls = 0;
+    const audio = createAudioFeedback({
+      storage: null,
+      gestureTarget: gestures as unknown as Window,
+      visibilityDocument: visibility as unknown as Document,
+      contextFactory: () => {
+        factoryCalls += 1;
+        return context as unknown as AudioContext;
+      },
+      canUnlock: () => !guideGateOpen,
+    });
+
+    gestures.fire("pointerdown");
+    gestures.fire("keydown");
+    expect(factoryCalls).toBe(0);
+
+    guideGateOpen = false;
+    gestures.fire("pointerdown");
+    expect(factoryCalls).toBe(1);
+
+    audio.dispose();
+  });
+
   it("retries rejected resumes on the same context and closes it once", async () => {
     const gestures = new ListenerTarget();
     const visibility = new VisibilityTarget();

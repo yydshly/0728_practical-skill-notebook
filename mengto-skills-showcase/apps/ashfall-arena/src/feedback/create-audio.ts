@@ -172,6 +172,7 @@ export function createAudioFeedback(options: {
   storage: AudioSettingsStorage | null;
   gestureTarget?: Window;
   visibilityDocument?: Document;
+  canUnlock?: (event: Event) => boolean;
   contextFactory?: () => AudioContext;
 }): AudioFeedback {
   const gestureTarget =
@@ -290,6 +291,7 @@ export function createAudioFeedback(options: {
   };
 
   const unlockFromGesture = (event: Event) => {
+    if (options.canUnlock?.(event) === false) return;
     if (
       disposed ||
       !event.isTrusted ||
