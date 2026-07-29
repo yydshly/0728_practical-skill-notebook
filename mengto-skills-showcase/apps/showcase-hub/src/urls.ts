@@ -10,7 +10,7 @@ export interface ShowcaseUrlEnv {
 export function resolveShowcaseProductUrls(
   env: ShowcaseUrlEnv,
 ): Record<ProductId, string> {
-  const defaults = env.DEV
+  const defaults = env.DEV && !import.meta.env.PROD
     ? {
         "monster-forge": "http://127.0.0.1:4173/",
         "ashfall-arena": "http://127.0.0.1:4174/",
