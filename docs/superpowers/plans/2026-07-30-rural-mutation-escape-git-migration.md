@@ -220,6 +220,17 @@ git -c "safe.directory=$ExportSafe" -C $ExportRepository `
 if ($LASTEXITCODE -ne 0) {
   throw 'The fixed source commit is missing from the export clone'
 }
+
+# The installed git-subtree checks that --prefix exists in the temporary
+# clone's working tree before it processes the supplied commit.  The clone is
+# intentionally created with --no-checkout, so populate only the isolated
+# clone at the fixed commit; do not check out or otherwise alter the source
+# worktree.
+git -c "safe.directory=$ExportSafe" -C $ExportRepository `
+  checkout --detach $SourceCommit
+if ($LASTEXITCODE -ne 0) {
+  throw 'Could not check out the fixed source commit in the isolated export clone'
+}
 ```
 
 The current Windows installation does not launch `git subtree` correctly from PowerShell's `git.exe` wrapper. Invoke the verified Git Bash executable with `GIT_EXEC_PATH`, validate the returned commit, and create the export ref only inside the temporary clone:
