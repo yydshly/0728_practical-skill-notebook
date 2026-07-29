@@ -212,6 +212,7 @@ function renderReveal(definition, pcm, random) {
     if (impactElapsed >= 0 && impactElapsed < 0.75) {
       const impactEnvelope = Math.exp(-impactElapsed * 8.5);
       const impact =
+        0.45 *
         impactEnvelope *
         (0.29 * Math.sin(TAU * 46 * impactElapsed) +
           0.11 * Math.sin(TAU * 82 * impactElapsed));

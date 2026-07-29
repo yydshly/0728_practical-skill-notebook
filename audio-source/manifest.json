@@ -77,19 +77,19 @@
       "durationSeconds": 3,
       "sampleFrames": 144000,
       "targetLufs": -18,
-      "sourcePcmSha256": "b9fba2181c48e1fa5227021af6de679f5cf0fdabf2b8f7b1f142685499d1c7b8",
+      "sourcePcmSha256": "3f3828ef7a8d78af94a4f364049330e6da8758626d73d6b9dcccf57ce0f536aa",
       "analysis": {
-        "peak": 0.36599731,
-        "dcOffset": 0.0003437,
-        "rms": 0.04813439,
+        "peak": 0.25076294,
+        "dcOffset": 0.00018581,
+        "rms": 0.04410216,
         "seamDelta": 0.02087402,
-        "approximateLufs": -27.042
+        "approximateLufs": -27.802
       },
       "files": {
         "wav": {
           "path": "audio-source/masters/mutation-reveal-stinger.wav",
           "bytes": 576044,
-          "sha256": "ddeb787bd373824c1eef442658a07529694dc161e791d98891dbf7ecff889300"
+          "sha256": "3782d50b62ea9e931561053fdea4a7a65c87183ae4f2c17ad69ba771524399fd"
         }
       }
     },

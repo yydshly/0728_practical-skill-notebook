@@ -115,6 +115,19 @@ test('rendered PCM has exact dimensions and safe normalized analysis', () => {
   }
 });
 
+test('source masters retain headroom after their authored loudness gain', () => {
+  for (const [rendered] of renderPairs) {
+    const { definition, analysis } = rendered;
+    const samplePeakDbfs = 20 * Math.log10(analysis.peak);
+    const requiredGainDb = definition.targetLufs - analysis.approximateLufs;
+    const predictedNormalizedPeakDbfs = samplePeakDbfs + requiredGainDb;
+    assert.ok(
+      predictedNormalizedPeakDbfs <= -2,
+      `${definition.id} predicted normalized peak ${predictedNormalizedPeakDbfs}`,
+    );
+  }
+});
+
 test('loops close cleanly and stingers release to digital zero', () => {
   const tailWindowFrames = Math.round(SCORE_FORMAT.sampleRate * 0.04);
 
