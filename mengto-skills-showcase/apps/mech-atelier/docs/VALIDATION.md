@@ -2,27 +2,26 @@
 
 ## 状态与范围
 
-- 候选提交：`a0d55bd649d176f8478d8457d4e783324dadc607`（`feat: harden Mech Atelier release`）
+- 候选提交：`71edf8bb85372aa4bc31cc0e782515596db89a33`（`fix: complete Mech interaction evidence`）
 - 当前定位：可本地运行的产品配置演示；不含价格、库存、订单、支付或任何商业履约承诺。
 - 验证日期：2026-07-29（Asia/Shanghai）。
 - 运行环境：Playwright Chromium 的确定性本地开发/生产预览；性能结论只描述本次自动化环境，不替代真机或真实用户研究。
 
 ## 自动化结果
 
-以下每组核心检查连续执行两轮，均以退出码 `0` 完成：
+以下是本轮候选的一次完整检查，均以退出码 `0` 完成；历史轮次不作为本轮结论：
 
-| 命令 | 第 1 轮 | 第 2 轮 |
-| --- | ---: | ---: |
-| `npm test --workspace @showcase/mech-atelier` | 34/34 | 34/34 |
-| `npm test --workspace @showcase/game-assets -- mech-assembly` | 11/11 | 11/11 |
-| `npm run build --workspace @showcase/mech-atelier` | 通过 | 通过 |
-| `npm run test:browser --workspace @showcase/mech-atelier` | 37/37（191.4s） | 37/37（188.8s） |
-| `git diff --check` | 通过 | 通过 |
+| 命令 | 本轮结果 |
+| --- | ---: |
+| `npm test --workspace @showcase/mech-atelier` | 34/34 |
+| `npm test --workspace @showcase/game-assets -- mech-assembly` | 11/11 |
+| `npm run build --workspace @showcase/mech-atelier` | 通过 |
+| `npm run test:browser --workspace @showcase/mech-atelier` | 44/44（221.8s） |
+| `git diff --check` | 通过 |
 
 生产构建预览还执行了关键路径矩阵：
 
-- `npx playwright test --config playwright.production.config.ts tests/browser/fallback.spec.ts tests/browser/mobile.spec.ts tests/browser/poster.spec.ts tests/browser/release-hardening.spec.ts`：13/13 通过。
-- `npx playwright test --config playwright.production.config.ts tests/browser/configure.spec.ts tests/browser/share.spec.ts`：19/19 通过。
+- `npx playwright test --config playwright.production.config.ts tests/browser/fallback.spec.ts tests/browser/mobile.spec.ts tests/browser/release-hardening.spec.ts`：17/17 通过（109.1s）。
 
 以上预览用例覆盖构建后的入口、配置、分享、回退、移动布局、海报、诊断与性能控制路径，并在常规路径中检查页面错误、控制台错误和失败资源请求。
 
@@ -31,7 +30,8 @@
 - 默认配置、三种底盘/头部/环境切换、兼容性规范化、摘要、状态持久化、非法分享链接、确认式重置和爆炸/相机控制均有浏览器用例。
 - WebGL 构造异常与显式强制失败都保留配置、摘要、分享和重置；页面明确标注“3D 预览不可用”和“静态示意”，不会把回退描述为实时 3D。
 - 海报使用点击时冻结的配置快照生成 1600×1200 PNG；读取失败会给出中文可操作提示，重试不下载空文件，文件名随快照配置变化。
-- 键盘操作、焦点返回、`aria-live`、禁用原因和移动端 44px 触控目标均有覆盖。390×844 竖屏和 844×390 横屏均验证产品、底部配置面板、摘要和主操作可达。
+- 键盘操作、焦点返回、`aria-live`、禁用原因和移动端 44px 触控目标均有覆盖。真实 Tab 顺序覆盖 canvas、舞台操作、十个 radio group 的当前选项、可聚焦摘要和三项分享操作；Shift+Tab 返回上一操作。390×844 还通过 CDP `Input.dispatchTouchEvent` 的 touchStart/move/end 验证画布旋转会改变相机 yaw 且不改变 `scrollY`。844×390 验证产品、底部配置面板、摘要、分享、关闭和焦点返回。
+- `viewport-fit=cover` 与统一 safe-area CSS 变量已接入；review-only `reviewSafeInset=24` 使配置按钮 right/bottom 从 16px 到 24px、面板 bottom padding 从 0px 到 24px。该证据是 CSS 响应仿真，不是实体刘海设备测试。
 
 ## 性能与资源证据
 
@@ -52,12 +52,12 @@
 
 本次 `vite build` 的产物摘要：
 
-- HTML：0.66 kB（gzip 0.36 kB）
-- CSS：16.88 kB（gzip 4.64 kB）
-- 入口 JavaScript：49.32 kB（gzip 18.20 kB）
+- HTML：0.68 kB（gzip 0.38 kB）
+- CSS：18.28 kB（gzip 4.99 kB）
+- 入口 JavaScript：53.46 kB（gzip 19.45 kB）
 - Mech 资产 JavaScript：15.35 kB（gzip 5.26 kB）
 - Three.js 分包 gzip：50.98 kB、83.53 kB
-- JavaScript gzip 合计：157.97 kB；最大单分包 gzip：83.53 kB
+- JavaScript gzip 合计：159.22 kB；最大单分包 gzip：83.53 kB
 
 构建没有引入额外的本地大媒体资产；下载内容由上述应用脚本、样式和入口组成。
 
