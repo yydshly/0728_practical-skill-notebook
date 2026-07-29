@@ -10,9 +10,9 @@
 | Final Four — Typographic Flags | Canvas 字体排版、指针驱动物理交互 | **已有演示，可运行** | 暂无独立验证记录；以其 README 的构建命令为准 |
 | Monster Forge｜怪物铸造所 | 3D 游戏资产目录、模型审阅、动画与来源追踪 | **已实现，可本地运行** | [验证记录](apps/monster-forge/docs/VALIDATION.md) |
 | Ashfall Arena｜灰烬竞技场 | 完整网页动作游戏切片：战斗、敌人、AI、成长与存档 | **发布候选；自动验收通过，人工可用性门槛未关闭** | [验证记录](apps/ashfall-arena/docs/VALIDATION.md) |
-| Mech Atelier｜机甲定制工坊 | 商业化 3D 产品配置、参数联动、分享与海报导出 | **规划中，尚未实现** | [未来验证记录](apps/mech-atelier/docs/VALIDATION.md) |
+| Mech Atelier｜机甲定制工坊 | 商业化 3D 产品配置、参数联动、分享与海报导出 | **发布候选；自动验收通过** | [验证记录](apps/mech-atelier/docs/VALIDATION.md) |
 
-前两个是仓库中已有演示；Monster Forge 已实现可审阅的程序化怪物目录、实时检查器和可读回退。Ashfall Arena 已形成可从训练、波次、精英一路打到首领并保存进度的发布候选，自动验收已经通过；8–12 分钟首次人工完成门槛仍待真人验证，因此当前不是 Ready。Mech Atelier 仍只是独立应用工作区，尚未实现产品功能或验证记录。
+前两个是仓库中已有演示；Monster Forge 已实现可审阅的程序化怪物目录、实时检查器和可读回退。Ashfall Arena 已形成可从训练、波次、精英一路打到首领并保存进度的发布候选，自动验收已经通过；8–12 分钟首次人工完成门槛仍待真人验证，因此当前不是 Ready。Mech Atelier 已形成可本地运行的 3D 定制流程，自动验收、生产预览、移动端与 WebGL 回退均已验证；它仍是产品演示，不包含下单、价格或支付承诺。
 
 ## 本地运行
 
@@ -67,7 +67,19 @@ npm run test:preview --workspace @showcase/ashfall-arena
 
 完整的自动化、性能、包体、三次环境阻塞的首次代理体验尝试及人工门槛见 [Ashfall Arena 验证记录](apps/ashfall-arena/docs/VALIDATION.md)。其中 `47.482s` 和 `50.809s` 是加速审阅测试墙钟时间，不是游戏时长；当前状态是“发布候选 / 自动验收通过，人工可用性门槛未关闭”。
 
-Mech Atelier 的命令仍是未来入口，尚不能作为可运行产品或验证通过条件。
+### 当前可运行：Mech Atelier｜机甲定制工坊
+
+Mech Atelier 提供底盘、头部与环境的真实 3D 装配，兼容性提示、可分享状态、海报导出和 WebGL 静态示意回退。运行与验证：
+
+```powershell
+npm run dev --workspace @showcase/mech-atelier
+npm test --workspace @showcase/mech-atelier
+npm run test:browser --workspace @showcase/mech-atelier
+npm run build --workspace @showcase/mech-atelier
+npm run test:preview --workspace @showcase/mech-atelier
+```
+
+验证边界、性能采样和已覆盖场景见 [Mech Atelier 验证记录](apps/mech-atelier/docs/VALIDATION.md)。
 
 已有演示仍在套件外独立运行：
 
