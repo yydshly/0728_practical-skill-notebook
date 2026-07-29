@@ -3,6 +3,7 @@ import './style.css';
 import { createVillage } from './level.js';
 import { createPlayer } from './player.js';
 import { createCameraController } from './camera.js';
+import { createCameraPointerInput } from './camera-pointer-input.js';
 import { createResident } from './characters.js';
 import { createStoryDirector } from './story.js';
 import { createPursuer } from './pursuer.js';
@@ -265,15 +266,15 @@ addEventListener('keydown', (event) => {
   }
 });
 addEventListener('keyup', (event) => setKey(event, false));
-canvas.addEventListener('click', () => {
-  unlockAudio();
-  canvas.requestPointerLock?.();
-});
-addEventListener('mousemove', (event) => {
-  if (document.pointerLockElement === canvas && (event.movementX || event.movementY)) {
+canvas.addEventListener('pointerdown', unlockAudio);
+createCameraPointerInput({
+  surface: canvas,
+  eventTarget: window,
+  documentRef: document,
+  onRotate(deltaX, deltaY) {
     tutorial.complete('look');
-    cameraController.rotate(event.movementX, event.movementY);
-  }
+    cameraController.rotate(deltaX, deltaY);
+  },
 });
 addEventListener('resize', resize);
 ui.onMute(() => {

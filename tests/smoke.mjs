@@ -635,6 +635,10 @@ try {
       `http://127.0.0.1:${port}/?evidence=${evidenceCase.id}`,
       { waitUntil: 'domcontentloaded' },
     );
+    await page.waitForFunction(
+      (dangerMode) => document.querySelector('.game-shell').dataset.danger === dangerMode,
+      evidenceCase.dangerMode,
+    );
     const fixtureState = await page.evaluate(() => {
       const game = window.__RURAL_ESCAPE__;
       const shellElement = document.querySelector('.game-shell');
@@ -834,6 +838,46 @@ try {
       throw new Error(`Expected positive renderer evidence for ${evidenceCase.id}`);
     }
   }
+
+  await page.goto(
+    `http://127.0.0.1:${port}/?evidence=birth`,
+    { waitUntil: 'domcontentloaded' },
+  );
+  const dragStart = await page.evaluate(() => ({
+    yaw: window.__RURAL_ESCAPE__.camera.yaw,
+    markerHidden: document.querySelector('#screen-marker').hidden,
+    markerEdge: document.querySelector('#screen-marker').dataset.edge,
+  }));
+  const canvasBox = await page.locator('#game').boundingBox();
+  if (!canvasBox) throw new Error('Expected game canvas bounds for camera drag');
+  const dragStartX = canvasBox.x + canvasBox.width * 0.1;
+  const dragY = canvasBox.y + canvasBox.height * 0.5;
+  await page.mouse.move(dragStartX, dragY);
+  await page.mouse.down({ button: 'left' });
+  await page.mouse.move(canvasBox.x + canvasBox.width * 0.9, dragY, { steps: 12 });
+  await page.mouse.up({ button: 'left' });
+  await page.waitForTimeout(120);
+  const dragEnd = await page.evaluate(() => ({
+    yaw: window.__RURAL_ESCAPE__.camera.yaw,
+    markerHidden: document.querySelector('#screen-marker').hidden,
+    markerEdge: document.querySelector('#screen-marker').dataset.edge,
+  }));
+  if (Math.abs(dragEnd.yaw - dragStart.yaw) < 0.2) {
+    throw new Error(
+      `Expected real left-button drag to rotate camera yaw, got `
+      + `${dragStart.yaw} -> ${dragEnd.yaw}`,
+    );
+  }
+  if (dragEnd.markerHidden || dragEnd.markerEdge !== 'true') {
+    throw new Error(
+      `Expected dragged camera to preserve edge guidance, got `
+      + `hidden=${dragEnd.markerHidden} edge=${dragEnd.markerEdge}`,
+    );
+  }
+  await page.goto(
+    `http://127.0.0.1:${port}/?evidence=birth`,
+    { waitUntil: 'domcontentloaded' },
+  );
 
   await page.click('#mute-toggle');
   const mutedState = await page.evaluate(() => ({

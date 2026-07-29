@@ -10,6 +10,7 @@ import { createPlayer } from '../src/player.js';
 import { createPursuer } from '../src/pursuer.js';
 import { createVillage } from '../src/level.js';
 import { createCameraController } from '../src/camera.js';
+import { createCameraPointerInput } from '../src/camera-pointer-input.js';
 import { createAtmosphere } from '../src/atmosphere.js';
 import { resolveCircleMove } from '../src/collision.js';
 import { nearestInteraction } from '../src/interactions.js';
@@ -34,6 +35,124 @@ import { createAudioFeedback } from '../src/audio-feedback.js';
 
 const { computeThirdPersonPose } = cameraMath;
 const { buildVillageGate } = buildings;
+
+function createPointerEvent(type, properties) {
+  const event = new Event(type);
+  Object.defineProperties(event, Object.fromEntries(
+    Object.entries(properties).map(([key, value]) => [
+      key,
+      { configurable: true, enumerable: true, value },
+    ]),
+  ));
+  return event;
+}
+
+test('unlocked left-button drag rotates while ordinary hover stays inert', () => {
+  const surface = new EventTarget();
+  const eventTarget = new EventTarget();
+  const documentRef = { pointerLockElement: null };
+  const rotations = [];
+  let pointerLockRequests = 0;
+  surface.requestPointerLock = () => { pointerLockRequests += 1; };
+  surface.setPointerCapture = () => {};
+  surface.releasePointerCapture = () => {};
+
+  const input = createCameraPointerInput({
+    surface,
+    eventTarget,
+    documentRef,
+    onRotate: (deltaX, deltaY) => rotations.push([deltaX, deltaY]),
+  });
+
+  eventTarget.dispatchEvent(createPointerEvent('pointermove', {
+    clientX: 30,
+    clientY: 40,
+    movementX: 30,
+    movementY: 40,
+  }));
+  surface.dispatchEvent(createPointerEvent('pointerdown', {
+    button: 0,
+    clientX: 10,
+    clientY: 20,
+    pointerId: 7,
+  }));
+  eventTarget.dispatchEvent(createPointerEvent('pointermove', {
+    clientX: 16,
+    clientY: 27,
+    movementX: 0,
+    movementY: 0,
+  }));
+  eventTarget.dispatchEvent(createPointerEvent('pointerup', {
+    button: 0,
+    pointerId: 7,
+  }));
+  eventTarget.dispatchEvent(createPointerEvent('pointermove', {
+    clientX: 20,
+    clientY: 30,
+    movementX: 0,
+    movementY: 0,
+  }));
+
+  assert.equal(pointerLockRequests, 1);
+  assert.deepEqual(rotations, [[6, 7]]);
+  input.dispose();
+});
+
+test('pointer-locked movement preserves browser relative deltas without a drag', () => {
+  const surface = new EventTarget();
+  const eventTarget = new EventTarget();
+  const documentRef = { pointerLockElement: surface };
+  const rotations = [];
+  const input = createCameraPointerInput({
+    surface,
+    eventTarget,
+    documentRef,
+    onRotate: (deltaX, deltaY) => rotations.push([deltaX, deltaY]),
+  });
+
+  eventTarget.dispatchEvent(createPointerEvent('pointermove', {
+    clientX: 0,
+    clientY: 0,
+    movementX: 9,
+    movementY: -3,
+  }));
+
+  assert.deepEqual(rotations, [[9, -3]]);
+  input.dispose();
+});
+
+test('pointer cancellation ends an unlocked fallback drag', () => {
+  const surface = new EventTarget();
+  const eventTarget = new EventTarget();
+  const rotations = [];
+  surface.requestPointerLock = () => {};
+  surface.setPointerCapture = () => {};
+  surface.releasePointerCapture = () => {};
+  const input = createCameraPointerInput({
+    surface,
+    eventTarget,
+    documentRef: { pointerLockElement: null },
+    onRotate: (deltaX, deltaY) => rotations.push([deltaX, deltaY]),
+  });
+
+  surface.dispatchEvent(createPointerEvent('pointerdown', {
+    button: 0,
+    clientX: 10,
+    clientY: 20,
+    pointerId: 7,
+  }));
+  eventTarget.dispatchEvent(createPointerEvent('pointercancel', { pointerId: 7 }));
+  eventTarget.dispatchEvent(createPointerEvent('pointermove', {
+    clientX: 18,
+    clientY: 29,
+    movementX: 0,
+    movementY: 0,
+    pointerId: 7,
+  }));
+
+  assert.deepEqual(rotations, []);
+  input.dispose();
+});
 
 test('danger controller distinguishes chase, close threat, recovery, and safety', () => {
   const danger = createDangerController({ recoverySeconds: 1.2 });
