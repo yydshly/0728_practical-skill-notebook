@@ -755,6 +755,38 @@ describe("final showcase text scan", () => {
     await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
   });
 
+  it.each([
+    [`const value="https:\t//cdn.example.test/app.js"`, "TAB after colon"],
+    [`const value="https:/\t/cdn.example.test/app.js"`, "TAB between slashes"],
+    [`const value="https:\\\n//cdn.example.test/app.js"`, "LF continuation after colon"],
+    [`const value="https:/\\\n/cdn.example.test/app.js"`, "LF continuation between slashes"],
+  ])("rejects report delimiter-gap counterexample: %s", async (content, _label) => {
+    const root = await createScanTree();
+    await addScanAsset(root, "monster-forge/assets/extra.js", content);
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
+  it.each([
+    [String.raw`\t`, "escaped TAB"],
+    [String.raw`\x0a`, "hex LF"],
+    [String.raw`\u000d`, "Unicode CR"],
+    [String.raw`\u{9}`, "code-point TAB"],
+    [`\\\r\n`, "CRLF continuation"],
+    [`\\\u2028`, "LS continuation"],
+    [`\\\u2029`, "PS continuation"],
+  ])("rejects JavaScript control atom in both URL delimiter gaps: %s", async (
+    atom,
+    _label,
+  ) => {
+    const root = await createScanTree();
+    await addScanAsset(
+      root,
+      "monster-forge/assets/extra.js",
+      `const one="https:${atom}//cdn.example.test/one.js";const two="https:/${atom}/cdn.example.test/two.js"`,
+    );
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
   it("rejects mixed valid JavaScript atoms without treating \\t as identity t", async () => {
     const root = await createScanTree();
     await addScanAsset(

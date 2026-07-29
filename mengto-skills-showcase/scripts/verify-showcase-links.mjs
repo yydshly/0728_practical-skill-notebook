@@ -19,8 +19,8 @@ const jsUrlSlash =
 const remoteStart = new RegExp(
   `${jsUrlLetterAtoms.h}${jsUrlControl}${jsUrlLetterAtoms.t}${jsUrlControl}`
     + `${jsUrlLetterAtoms.t}${jsUrlControl}${jsUrlLetterAtoms.p}${jsUrlControl}`
-    + `(?:${jsUrlLetterAtoms.s})?${jsUrlControl}${jsUrlColon}`
-    + `${jsUrlSlash}${jsUrlSlash}`,
+    + `(?:${jsUrlLetterAtoms.s})?${jsUrlControl}${jsUrlColon}${jsUrlControl}`
+    + `${jsUrlSlash}${jsUrlControl}${jsUrlSlash}`,
   "g",
 );
 const hubThreeToken = /(?:^|[^a-z0-9])three(?:\.module)?(?:[^a-z0-9]|$)/i;
