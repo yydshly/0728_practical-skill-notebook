@@ -1,5 +1,15 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -285,7 +295,34 @@ test('encoded manifest records the reproducible encoder contract', () => {
   assert.equal(manifest.encoder.ogg.bitExact, true);
   assert.equal(manifest.encoder.ogg.serialOffset, 0);
   assert.equal(manifest.encoder.ogg.metadata, 'stripped');
-  assert.ok(Array.isArray(manifest.encoder.ogg.argv));
+  assert.deepEqual(manifest.encoder.ogg.argv, [
+    '-hide_banner',
+    '-nostdin',
+    '-y',
+    '-loglevel',
+    'error',
+    '-i',
+    '{input}',
+    '-map',
+    '0:a:0',
+    '-ar',
+    '48000',
+    '-ac',
+    '2',
+    '-c:a',
+    'libvorbis',
+    '-q:a',
+    '4',
+    '-fflags',
+    '+bitexact',
+    '-flags:a',
+    '+bitexact',
+    '-map_metadata',
+    '-1',
+    '-serial_offset',
+    '0',
+    '{output}',
+  ]);
   assert.equal(manifest.encoder.mp3.codec, 'libmp3lame');
   assert.equal(manifest.encoder.mp3.bitrate, '96k');
   assert.equal(manifest.encoder.mp3.bitExact, true);
@@ -293,7 +330,205 @@ test('encoded manifest records the reproducible encoder contract', () => {
   assert.equal(manifest.encoder.mp3.id3v1, false);
   assert.equal(manifest.encoder.mp3.id3v2, false);
   assert.equal(manifest.encoder.mp3.metadata, 'stripped');
-  assert.ok(Array.isArray(manifest.encoder.mp3.argv));
+  assert.deepEqual(manifest.encoder.mp3.argv, [
+    '-hide_banner',
+    '-nostdin',
+    '-y',
+    '-loglevel',
+    'error',
+    '-i',
+    '{input}',
+    '-map',
+    '0:a:0',
+    '-ar',
+    '48000',
+    '-ac',
+    '2',
+    '-c:a',
+    'libmp3lame',
+    '-b:a',
+    '96k',
+    '-fflags',
+    '+bitexact',
+    '-flags:a',
+    '+bitexact',
+    '-map_metadata',
+    '-1',
+    '-write_xing',
+    '1',
+    '-id3v2_version',
+    '0',
+    '-write_id3v1',
+    '0',
+    '{output}',
+  ]);
+});
+
+test('asset publication rolls back every target after a later publish failure', async () => {
+  const { publishFilesTransaction } = await import(
+    '../scripts/encode-rural-score.mjs'
+  );
+  assert.equal(typeof publishFilesTransaction, 'function');
+
+  const directory = await mkdtemp(join(tmpdir(), 'rural-score-transaction-test-'));
+  const assetA = join(directory, 'asset-a.bin');
+  const introduced = join(directory, 'introduced.bin');
+  const assetB = join(directory, 'asset-b.bin');
+  const manifestPath = join(directory, 'manifest.json');
+  try {
+    await Promise.all([
+      writeFile(assetA, 'old-a'),
+      writeFile(assetB, 'old-b'),
+      writeFile(manifestPath, 'old-manifest'),
+    ]);
+
+    await assert.rejects(
+      publishFilesTransaction(
+        [
+          { destination: assetA, contents: 'new-a' },
+          { destination: introduced, contents: 'new-file' },
+          { destination: assetB, contents: 'new-b' },
+          { destination: manifestPath, contents: 'new-manifest' },
+        ],
+        {
+          rename: async (source, destination) => {
+            if (
+              source.includes('.rural-score-stage-') &&
+              destination === assetB
+            ) {
+              throw new Error('injected later publish failure');
+            }
+            await rename(source, destination);
+          },
+        },
+      ),
+      /injected later publish failure/,
+    );
+
+    assert.equal(await readFile(assetA, 'utf8'), 'old-a');
+    assert.equal(await readFile(assetB, 'utf8'), 'old-b');
+    assert.equal(await readFile(manifestPath, 'utf8'), 'old-manifest');
+    await assert.rejects(readFile(introduced), { code: 'ENOENT' });
+    assert.deepEqual((await readdir(directory)).sort(), [
+      'asset-a.bin',
+      'asset-b.bin',
+      'manifest.json',
+    ]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('failed rollback preserves the only recoverable original backup', async () => {
+  const { publishFilesTransaction } = await import(
+    '../scripts/encode-rural-score.mjs'
+  );
+  const directory = await mkdtemp(
+    join(tmpdir(), 'rural-score-rollback-failure-test-'),
+  );
+  const assetA = join(directory, 'asset-a.bin');
+  const introduced = join(directory, 'introduced.bin');
+  const assetB = join(directory, 'asset-b.bin');
+  const manifestPath = join(directory, 'manifest.json');
+  try {
+    await Promise.all([
+      writeFile(assetA, 'old-a'),
+      writeFile(assetB, 'old-b'),
+      writeFile(manifestPath, 'old-manifest'),
+    ]);
+
+    await assert.rejects(
+      publishFilesTransaction(
+        [
+          { destination: assetA, contents: 'new-a' },
+          { destination: introduced, contents: 'new-file' },
+          { destination: assetB, contents: 'new-b' },
+          { destination: manifestPath, contents: 'new-manifest' },
+        ],
+        {
+          rename: async (source, destination) => {
+            if (
+              source.includes('.rural-score-stage-') &&
+              destination === assetB
+            ) {
+              throw new Error('injected later publish failure');
+            }
+            if (
+              source.includes('.rural-score-backup-') &&
+              destination === assetA
+            ) {
+              throw new Error('injected rollback failure');
+            }
+            await rename(source, destination);
+          },
+        },
+      ),
+      (error) => {
+        assert.ok(error instanceof AggregateError);
+        assert.match(error.message, /rollback encountered 1 error/);
+        return true;
+      },
+    );
+
+    assert.equal(await readFile(assetA, 'utf8'), 'new-a');
+    assert.equal(await readFile(assetB, 'utf8'), 'old-b');
+    assert.equal(await readFile(manifestPath, 'utf8'), 'old-manifest');
+    await assert.rejects(readFile(introduced), { code: 'ENOENT' });
+
+    const entries = await readdir(directory);
+    const recoveryBackups = entries.filter((name) =>
+      name.startsWith('asset-a.bin.rural-score-backup-'),
+    );
+    assert.equal(recoveryBackups.length, 1);
+    assert.equal(
+      await readFile(join(directory, recoveryBackups[0]), 'utf8'),
+      'old-a',
+    );
+    assert.equal(
+      entries.some((name) => name.includes('.rural-score-stage-')),
+      false,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('canonical asset paths reject alternate and escaping copies before access', async () => {
+  const { resolveCanonicalAssetPath } = await import(
+    '../scripts/encode-rural-score.mjs'
+  );
+  assert.equal(typeof resolveCanonicalAssetPath, 'function');
+
+  const directory = await mkdtemp(join(tmpdir(), 'rural-score-path-test-'));
+  const projectDirectory = join(directory, 'project');
+  const copiedFile = join(directory, 'copied.ogg');
+  try {
+    await mkdir(projectDirectory, { recursive: true });
+    await writeFile(copiedFile, 'matching copied bytes');
+
+    assert.throws(
+      () =>
+        resolveCanonicalAssetPath({
+          projectRoot: projectDirectory,
+          assetId: 'rural-dusk-bed',
+          codec: 'ogg',
+          recordedPath: '../../copied.ogg',
+        }),
+      /canonical path/,
+    );
+    assert.throws(
+      () =>
+        resolveCanonicalAssetPath({
+          projectRoot: projectDirectory,
+          assetId: 'rural-dusk-bed',
+          codec: 'ogg',
+          recordedPath: copiedFile,
+        }),
+      /canonical path/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('encoded verification rejects phantom assets and false normalization provenance', async () => {

@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
+  copyFile,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
@@ -8,7 +11,14 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import {
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
@@ -113,6 +123,41 @@ function resolveProjectRoot(projectRoot) {
   return projectRoot instanceof URL
     ? fileURLToPath(projectRoot)
     : resolve(projectRoot);
+}
+
+function canonicalAssetRelativePath(assetId, codec) {
+  invariant(
+    SCORE_ASSETS.some(({ id }) => id === assetId),
+    `Unknown score asset ID: ${assetId}`,
+  );
+  invariant(
+    codec === 'wav' || codec === 'ogg' || codec === 'mp3',
+    `Unsupported score codec: ${codec}`,
+  );
+  return codec === 'wav'
+    ? `audio-source/masters/${assetId}.wav`
+    : `src/assets/audio/${assetId}.${codec}`;
+}
+
+export function resolveCanonicalAssetPath({
+  projectRoot,
+  assetId,
+  codec,
+  recordedPath,
+}) {
+  const canonicalPath = canonicalAssetRelativePath(assetId, codec);
+  exact(recordedPath, canonicalPath, `${assetId} ${codec} canonical path`);
+
+  const projectDirectory = resolveProjectRoot(projectRoot);
+  const resolvedPath = resolve(projectDirectory, ...canonicalPath.split('/'));
+  const relativePath = relative(projectDirectory, resolvedPath);
+  invariant(
+    relativePath !== '..' &&
+      !relativePath.startsWith(`..${sep}`) &&
+      !isAbsolute(relativePath),
+    `${assetId} ${codec} canonical path escapes project root`,
+  );
+  return resolvedPath;
 }
 
 function renderArgv(template, input, output) {
@@ -490,14 +535,137 @@ function calculateAggregateAnalysis(assets) {
   };
 }
 
-async function atomicWrite(destination, contents) {
-  await mkdir(dirname(destination), { recursive: true });
-  const temporary = `${destination}.${process.pid}.tmp`;
+async function pathExists(path, inspectPath) {
   try {
-    await writeFile(temporary, contents);
-    await rename(temporary, destination);
+    return await inspectPath(path);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+export async function publishFilesTransaction(
+  publications,
+  fileOperations = {},
+) {
+  invariant(
+    Array.isArray(publications) && publications.length > 0,
+    'publication transaction requires at least one target',
+  );
+  const operations = {
+    copyFile,
+    lstat,
+    mkdir,
+    rename,
+    rm,
+    writeFile,
+    ...fileOperations,
+  };
+  const transactionId = `${process.pid}-${randomUUID()}`;
+  const targets = publications.map(({ destination, contents }) => {
+    invariant(
+      typeof destination === 'string' && destination.length > 0,
+      'publication destination must be a non-empty path',
+    );
+    const resolvedDestination = resolve(destination);
+    return {
+      destination: resolvedDestination,
+      contents,
+      stagedPath: `${resolvedDestination}.rural-score-stage-${transactionId}`,
+      backupPath: `${resolvedDestination}.rural-score-backup-${transactionId}`,
+      existed: false,
+      publicationAttempted: false,
+      rollbackRestored: false,
+    };
+  });
+  const destinationKeys = targets.map(({ destination }) =>
+    process.platform === 'win32' ? destination.toLowerCase() : destination,
+  );
+  invariant(
+    new Set(destinationKeys).size === destinationKeys.length,
+    'publication transaction requires unique destinations',
+  );
+
+  let transactionError;
+  const rollbackErrors = [];
+  const cleanupErrors = [];
+  try {
+    for (const target of targets) {
+      await operations.mkdir(dirname(target.destination), { recursive: true });
+      await operations.writeFile(target.stagedPath, target.contents);
+    }
+
+    for (const target of targets) {
+      const existing = await pathExists(target.destination, operations.lstat);
+      if (!existing) {
+        continue;
+      }
+      invariant(
+        existing.isFile(),
+        `publication target is not a file: ${target.destination}`,
+      );
+      target.existed = true;
+      await operations.copyFile(target.destination, target.backupPath);
+    }
+
+    for (const target of targets) {
+      target.publicationAttempted = true;
+      await operations.rename(target.stagedPath, target.destination);
+    }
+  } catch (error) {
+    transactionError = error;
+    for (const target of [...targets].reverse()) {
+      if (!target.publicationAttempted) {
+        continue;
+      }
+      try {
+        if (target.existed) {
+          await operations.rename(target.backupPath, target.destination);
+          target.rollbackRestored = true;
+        } else {
+          await operations.rm(target.destination, { force: true });
+        }
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
+      }
+    }
   } finally {
-    await rm(temporary, { force: true });
+    for (const target of targets) {
+      const preserveBackupForRecovery =
+        transactionError &&
+        target.publicationAttempted &&
+        target.existed &&
+        !target.rollbackRestored;
+      const artifacts = [
+        target.stagedPath,
+        ...(preserveBackupForRecovery ? [] : [target.backupPath]),
+      ];
+      for (const artifact of artifacts) {
+        try {
+          await operations.rm(artifact, { force: true });
+        } catch (cleanupError) {
+          cleanupErrors.push(cleanupError);
+        }
+      }
+    }
+  }
+
+  if (transactionError) {
+    if (rollbackErrors.length > 0 || cleanupErrors.length > 0) {
+      throw new AggregateError(
+        [transactionError, ...rollbackErrors, ...cleanupErrors],
+        `Publication failed; rollback encountered ${rollbackErrors.length} error(s) and cleanup encountered ${cleanupErrors.length} error(s): ${transactionError.message}`,
+      );
+    }
+    throw transactionError;
+  }
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(
+      cleanupErrors,
+      `Publication succeeded but cleanup encountered ${cleanupErrors.length} error(s)`,
+    );
   }
 }
 
@@ -714,7 +882,12 @@ async function verifyEncodedAsset({
     `${asset.id} deterministic normalized WAV hash`,
   );
 
-  const wavPath = join(projectDirectory, ...asset.files.wav.path.split('/'));
+  const wavPath = resolveCanonicalAssetPath({
+    projectRoot: projectDirectory,
+    assetId: asset.id,
+    codec: 'wav',
+    recordedPath: asset.files.wav.path,
+  });
   const wavBuffer = await readFile(wavPath);
   exact(wavBuffer.byteLength, asset.files.wav.bytes, `${asset.id} wav bytes`);
   exact(sha256(wavBuffer), asset.files.wav.sha256, `${asset.id} wav hash`);
@@ -752,13 +925,19 @@ async function verifyEncodedAsset({
     ['mp3', 'mp3'],
   ]) {
     const record = asset.files[codec];
-    const inputPath = join(projectDirectory, ...record.path.split('/'));
+    const canonicalPath = canonicalAssetRelativePath(asset.id, codec);
+    const inputPath = resolveCanonicalAssetPath({
+      projectRoot: projectDirectory,
+      assetId: asset.id,
+      codec,
+      recordedPath: record.path,
+    });
     const actual = await inspectCompressedFile({
       asset,
       codec,
       expectedCodec,
       filePath: inputPath,
-      relativePath: record.path,
+      relativePath: canonicalPath,
       ffmpegPath,
       ffprobePath,
     });
@@ -913,7 +1092,12 @@ export async function buildEncodedScore({
       const manifestAsset = manifest.assets.find(({ id }) => id === definition.id);
       invariant(manifestAsset, `${definition.id}: missing rendered manifest asset`);
       const committedSource = await readFile(
-        join(projectDirectory, ...manifestAsset.files.wav.path.split('/')),
+        resolveCanonicalAssetPath({
+          projectRoot: projectDirectory,
+          assetId: definition.id,
+          codec: 'wav',
+          recordedPath: manifestAsset.files.wav.path,
+        }),
       );
       exact(
         committedSource.byteLength,
@@ -951,19 +1135,26 @@ export async function buildEncodedScore({
       runtimeMixAnalysis: aggregate.runtimeMixAnalysis,
     };
 
+    const publications = [];
     for (const generatedAsset of generated) {
       for (const codec of ['wav', 'ogg', 'mp3']) {
         const record = generatedAsset.manifestAsset.files[codec];
-        await atomicWrite(
-          join(projectDirectory, ...record.path.split('/')),
-          generatedAsset.outputs[codec].buffer,
-        );
+        publications.push({
+          destination: resolveCanonicalAssetPath({
+            projectRoot: projectDirectory,
+            assetId: generatedAsset.manifestAsset.id,
+            codec,
+            recordedPath: record.path,
+          }),
+          contents: generatedAsset.outputs[codec].buffer,
+        });
       }
     }
-    await atomicWrite(
-      manifestPath,
-      `${JSON.stringify(completedManifest, null, 2)}\n`,
-    );
+    publications.push({
+      destination: manifestPath,
+      contents: `${JSON.stringify(completedManifest, null, 2)}\n`,
+    });
+    await publishFilesTransaction(publications);
     return completedManifest;
   } finally {
     await rm(tempDirectory, { recursive: true, force: true });
