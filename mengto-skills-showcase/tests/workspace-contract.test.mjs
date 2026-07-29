@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { configDefaults } from "vitest/config";
 
 const readJson = async (path) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8"));
 const auditScript = fileURLToPath(new URL("../scripts/check-selected-skills.mjs", import.meta.url));
@@ -132,7 +133,14 @@ describe("showcase workspace", () => {
   it("keeps Playwright showroom journeys out of the root Vitest run", async () => {
     const { default: vitestConfig } = await import("../vitest.config.ts");
 
-    expect(vitestConfig.test.exclude).toContain("tests/showcase-preview/**");
+    expect(vitestConfig.test.exclude).toEqual([
+      ...configDefaults.exclude,
+      "apps/*/tests/browser/**",
+      "apps/*/tests/production/**",
+      "packages/*/tests/browser/**",
+      "tests/browser/**",
+      "tests/showcase-preview/**",
+    ]);
   });
 
   it("runs Ashfall browser behavior and performance in isolated Playwright processes", async () => {
