@@ -2,7 +2,8 @@
 
 ## 验证对象与边界
 
-- 最终候选验证提交：`b560d636eed004c7b09e88f34ad7c5e17adb44e9`（`fix: harden showcase release boundaries`）。该提交已完成开发服务与生产预览两条浏览器路径、全仓测试、构建、工作区契约和 Skill 只读审计。
+- 当前套件代码候选：`43ef034d06f341f525740fbfd243a6d9aabc0b20`。本轮重新执行了覆盖 Monster Forge 源码的根测试、根构建、工作区契约和 Skill 只读审计，但没有重跑 Monster Forge 专项浏览器矩阵或生产预览。
+- 下文 Monster Forge 产品专项证据仍来自候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9`（`fix: harden showcase release boundaries`），不会被冒充为当前套件候选的重跑结果。
 - 本地运行入口：在套件根目录执行 `npm run dev:forge`，默认地址为 `http://127.0.0.1:4173`。
 - 确定性审阅入口：`/?review=ash-warden`；其他 ID 为 `glass-crawler`、`bell-knight`、`mire-hound`。`?capture=1` 仅用于生成目录预览。
 - 本记录不代表已部署：本任务没有发布、托管或外部服务连接。
@@ -51,7 +52,7 @@
 
 ## 自动化验证命令
 
-最终候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9` 执行了下列门槛：
+Monster Forge 产品专项证据候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9` 执行了下列门槛：
 
 ```powershell
 npm test --workspace @showcase/monster-forge
@@ -65,7 +66,9 @@ npm ls three
 git diff --check
 ```
 
-结果为：Monster Forge 单元测试 `15/15`，开发服务 Playwright `16/16`，生产预览 smoke `1/1`，全仓测试 `37` 个文件、`447/447`；全仓 build、workspace validate、16 项 Skill 只读审计和 `git diff --check` 全部通过。生产预览正常显示实时 canvas，没有进入 fallback，也没有 console error 或 page error。四张目录 PNG 与当前程序化模型源码的配对校验保持通过。
+该产品专项候选的结果为：Monster Forge 单元测试 `15/15`，开发服务 Playwright `16/16`，生产预览 smoke `1/1`。生产预览正常显示实时 canvas，没有进入 fallback，也没有 console error 或 page error；四张目录 PNG 与当前程序化模型源码的配对校验保持通过。这三项产品专项结果本轮未重跑。
+
+当前套件候选 `43ef034d06f341f525740fbfd243a6d9aabc0b20` 的新鲜公共门禁为：根测试 `37` 个文件、`450/450`，根构建、workspace validate、16 项 Skill 只读审计和 `git diff --check` 通过。它们证明当前源码仍通过公共门禁，但不替代 Monster Forge 的专项浏览器或生产预览重跑。
 
 ## 最终审查修复：目录重捕获与三类故障边界
 
@@ -74,7 +77,7 @@ git diff --check
 - `?reviewControls=1&forceModelFailure=1` 是一次性、确定性的模型构建故障夹具。首次真实模型工厂调用抛错并进入 `model-creation-failed` 边界；回退显示同一资产的 PNG、名称、程序化来源、尺寸、动作和中文具体原因。
 - `?reviewControls=1&forceRuntimeFailure=1` 会让已启动场景的首次实例更新抛错并进入独立的 `runtime-failed` 边界。点击“重试 3D 预览”会释放失败场景、重建实时场景并恢复持续增长的帧诊断。
 - 故障状态下切换目录卡会同步更新回退元数据。模型故障与 `?reviewControls=1&forceWebglFailure=1` 的旅程均继续通过；三个强制故障参数在普通 URL 上都不会生效。
-- 最终候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9` 已包含上述修复，并通过开发浏览器全套与生产预览 smoke。
+- 产品专项证据候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9` 已包含上述修复，并通过开发浏览器全套与生产预览 smoke；当前套件候选 `43ef034d06f341f525740fbfd243a6d9aabc0b20` 未重跑这两项专项门禁。
 
 ## 已批准的非目标
 

@@ -2,7 +2,8 @@
 
 ## 当前结论与验证边界
 
-- 被测产品候选提交：`b560d636eed004c7b09e88f34ad7c5e17adb44e9`（`fix: harden showcase release boundaries`）。
+- 被测产品候选提交：`43ef034d06f341f525740fbfd243a6d9aabc0b20`（`fix: close final installer and ashfall review gaps`）。
+- 前一轮发布边界基线提交是 `b560d636eed004c7b09e88f34ad7c5e17adb44e9`；下表中的当前计数均来自新的代码候选，不把历史结果冒充为本轮重跑。
 - 当前状态：**发布候选 / 自动验收通过，人工可用性门槛未关闭**。
 - 8–12 分钟首次人工完成门槛：**待人工验证**。没有有效的首次人工完成时长，也没有可计算的中位数。
 - 本记录证明的是本地开发服务、自动化浏览器旅程和本地生产预览；本任务没有部署到公网，也没有验证线上 CDN、缓存或真实移动设备。
@@ -16,7 +17,7 @@
 | Node.js | `v22.15.0` |
 | npm | `10.9.2` |
 | Playwright | `1.62.0`，捆绑 Chromium、无头模式 |
-| 候选工作区 | `codex/mengto-skills-showcase` 分支的干净 worktree |
+| 候选工作区 | `codex/mengto-skills-showcase` 分支，代码候选 `43ef034d06f341f525740fbfd243a6d9aabc0b20` |
 | 自动通关入口 | `/?fixture=fresh&seed=7481&reviewControls=1` |
 | 生产验证入口 | Vite `dist` 本地 preview；默认使用独占严格端口 `4184` |
 
@@ -27,10 +28,10 @@
 | 门槛 | 结果 |
 | --- | --- |
 | Ashfall 单元测试 | `15` 个文件，`308/308` 通过 |
-| Ashfall 开发服务浏览器全套 | `44/44` 通过，约 `3.2m` |
-| 根工作区测试 | `37` 个文件，`447/447` 通过 |
+| Ashfall 开发服务浏览器全套 | 同一 `npm run test:browser` 门禁顺序启动两个独立 Playwright 进程：普通矩阵 `41/41`（约 `2.0m`），独占性能矩阵 `5/5`（约 `23.3s`），合计 `46/46` |
+| 根工作区测试 | `37` 个文件，`450/450` 通过 |
 | Ashfall 生产预览 | 先重新构建并检查包体预算，再以 `dist` 运行；`1/1` 通过 |
-| Skill 安装器回归 | `2/2` 通过：锁定提交参数与已安装副本漂移保护 |
+| Skill 安装器回归 | `4/4` 通过：锁定引用与文本换行规范化、已安装副本漂移、脏子模块拒绝、二进制原始字节漂移 |
 | 根工作区构建 | 命令成功；Ashfall 无大分包警告，Monster Forge 已知警告见下文 |
 | 工作区契约 | `npm run validate` 通过 |
 | Skill 只读审计 | 批准的 `16/16` 项均存在可读 `SKILL.md` |
@@ -55,7 +56,7 @@ git diff --check
 git status --porcelain=v1
 ```
 
-Playwright 的服务配置使用 `--strictPort` 且不复用已有服务。测试完成后服务退出，避免把其他进程误当成被测候选。
+Playwright 的服务配置使用 `--strictPort` 且不复用已有服务。普通浏览器矩阵和 `release-performance.spec.ts` 由同一 npm 门禁顺序启动两个 Playwright 进程，各自创建新的浏览器与 Vite 服务；本轮成功运行使用 `4311` 和 `4312`，测试完成后服务退出。这样性能采样不承受前 41 项在长期浏览器/GPU 进程中的累积影响，所有既有性能阈值保持不变。
 
 ## 完整加速审阅旅程
 
@@ -81,7 +82,8 @@ Playwright 的服务配置使用 `--strictPort` 且不复用已有服务。测�
 - 标准手柄：模拟标准 mapping 的有效按键后输入模式切换为 gamepad；释放和断开不会留下粘滞输入。
 - 减少动态效果：`prefers-reduced-motion: reduce` 独立关闭相机 shake 和粒子位移，但保留伤害闪光、盾环、字幕等语义反馈；它不被质量档位代替。
 - 音频恢复：第一次 `AudioContext.resume()` 被浏览器阻止后诊断为 blocked；第二次用户手势可以在同一上下文恢复到 `unlocked: true`。静音时等价视觉反馈仍存在。
-- WebGL 不可用：浏览器用例让真实 `HTMLCanvasElement.getContext()` 返回 `null`，覆盖 `WebGLRenderer` 构造失败；画布会隐藏并显示中文信息回退，目标、阶段、生命与武器仍可读，运行循环和清理不会抛出未处理错误。
+- 反馈字幕：优先级会跨多次事件消费持续到字幕 TTL 结束；高优先级受击不会被稍后的闪避起步覆盖，但治疗仍可更新当前受击提示，升级和通关提示可立即覆盖战斗字幕。
+- WebGL 不可用：浏览器用例让真实 `HTMLCanvasElement.getContext()` 返回 `null`，覆盖 `WebGLRenderer` 构造失败；画布会隐藏并显示中文静态信息模式，目标、阶段、生命与武器仍可读。该模式不创建输入或音频控制器、不启动 RAF/模拟、不改写存档，所有交互控件禁用；诊断中的帧、tick、renderer 资源保持为零，清理后监听器和资源也为零。
 - 运行健康：相关旅程检查 console error、page error 和未处理拒绝；生产预览还检查请求失败与 `4xx/5xx`，结果均为空。
 
 ## 性能诊断与自适应质量
@@ -98,7 +100,7 @@ Playwright 的服务配置使用 `--strictPort` 且不复用已有服务。测�
 
 本机无头环境的同页 empty rAF 基线约为 median `16.7ms`、p95 `16.8ms`，而 live rAF 可能因软件渲染明显变慢并触发自动降档。该差异不被包装成“真实设备帧率已达标”；当前只关闭主线程提交预算、资源计数与自动降档行为，GPU 完成时间仍是未测边界。
 
-固定 high/low 对照还验证了 low 的 DPR、drawing-buffer 像素数和局部灯数量都低于 high，且显式 `quality=high`、`medium` 或 `low` 不会被 auto 覆盖。阴影始终关闭，档位不会通过隐藏场景内容伪造收益。
+固定 high/low 对照先在同一浏览器环境采集 empty 调度基线，再要求 low 相对该基线的 rAF 增量满足原有 `median≤24ms`、`p95≤34ms`，同时 high/low 都继续满足 live work 的 `median≤12ms`、`p95≤24ms`、`max<100ms`，没有放宽产品工作预算。该对照还验证了 low 的 DPR、drawing-buffer 像素数和局部灯数量都低于 high，且显式 `quality=high`、`medium` 或 `low` 不会被 auto 覆盖。阴影始终关闭，档位不会通过隐藏场景内容伪造收益。
 
 质量档位可以解释为：
 
@@ -130,11 +132,11 @@ Ashfall 使用真实代码分包，没有通过提高 Vite warning limit 隐藏�
 | --- | ---: | ---: |
 | `three-runtime-BF9wd6mB.js` | `335.79 KiB` | `80.94 KiB` |
 | `three-runtime-C-7BDurz.js` | `178.40 KiB` | `47.95 KiB` |
-| `index-CrJ7PaSQ.js` | `115.62 KiB` | `36.22 KiB` |
+| `index-B_VGzdkx.js` | `119.37 KiB` | `36.77 KiB` |
 | `game-assets-DS5U0l33.js` | `16.46 KiB` | `6.13 KiB` |
 | `index-XeHs61OF.css` | `12.06 KiB` | `3.37 KiB` |
 
-- JavaScript gzip 合计：`171.23 KiB / 190.00 KiB`
+- JavaScript gzip 合计：`171.78 KiB / 190.00 KiB`
 - CSS gzip 合计：`3.37 KiB / 8.00 KiB`
 - 每个 Ashfall JavaScript 分包均小于 `500 KiB`，构建没有 Ashfall 大 chunk 警告。
 
@@ -187,10 +189,10 @@ localStorage.removeItem("ashfall-arena:v1");
 localStorage.removeItem("ashfall-arena:audio-settings:v1");
 ```
 
-若候选需要回滚，目标是上一实现提交 `fe82065`。优先使用可审计、可恢复的提交：
+若需要撤销本轮代码候选，优先使用可审计、可恢复的提交：
 
 ```powershell
-git revert b560d636eed004c7b09e88f34ad7c5e17adb44e9
+git revert 43ef034d06f341f525740fbfd243a6d9aabc0b20
 ```
 
 不要使用 `git reset --hard`。证据文档提交与产品候选分离；若只需撤销文档，应只 revert 对应的 evidence-only 提交。
