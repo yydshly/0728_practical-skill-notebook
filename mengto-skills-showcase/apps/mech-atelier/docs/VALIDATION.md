@@ -1,5 +1,26 @@
 # Mech Atelier 发布验证记录
 
+## 2026-07-29 中文导览、移动面板协调与配置小成功点
+
+本节记录从基线 `af211294d590103bbdd0c4f742c268cffd9825c3` 增加 Mech Atelier v1 中文导览后的新鲜证据；下方既有发布记录继续保留，不能替代本节的增量验证。
+
+- 首访导览说明产品用途、第一步和预计 3–5 分钟体验时长；完成后可由“导览”按钮重新打开，`Escape` 关闭后焦点回到触发按钮。`localStorage` getter 被浏览器拒绝时，导览仍可用。
+- 返回入口在同一标签页打开固定的 `#product-mech-atelier` 锚点。URL 单测覆盖显式环境变量、开发默认、生产默认和 `../` 相对 Hub 基址；生产产物扫描未发现 `127.0.0.1`、`localhost`、`4172` 或 `[::1]`。
+- 390px 移动视口打开导览时会无焦点抢夺地关闭配置底部面板；普通关闭配置面板仍保留原有焦点返回。导览触发器与对话框的计算层级分别为 `50` 和 `60`。
+- WebGL 回退仍保留导览与返回入口。将头部改为 Halo 后，摘要同步为价格 `194000`、重量 `29 / 32`、功率 `66`、防护 `43`、机动 `74`，规范 URL 同步 `v/c/h` 参数且页面只保留一个 canvas。
+- 重复开关导览不会改变当前配置 URL、Halo 选中状态或摘要数值；`pagehide` 先 flush 配置持久化，再销毁导览，最后释放持久化和场景资源。
+
+| 命令 | 新鲜结果 |
+| --- | ---: |
+| `npm test --workspace @showcase/mech-atelier -- showcase-hub-url` | 1/1 |
+| `npm run test:browser --workspace @showcase/mech-atelier -- guide` | 7/7 |
+| `npm test --workspace @showcase/mech-atelier` | 6 个文件，38/38 |
+| `npm run build --workspace @showcase/mech-atelier` | 通过 |
+| `npm run test:browser --workspace @showcase/mech-atelier` | 52/52（约 3.7m） |
+| `npm run test:preview --workspace @showcase/mech-atelier` | 先构建再运行 `dist`；52/52（约 3.2m） |
+
+开发矩阵第一次执行时，现有 50 次切换压力用例在 60 秒上限内停在一次 radio `check`，没有断言或资源计数不匹配；同文件独立重跑 6/6、随后完整开发矩阵 52/52 均通过，且未修改超时或核心场景逻辑，因此记录为本机 SwiftShader 并发资源波动。
+
 ## 状态与范围
 
 - 当前套件代码候选：`43ef034d06f341f525740fbfd243a6d9aabc0b20`。本轮重新执行了覆盖 Mech Atelier 源码的根测试、根构建和工作区校验，但没有重跑 Mech Atelier 专项浏览器矩阵或生产预览。

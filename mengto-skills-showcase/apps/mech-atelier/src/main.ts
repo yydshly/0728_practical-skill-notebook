@@ -1,5 +1,10 @@
+import "@showcase/showcase-guide/styles.css";
 import "./styles.css";
 import type { MechModuleSlot } from "@showcase/game-assets";
+import {
+  createProductGuide,
+  resolveProductHubHref,
+} from "@showcase/showcase-guide";
 import { calculateSummary } from "./configuration/calculate-summary";
 import { catalog, defaultConfiguration } from "./content/catalog";
 import {
@@ -34,6 +39,8 @@ import { renderHotspots } from "./ui/render-hotspots";
 import { renderOptionGroups } from "./ui/render-option-groups";
 import { renderSummary } from "./ui/render-summary";
 import { renderFallback, type RenderFallbackController } from "./ui/render-fallback";
+import { MECH_ATELIER_GUIDE } from "./showcase/guide-content";
+import { resolveMechAtelierHubHref } from "./showcase/resolve-hub-href";
 
 type DebugWindow = typeof window & {
   __MECH_ATELIER_DEBUG__?: {
@@ -91,7 +98,7 @@ if (!app) throw new Error("Mech Atelier app root is missing");
 app.innerHTML = `
   <div class="app-shell">
     <header class="topbar">
-      <a class="wordmark" href="/" aria-label="Mech Atelier 首页">
+      <a class="wordmark" href="./" aria-label="Mech Atelier 首页">
         <span class="wordmark-mark" aria-hidden="true">M</span>
         <span>
           <strong>MECH ATELIER</strong>
@@ -236,6 +243,23 @@ const openConfigButton = requiredElement<HTMLButtonElement>("[data-open-config]"
 const closeConfigButton = requiredElement<HTMLButtonElement>("[data-close-config]");
 const configurationPanel = requiredElement<HTMLElement>(".configuration-panel");
 configurationPanel.id = "mech-configuration-panel";
+
+const hubHref = import.meta.env.DEV
+  ? resolveMechAtelierHubHref(import.meta.env, window.location.href)
+  : resolveProductHubHref(
+    import.meta.env.VITE_SHOWCASE_HUB_URL ?? "/",
+    "mech-atelier",
+    window.location.href,
+  );
+const guide = createProductGuide(app, {
+  ...MECH_ATELIER_GUIDE,
+  hubHref,
+  onOpen() {
+    if (document.documentElement.dataset.configurationSheet === "open") {
+      setConfigurationPanel(false, { restoreFocus: false });
+    }
+  },
+});
 
 const search = new URLSearchParams(window.location.search);
 const hasExplicitConfiguration = hasConfigurationQuery(search);
@@ -534,6 +558,7 @@ window.addEventListener(
   "pagehide",
   () => {
     persistence.flush();
+    guide.destroy();
     persistence.dispose();
     hotspotController?.dispose();
     fallbackController?.dispose();
@@ -571,14 +596,18 @@ function applyConfiguration(
   persistence.schedule(configuration);
 }
 
-function setConfigurationPanel(open: boolean): void {
+function setConfigurationPanel(
+  open: boolean,
+  options: { restoreFocus?: boolean } = {},
+): void {
+  const { restoreFocus = true } = options;
   document.documentElement.dataset.configurationSheet = open ? "open" : "closed";
   openConfigButton.setAttribute("aria-expanded", String(open));
   if (open) {
     window.setTimeout(() => {
       configurationPanel.querySelector<HTMLElement>("input:checked")?.focus({ preventScroll: true });
     }, 0);
-  } else {
+  } else if (restoreFocus) {
     openConfigButton.focus({ preventScroll: true });
   }
 }

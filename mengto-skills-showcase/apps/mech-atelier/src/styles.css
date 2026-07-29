@@ -47,6 +47,18 @@ body {
     #08090a;
 }
 
+#app {
+  --showcase-guide-accent: #55c7d9;
+}
+
+.showcase-guide-trigger {
+  z-index: 50;
+}
+
+dialog.showcase-guide-dialog {
+  z-index: 60;
+}
+
 button,
 input {
   font: inherit;

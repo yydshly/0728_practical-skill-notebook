@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@showcase/game-assets": "*",
+    "@showcase/showcase-guide": "*",
     "three": "^0.185.1"
   },
   "devDependencies": {

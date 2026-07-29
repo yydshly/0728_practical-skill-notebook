@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import { hiddenMechGuideState } from "./tests/guide-storage-state";
 
 const port = process.env.MECH_PLAYWRIGHT_PORT ?? "4175";
 const baseURL = `http://127.0.0.1:${port}`;
@@ -13,6 +14,7 @@ export default defineConfig({
   },
   use: {
     baseURL,
+    storageState: hiddenMechGuideState(baseURL),
     viewport: { width: 1440, height: 900 },
   },
   webServer: {

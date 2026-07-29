@@ -60,6 +60,7 @@ base("浏览器拒绝 localStorage getter 时仍可配置并给出中文无持�
   });
 
   await page.goto("/");
+  await page.getByRole("button", { name: "开始体验" }).click();
   await expect(page.getByRole("heading", { name: "机甲定制工坊" })).toBeVisible();
   await expect(page.locator("[data-config-announcer]")).toContainText(
     "浏览器禁止本地保存",
