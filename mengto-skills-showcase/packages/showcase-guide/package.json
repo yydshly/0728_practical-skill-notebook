@@ -1,0 +1,13 @@
+{
+  "name": "@showcase/showcase-guide",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:browser": "playwright test"
+  }
+}

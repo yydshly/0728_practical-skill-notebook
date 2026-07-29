@@ -2,7 +2,10 @@
   "name": "@showcase/ui-system",
   "private": true,
   "type": "module",
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./src/tokens.css"
+  },
   "scripts": {
     "test": "vitest run"
   }

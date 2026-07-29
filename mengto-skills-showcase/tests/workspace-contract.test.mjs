@@ -59,6 +59,15 @@ const runAudit = (cwd, userProfile) => {
 };
 
 describe("showcase workspace", () => {
+  it("keeps the shared guide independently addressable", async () => {
+    const guide = await readJson("../packages/showcase-guide/package.json");
+    expect(guide.name).toBe("@showcase/showcase-guide");
+    expect(guide.exports).toEqual({
+      ".": "./src/index.ts",
+      "./styles.css": "./src/styles.css",
+    });
+  });
+
   it("declares three independent apps and five shared package workspaces", async () => {
     const manifest = await readJson("../package.json");
     expect(manifest.workspaces).toEqual(["apps/*", "packages/*"]);

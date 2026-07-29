@@ -14,9 +14,14 @@
 
 - `packages/game-assets`、`packages/content-schema`：先读 `build-hybrid-game-assets`；涉及审阅图、来源或资产证据时再读 `build-vesperfall-review-assets`。
 - `packages/three-runtime`：只在需要时读取与相机、性能或 Three.js 生命周期直接匹配的已安装 Skill；不要把产品状态放进这个包。
+- `packages/showcase-guide`：只承载产品无关导览契约；浏览器运行时不得加载 Skill。
 - `packages/input-system`、`packages/ui-system`：保持产品无关；移动端输入或性能任务分别路由到 `build-mobile-threejs-games`、`optimize-threejs-games`。
 
 ## 产品路由
+
+### `apps/showcase-hub`
+
+- Showcase Hub 是展厅入口，不是第四款产品；不得新增或引入任何 Skill。
 
 ### `apps/monster-forge`
 
