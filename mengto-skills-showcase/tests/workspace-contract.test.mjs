@@ -129,7 +129,7 @@ describe("showcase workspace", () => {
     expect(readme).toContain("规划中");
     expect(readme).toContain("发布候选；自动验收通过，人工可用性门槛未关闭");
     expect(readme).toContain("[验证记录](apps/ashfall-arena/docs/VALIDATION.md)");
-    expect(readme).toContain("Node.js 22+");
+    expect(readme).toContain("Node.js 22.12+");
 
     const selection = await readJson("../config/selected-skills.json");
     for (const skill of selection.skills) {
@@ -189,6 +189,10 @@ describe("showcase workspace", () => {
     );
     const ashfallCommands = readme.slice(
       readme.indexOf("### 当前可运行：Ashfall Arena｜灰烬竞技场"),
+      readme.indexOf("### 当前可运行：Mech Atelier｜机甲定制工坊"),
+    );
+    const mechAtelierCommands = readme.slice(
+      readme.indexOf("### 当前可运行：Mech Atelier｜机甲定制工坊"),
       readme.indexOf("## Skill 源码与安装目录"),
     );
 
@@ -211,7 +215,26 @@ describe("showcase workspace", () => {
     expect(ashfallCommands).not.toContain("npm run dev:forge");
     expect(ashfallCommands).not.toContain("npm run dev:atelier");
     expect(monsterForgeCommands).not.toContain("npm run dev:atelier");
-    expect(readme.match(/npm run test:browser/g)).toHaveLength(2);
+    expect(mechAtelierCommands).toContain("当前可运行：Mech Atelier｜机甲定制工坊");
+    expect(mechAtelierCommands).toContain(
+      "npm run test:browser --workspace @showcase/mech-atelier",
+    );
+    expect(mechAtelierCommands).toContain(
+      "npm run test:preview --workspace @showcase/mech-atelier",
+    );
+    expect(mechAtelierCommands).not.toContain("npm run dev:forge");
+    expect(mechAtelierCommands).not.toContain("npm run dev:arena");
+    expect(readme.match(/npm run test:browser/g)).toHaveLength(3);
+  });
+
+  it("声明与 Vite 兼容的 Node 运行时下限", async () => {
+    const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+    const packageJson = await readJson("../package.json");
+
+    expect(readme).toContain("Node.js 22.12+");
+    expect(packageJson.engines).toEqual({
+      node: "^20.19.0 || >=22.12.0",
+    });
   });
 
   it("记录 Ashfall 候选证据且不冒充人工可用性结论", async () => {

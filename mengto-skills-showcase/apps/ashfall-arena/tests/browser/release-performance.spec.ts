@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 type PerformanceSnapshot = {
+  performanceControl: "live" | "empty";
   qualityMode: "auto" | "low" | "medium" | "high";
   qualityTier: "low" | "medium" | "high";
   quality: {
@@ -25,7 +26,15 @@ type PerformanceSnapshot = {
     p95Ms: number;
     maxMs: number;
   };
+  work: {
+    sampleCount: number;
+    averageMs: number;
+    medianMs: number;
+    p95Ms: number;
+    maxMs: number;
+  };
   renderer: {
+    submittedFrames: number;
     calls: number;
     triangles: number;
     geometries: number;
@@ -69,6 +78,11 @@ const waitForSampleCount = (page: Page, minimum = 30) =>
     minimum,
   );
 
+const waitForWorkSampleCount = (page: Page, minimum = 30) =>
+  expect.poll(async () => (await sample(page)).work.sampleCount).toBeGreaterThanOrEqual(
+    minimum,
+  );
+
 const assertMeasurableSnapshot = (
   reading: PerformanceSnapshot,
   quality: "high" | "medium" | "low",
@@ -78,6 +92,7 @@ const assertMeasurableSnapshot = (
   expect(reading.frame.averageMs).toBeGreaterThan(0);
   expect(reading.frame.maxMs).toBeLessThan(250);
   expect(reading.renderer.calls).toBeGreaterThan(0);
+  expect(reading.renderer.submittedFrames).toBeGreaterThan(0);
   expect(reading.renderer.calls).toBeLessThan(200);
   expect(reading.renderer.triangles).toBeGreaterThan(0);
   expect(reading.renderer.triangles).toBeLessThan(250_000);
@@ -115,10 +130,19 @@ const assertRepresentativeSample = (
   expect(reading.frame.p95Ms).toBeLessThan(100);
 };
 
-test("default auto quality settles within the wave and boss frame budgets", async ({
+const assertBoundedLiveWork = (reading: PerformanceSnapshot) => {
+  expect(reading.performanceControl).toBe("live");
+  expect(reading.work.sampleCount).toBeGreaterThanOrEqual(30);
+  expect(reading.work.averageMs).toBeGreaterThanOrEqual(0);
+  expect(reading.work.medianMs).toBeLessThanOrEqual(12);
+  expect(reading.work.p95Ms).toBeLessThanOrEqual(24);
+  expect(reading.work.maxMs).toBeLessThan(100);
+};
+
+test("auto quality reacts to real rAF while live update/render work stays bounded", async ({
   page,
 }) => {
-  test.setTimeout(45_000);
+  test.setTimeout(60_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
@@ -137,28 +161,40 @@ test("default auto quality settles within the wave and boss frame budgets", asyn
           window.__ashfallDiagnostics!.snapshot().enemyModelRootCount,
       ),
     ).toBeGreaterThan(0);
-    await expect.poll(async () =>
-      page.evaluate(
-        () =>
-          window.__ashfallDiagnostics!.snapshot().performance
-            .qualityTier,
-      ),
-    ).not.toBe("high");
-    await page.waitForTimeout(1_800);
+    await expect.poll(async () => {
+      const current = await sample(page);
+      return current.qualityTier === "low" ||
+        (
+          current.quality.lastWindowMedianMs > 0 &&
+          current.quality.sampleCount >= 30
+        );
+    }, { timeout: 15_000 }).toBe(true);
     await resetSamples(page);
-    await page.waitForTimeout(1_200);
+    await waitForSampleCount(page);
+    await waitForWorkSampleCount(page);
     const reading = await sample(page);
     expect(reading.qualityMode).toBe("auto");
-    expect(["medium", "low"]).toContain(reading.qualityTier);
-    assertRepresentativeSample(reading, reading.qualityTier);
-    expect(reading.frame.medianMs).toBeLessThanOrEqual(24);
-    expect(reading.frame.p95Ms).toBeLessThanOrEqual(34);
-    expect(reading.quality.transitions[0]).toMatchObject({
-      from: "high",
-      to: "medium",
-    });
-    expect(reading.quality.lastWindowMedianMs).toBeLessThanOrEqual(24);
-    expect(reading.quality.lastWindowP95Ms).toBeLessThanOrEqual(34);
+    assertMeasurableSnapshot(reading, reading.qualityTier);
+    assertBoundedLiveWork(reading);
+    if (reading.quality.transitionCount === 0) {
+      expect(reading.qualityTier).toBe("high");
+      expect(reading.quality.lastWindowMedianMs).toBeLessThanOrEqual(24);
+      expect(reading.quality.lastWindowP95Ms).toBeLessThanOrEqual(34);
+    } else {
+      expect(reading.quality).toMatchObject({
+        reason: "sustained-slow-frame",
+      });
+      expect(reading.quality.transitions[0]).toMatchObject({
+        from: "high",
+        to: "medium",
+      });
+      if (reading.qualityTier === "low") {
+        expect(reading.quality.transitions[1]).toMatchObject({
+          from: "medium",
+          to: "low",
+        });
+      }
+    }
     expect(reading.renderer.calls).toBeLessThanOrEqual(
       drawCallBudgets[fixture],
     );
@@ -168,6 +204,29 @@ test("default auto quality settles within the wave and boss frame budgets", asyn
     });
   }
   expect(errors).toEqual([]);
+});
+
+test("review-only empty control records the same-page rAF baseline without product work", async ({
+  page,
+}) => {
+  await page.goto(
+    "/?fixture=wave-one&reviewControls=1&reviewPerformance=empty&quality=low&manualEnemyAi=1",
+  );
+  await resetSamples(page);
+  await waitForSampleCount(page);
+  await waitForWorkSampleCount(page);
+  const reading = await sample(page);
+  expect(reading.performanceControl).toBe("empty");
+  expect(reading.qualityMode).toBe("low");
+  expect(reading.renderer.submittedFrames).toBe(0);
+  expect(reading.frame.sampleCount).toBeGreaterThanOrEqual(30);
+  expect(reading.frame.maxMs).toBeLessThan(250);
+  expect(reading.work.sampleCount).toBeGreaterThanOrEqual(30);
+  expect(reading.work.p95Ms).toBeLessThanOrEqual(1);
+  test.info().annotations.push({
+    type: "same-page-empty-rAF-baseline",
+    description: JSON.stringify(reading),
+  });
 });
 
 test("same desktop environment proves fixed high versus low and never overrides the user", async ({

@@ -1,6 +1,10 @@
 import type { MonsterDefinition } from "@showcase/game-assets";
 
-export type FallbackReason = "webgl-unavailable" | "renderer-init-failed" | "model-creation-failed";
+export type FallbackReason =
+  | "webgl-unavailable"
+  | "renderer-init-failed"
+  | "model-creation-failed"
+  | "runtime-failed";
 
 export function fallbackDetails(reason: FallbackReason): Readonly<{ title: string; message: string }> {
   switch (reason) {
@@ -10,6 +14,8 @@ export function fallbackDetails(reason: FallbackReason): Readonly<{ title: strin
       return { title: "3D 预览不可用", message: "渲染器初始化失败，已显示同一资产的透明目录预览。" };
     case "model-creation-failed":
       return { title: "3D 预览不可用", message: "模型创建失败，已显示同一资产的透明目录预览。" };
+    case "runtime-failed":
+      return { title: "实时预览运行失败", message: "模型更新或渲染已终止，已显示同一资产的透明目录预览；重试会重建 3D 场景。" };
   }
 }
 

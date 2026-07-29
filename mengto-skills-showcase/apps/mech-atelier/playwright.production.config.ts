@@ -16,9 +16,10 @@ export default defineConfig({
     viewport: { width: 1440, height: 900 },
   },
   webServer: {
-    command: `vite preview --host 127.0.0.1 --port ${port} --strictPort`,
+    command:
+      `npm run build && vite preview --host 127.0.0.1 --port ${port} --strictPort`,
     url: baseURL,
     reuseExistingServer: false,
-    timeout: 20_000,
+    timeout: 120_000,
   },
 });

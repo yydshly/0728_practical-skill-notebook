@@ -268,67 +268,92 @@ export function createHudController(
   }
 
   const setCaption = (value: string, duration = 1.25) => {
+    if (value.length === 0) {
+      setText(feedbackCaption, "");
+      feedbackCaption.hidden = true;
+      captionRemaining = 0;
+      return;
+    }
     setText(feedbackCaption, value);
-    feedbackCaption.hidden = value.length === 0;
-    captionRemaining = value.length === 0 ? 0 : duration;
+    feedbackCaption.hidden = false;
+    captionRemaining = duration;
   };
 
   const consume = (
     events: readonly GameEvent[],
     state: Readonly<GameState>,
   ) => {
+    let batchPriority = Number.POSITIVE_INFINITY;
+    const setBatchCaption = (
+      value: string,
+      duration: number,
+      priority: number,
+    ) => {
+      if (priority > batchPriority) return;
+      batchPriority = priority;
+      setCaption(value, duration);
+    };
     for (const event of events) {
       if (
         event.type === "action-started" &&
         event.actorId === state.player.id
       ) {
-        setCaption(
+        setBatchCaption(
           event.actionId === "dodge"
             ? "闪避起步"
             : `攻击起手：${ATTACK_LABELS[event.actionId]}`,
           0.75,
+          3,
         );
       } else if (
         event.type === "attack-resolved" &&
         event.actorId === state.player.id
       ) {
-        setCaption(
+        setBatchCaption(
           formatAttackResolutionCaption(event.result),
           event.result === "hit"
             ? 0.8
             : event.result === "interrupted"
               ? 1.15
               : 1,
+          event.result === "interrupted"
+            ? 1
+            : event.result === "hit"
+              ? 2
+              : 3,
         );
       } else if (
         event.type === "damage" &&
         event.targetId === state.player.id
       ) {
-        setCaption(
+        setBatchCaption(
           event.guardBroken
             ? `格挡崩解：承受 ${event.amount} 点伤害`
             : event.guarded
             ? `格挡成功：承受 ${event.amount} 点伤害`
             : `受击：生命减少 ${event.amount}`,
+          1.25,
+          1,
         );
       } else if (event.type === "enemy-telegraph") {
-        setCaption(
+        setBatchCaption(
           `敌人预警：${formatTelegraphLabel(
             state.enemies[event.enemyId]?.kind ?? "",
             event.moveId,
           )}`,
           1.1,
+          2,
         );
       } else if (event.type === "boss-phase") {
-        setCaption(`首领进入第 ${event.phase} 阶段`, 1.8);
+        setBatchCaption(`首领进入第 ${event.phase} 阶段`, 1.8, 1);
       } else if (event.type === "drop") {
-        setCaption("战利品已落地", 0.9);
+        setBatchCaption("战利品已落地", 0.9, 3);
       } else if (event.type === "upgrade-offered") {
-        setCaption("第一波完成：请选择升级", 1.8);
+        setBatchCaption("第一波完成：请选择升级", 1.8, 1);
       } else if (event.type === "encounter-complete") {
-        setCaption("竞技场挑战完成", 2.2);
+        setBatchCaption("竞技场挑战完成", 2.2, 1);
       } else if (event.type === "healed") {
-        setCaption(`治疗：恢复 ${event.amount} 点生命`, 1);
+        setBatchCaption(`治疗：恢复 ${event.amount} 点生命`, 1, 2);
       }
     }
   };

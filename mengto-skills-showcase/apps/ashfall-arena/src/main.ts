@@ -108,11 +108,14 @@ interface AshfallSnapshot {
 }
 
 interface AshfallPerformanceSnapshot {
+  performanceControl: "live" | "empty";
   qualityMode: QualityMode;
   qualityTier: QualityTier;
   quality: QualityDiagnostics;
   frame: FramePerformanceSnapshot;
+  work: FramePerformanceSnapshot;
   renderer: {
+    submittedFrames: number;
     calls: number;
     triangles: number;
     geometries: number;
@@ -183,6 +186,10 @@ const reviewControls = query.get("reviewControls") === "1";
 const safeTraining = query.get("safeTraining") === "1";
 const manualEnemyAi = query.get("manualEnemyAi") === "1";
 const captureMode = query.get("capture") === "1";
+const performanceControl =
+  reviewControls && query.get("reviewPerformance") === "empty"
+    ? "empty"
+    : "live";
 const forcedMonsterFailure = query.get("forceEnemyModelFailure");
 const qualityParameter = query.get("quality");
 const qualityMode: QualityMode =
@@ -340,9 +347,55 @@ const canvas = app.querySelector<HTMLCanvasElement>("[data-game-canvas]")!;
 const stage = app.querySelector<HTMLElement>(".game-stage")!;
 let hud: HudController | null = null;
 
+const showArenaFallback = (error: unknown) => {
+  canvas.hidden = true;
+  canvas.setAttribute("aria-hidden", "true");
+  document.documentElement.dataset.renderMode = "information-fallback";
+  const phaseLabel = ({
+    training: "训练阶段",
+    "wave-one": "第一波",
+    elite: "精英战",
+    boss: "首领战",
+    complete: "挑战完成",
+  } as const)[state.encounter.phase] ?? "未知阶段";
+  const fallback = document.createElement("section");
+  fallback.className = "runtime-fallback";
+  fallback.dataset.runtimeFallback = "";
+  fallback.setAttribute("role", "status");
+  fallback.setAttribute("aria-live", "polite");
+  const heading = document.createElement("h2");
+  heading.textContent = "3D 画面不可用";
+  const message = document.createElement("p");
+  message.textContent =
+    "当前浏览器未能创建 WebGL 渲染器，实时战斗画面没有启动。你仍可阅读本次开局的目标与核心状态。";
+  const summary = document.createElement("dl");
+  const summaryEntries: Array<readonly [string, string]> = [
+    ["阶段", phaseLabel],
+    ["生命", `${state.player.health} / ${state.player.maxHealth}`],
+    ["武器", state.player.weaponId === "oathblade" ? "誓约刃" : "余烬弓"],
+  ];
+  for (const [label, value] of summaryEntries) {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const detail = document.createElement("dd");
+    detail.textContent = value;
+    summary.append(term, detail);
+  }
+  const technical = document.createElement("details");
+  const technicalLabel = document.createElement("summary");
+  technicalLabel.textContent = "技术原因";
+  const technicalDetail = document.createElement("p");
+  technicalDetail.textContent =
+    error instanceof Error ? error.message : String(error);
+  technical.append(technicalLabel, technicalDetail);
+  fallback.append(heading, message, summary, technical);
+  canvas.after(fallback);
+};
+
 const arena = createArenaScene(canvas, {
-  preserveDrawingBuffer: reviewControls || captureMode,
+  preserveDrawingBuffer: captureMode,
   quality: qualityTier,
+  onUnavailable: showArenaFallback,
 });
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const vfx = createVfx(arena.scene, {
@@ -391,6 +444,9 @@ const accumulator = new FixedStepAccumulator(1 / 60, 5, 0.25);
 const performanceSampler = reviewControls
   ? createPerformanceSampler()
   : null;
+const workSampler = reviewControls
+  ? createPerformanceSampler()
+  : null;
 const playerTarget = new Vector3();
 const trainingLockTarget = new Vector3(
   arenaContent.arena.trainingCenter.x,
@@ -409,6 +465,7 @@ const recentEvents: Array<{ tick: number; event: GameEvent }> = [];
 let previousTimestamp: number | null = null;
 let frameRequest = 0;
 let frameCount = 0;
+let renderSubmissionCount = 0;
 let disposed = false;
 let manualReviewClock = false;
 let focusGameOnNextFrame = false;
@@ -657,39 +714,47 @@ const frame = (timestamp: number) => {
     arena.setQuality(qualityTier);
     vfx.setQuality(qualityTier);
     performanceSampler?.reset();
+    workSampler?.reset();
   }
-  if (!manualReviewClock) {
-    accumulator.advance(frameDelta, step);
+  const workStartedAt = performance.now();
+  if (performanceControl === "live") {
+    if (!manualReviewClock) {
+      accumulator.advance(frameDelta, step);
+    }
+    synchronizer.sync(state, frameDelta);
+    vfx.sync(state);
+    const presentationPaused =
+      state.paused || state.status === "upgrade";
+    vfx.update(frameDelta, presentationPaused);
+    hud?.updatePresentation(frameDelta, presentationPaused);
+    arena.setGateOpen(state.encounter.gateOpen);
+    playerTarget.set(state.player.position.x, 0, state.player.position.y);
+    cameraController.setLockTarget(currentLockTarget());
+    consumePresentationEvents();
+    cameraController.update(playerTarget, frameDelta);
+    const entityDiagnostics = synchronizer.getDiagnostics();
+    hud?.render(state, {
+      deviceMode: input.getDeviceMode(),
+      telegraphs: entityDiagnostics.telegraphs,
+      damageFlashActive: vfx.getDiagnostics().damageFlashActive,
+    });
+    const cameraDiagnostics = cameraController.getDiagnostics();
+    document.documentElement.dataset.cameraShake =
+      cameraDiagnostics.reducedMotion ? "off" : "on";
+    if (
+      state.status === "playing" &&
+      !state.paused &&
+      (focusGameOnNextFrame || hud?.consumeFocusGameRequest())
+    ) {
+      canvas.focus();
+      focusGameOnNextFrame = false;
+    }
+    arena.render(camera);
+    renderSubmissionCount += 1;
   }
-  synchronizer.sync(state, frameDelta);
-  vfx.sync(state);
-  const presentationPaused =
-    state.paused || state.status === "upgrade";
-  vfx.update(frameDelta, presentationPaused);
-  hud?.updatePresentation(frameDelta, presentationPaused);
-  arena.setGateOpen(state.encounter.gateOpen);
-  playerTarget.set(state.player.position.x, 0, state.player.position.y);
-  cameraController.setLockTarget(currentLockTarget());
-  consumePresentationEvents();
-  cameraController.update(playerTarget, frameDelta);
-  const entityDiagnostics = synchronizer.getDiagnostics();
-  hud?.render(state, {
-    deviceMode: input.getDeviceMode(),
-    telegraphs: entityDiagnostics.telegraphs,
-    damageFlashActive: vfx.getDiagnostics().damageFlashActive,
-  });
-  const cameraDiagnostics = cameraController.getDiagnostics();
-  document.documentElement.dataset.cameraShake =
-    cameraDiagnostics.reducedMotion ? "off" : "on";
-  if (
-    state.status === "playing" &&
-    !state.paused &&
-    (focusGameOnNextFrame || hud?.consumeFocusGameRequest())
-  ) {
-    canvas.focus();
-    focusGameOnNextFrame = false;
-  }
-  arena.render(camera);
+  workSampler?.recordFrame(
+    Math.max(Number.EPSILON, performance.now() - workStartedAt),
+  );
   frameCount += 1;
   frameRequest = requestAnimationFrame(frame);
 };
@@ -710,7 +775,7 @@ reducedMotion.addEventListener("change", onReducedMotion);
 const getPerformanceSnapshot = (
   runtimeDisposed = false,
 ): AshfallPerformanceSnapshot => {
-  const rendererInfo = arena.renderer.info;
+  const rendererInfo = arena.renderer?.info;
   const arenaDiagnostics = arena.getDiagnostics();
   const effects = vfx.getDiagnostics();
   const entityDiagnostics = synchronizer.getDiagnostics();
@@ -745,6 +810,7 @@ const getPerformanceSnapshot = (
     audio.getDiagnostics().listenerRegistrations;
 
   return {
+    performanceControl,
     qualityMode,
     qualityTier,
     quality: qualityController.getDiagnostics(),
@@ -755,8 +821,16 @@ const getPerformanceSnapshot = (
       p95Ms: 0,
       maxMs: 0,
     },
+    work: workSampler?.getFrameSnapshot() ?? {
+      sampleCount: 0,
+      averageMs: 0,
+      medianMs: 0,
+      p95Ms: 0,
+      maxMs: 0,
+    },
     renderer: runtimeDisposed
       ? {
+          submittedFrames: 0,
           calls: 0,
           triangles: 0,
           geometries: 0,
@@ -768,10 +842,11 @@ const getPerformanceSnapshot = (
           activeLocalLights: 0,
         }
       : {
-          calls: rendererInfo.render.calls,
-          triangles: rendererInfo.render.triangles,
-          geometries: rendererInfo.memory.geometries,
-          textures: rendererInfo.memory.textures,
+          submittedFrames: renderSubmissionCount,
+          calls: rendererInfo?.render.calls ?? 0,
+          triangles: rendererInfo?.render.triangles ?? 0,
+          geometries: rendererInfo?.memory.geometries ?? 0,
+          textures: rendererInfo?.memory.textures ?? 0,
           pixelRatio: arenaDiagnostics.pixelRatio,
           drawingBufferWidth: arenaDiagnostics.drawingBufferWidth,
           drawingBufferHeight: arenaDiagnostics.drawingBufferHeight,
@@ -828,6 +903,8 @@ if (reviewControls) {
   window.__ashfallDiagnostics = {
     resetPerformanceSamples() {
       performanceSampler?.reset();
+      workSampler?.reset();
+      renderSubmissionCount = 0;
     },
     setManualReviewClock(enabled) {
       manualReviewClock = enabled;

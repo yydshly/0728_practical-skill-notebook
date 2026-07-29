@@ -26,7 +26,9 @@ test("production dist renders and advances the real arena runtime", async ({
     }
   });
 
-  const response = await page.goto("/?fixture=fresh&reviewControls=1");
+  const response = await page.goto(
+    "/?fixture=fresh&reviewControls=1&capture=1",
+  );
   expect(response?.status()).toBe(200);
   await expect(page.getByRole("heading", { name: /灰烬竞技场/ })).toBeVisible();
   await expect(page.locator("[data-game-canvas]")).toHaveCount(1);

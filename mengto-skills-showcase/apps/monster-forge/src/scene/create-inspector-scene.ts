@@ -53,7 +53,10 @@ export interface InspectorScene {
   dispose(): void;
 }
 
-export type InspectorUnavailableKind = "renderer-init-failed" | "model-creation-failed";
+export type InspectorUnavailableKind =
+  | "renderer-init-failed"
+  | "model-creation-failed"
+  | "runtime-failed";
 
 interface InspectorSceneOptions {
   onReady(): void;
@@ -209,7 +212,7 @@ export function createInspectorScene(
     failed = true;
     lastError = errorMessage(error);
     cancelAnimationFrame(animationFrame);
-    options.onUnavailable(error, "model-creation-failed");
+    options.onUnavailable(error, "runtime-failed");
   };
 
   const frame = (timestamp: number) => {
@@ -368,7 +371,6 @@ export function createInspectorScene(
         for (const material of gridMaterials as Material[]) material.dispose();
       }
       renderer.dispose();
-      renderer.forceContextLoss();
     },
   };
 }

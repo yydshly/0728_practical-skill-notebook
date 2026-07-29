@@ -57,7 +57,9 @@ const installDeterministicGamepad = (
 test("fresh start renders a live arena and moves authoritative state", async ({
   page,
 }) => {
-  await page.goto("/?fixture=fresh&reviewControls=1&safeTraining=1");
+  await page.goto(
+    "/?fixture=fresh&reviewControls=1&safeTraining=1&capture=1",
+  );
   await expect(page.getByRole("heading", { name: /灰烬竞技场/ })).toBeVisible();
   await expect(page.getByText("进入第一个琥珀训练环")).toBeVisible();
   await expect(page.getByText("105 / 105")).toBeVisible();

@@ -3,6 +3,7 @@ import { defaultConfiguration } from "../src/content/catalog";
 import {
   SAVED_CONFIG_KEY,
   createSavedConfigurationController,
+  getSafeStorage,
   loadConfiguration,
   saveConfiguration,
   type StorageLike,
@@ -143,6 +144,61 @@ describe("versioned local configuration", () => {
     expect(loadConfiguration(storage)).toMatchObject({
       ok: true,
       config: defaultConfiguration,
+    });
+  });
+
+  it("turns a throwing browser storage getter into an unavailable storage boundary", () => {
+    const getter = vi.fn(() => {
+      throw new DOMException("blocked by browser policy", "SecurityError");
+    });
+
+    expect(getSafeStorage(getter)).toBeNull();
+    expect(getter).toHaveBeenCalledOnce();
+    expect(loadConfiguration(null)).toMatchObject({
+      ok: false,
+      config: null,
+      issues: [{ field: "storage", code: "unavailable" }],
+    });
+    expect(saveConfiguration(defaultConfiguration, null)).toMatchObject({
+      ok: false,
+      issues: [{ field: "storage", code: "unavailable" }],
+    });
+  });
+
+  it("reports a delayed write failure instead of throwing from the timer", () => {
+    const onUnavailable = vi.fn();
+    const storage: StorageLike = {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException("quota denied", "QuotaExceededError");
+      },
+    };
+    const controller = createSavedConfigurationController({
+      storage,
+      onUnavailable,
+    });
+
+    expect(controller.schedule(defaultConfiguration)).toBe(true);
+    expect(() => vi.advanceTimersByTime(250)).not.toThrow();
+    expect(onUnavailable).toHaveBeenCalledOnce();
+    expect(onUnavailable.mock.calls[0]?.[0]).toMatchObject({
+      ok: false,
+      issues: [{ field: "storage", code: "unavailable" }],
+    });
+  });
+
+  it("uses a no-persistence controller when storage acquisition failed", () => {
+    const onUnavailable = vi.fn();
+    const controller = createSavedConfigurationController({
+      storage: null,
+      onUnavailable,
+    });
+
+    expect(controller.schedule(defaultConfiguration)).toBe(false);
+    expect(onUnavailable).toHaveBeenCalledOnce();
+    expect(controller.flush()).toMatchObject({
+      ok: false,
+      issues: [{ field: "storage", code: "unavailable" }],
     });
   });
 });

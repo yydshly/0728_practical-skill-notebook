@@ -51,14 +51,45 @@ interface SavedPayload {
   config: MechConfiguration;
 }
 
+type UnavailableSaveResult = Extract<
+  SaveConfigurationResult,
+  { ok: false }
+>;
+
+const unavailableResult = (error?: unknown): UnavailableSaveResult => ({
+  ok: false,
+  issues: [
+    {
+      field: "storage",
+      code: "unavailable",
+      ...(error === undefined
+        ? {}
+        : {
+            value: error instanceof Error ? error.message : String(error),
+          }),
+    },
+  ],
+});
+
+export function getSafeStorage(
+  getter: () => StorageLike = () => window.localStorage,
+): StorageLike | null {
+  try {
+    return getter();
+  } catch {
+    return null;
+  }
+}
+
 export function saveConfiguration(
   config: MechConfiguration,
-  storage: StorageLike = window.localStorage,
+  storage: StorageLike | null = getSafeStorage(),
 ): SaveConfigurationResult {
   const validation = validateConfiguration(config, catalog);
   if (!validation.ok) {
     return { ok: false, issues: validation.issues };
   }
+  if (storage === null) return unavailableResult();
 
   const payload: SavedPayload = {
     version: 1,
@@ -68,22 +99,20 @@ export function saveConfiguration(
     storage.setItem(SAVED_CONFIG_KEY, JSON.stringify(payload));
     return { ok: true };
   } catch (error) {
-    return {
-      ok: false,
-      issues: [
-        {
-          field: "storage",
-          code: "unavailable",
-          value: error instanceof Error ? error.message : String(error),
-        },
-      ],
-    };
+    return unavailableResult(error);
   }
 }
 
 export function loadConfiguration(
-  storage: StorageLike = window.localStorage,
+  storage: StorageLike | null = getSafeStorage(),
 ): LoadConfigurationResult {
+  if (storage === null) {
+    return {
+      ok: false,
+      config: null,
+      issues: unavailableResult().issues,
+    };
+  }
   let serialized: string | null;
   try {
     serialized = storage.getItem(SAVED_CONFIG_KEY);
@@ -148,11 +177,13 @@ export function loadConfiguration(
 }
 
 export function createSavedConfigurationController({
-  storage = window.localStorage,
+  storage = getSafeStorage(),
   delayMs = 250,
+  onUnavailable,
 }: {
-  storage?: StorageLike;
+  storage?: StorageLike | null;
   delayMs?: number;
+  onUnavailable?(result: SaveConfigurationResult): void;
 } = {}): SavedConfigurationController {
   let pending: MechConfiguration | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -165,15 +196,25 @@ export function createSavedConfigurationController({
 
   const flush = (): SaveConfigurationResult => {
     clearPendingTimer();
+    if (storage === null) {
+      pending = null;
+      return unavailableResult();
+    }
     if (pending === null) return { ok: true };
     const config = pending;
     pending = null;
-    return saveConfiguration(config, storage);
+    const result = saveConfiguration(config, storage);
+    if (!result.ok) onUnavailable?.(result);
+    return result;
   };
 
   return {
     schedule(config) {
       if (!validateConfiguration(config, catalog).ok) return false;
+      if (storage === null) {
+        onUnavailable?.(unavailableResult());
+        return false;
+      }
       pending = cloneConfiguration(config);
       clearPendingTimer();
       timer = setTimeout(flush, delayMs);

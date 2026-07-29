@@ -15,7 +15,9 @@ import type {
 import { normalizeConfiguration } from "./configuration/validate-config";
 import {
   createSavedConfigurationController,
+  getSafeStorage,
   loadConfiguration,
+  type StorageLike,
 } from "./persistence/saved-config";
 import {
   createConfiguratorScene,
@@ -274,13 +276,21 @@ const scenePixelRatio = useMobileRenderTier ? 0.6 : reviewPixelRatio;
 let forcePosterReadbackFailure =
   search.get("forcePosterReadbackFailure") === "once" &&
   (knownReview || search.get("reviewControls") === "1");
+const persistenceStorage = getSafeStorage();
 const initial = resolveInitialConfiguration(
   hasExplicitConfiguration,
   reviewId,
   knownReview,
+  persistenceStorage,
 );
 let configuration = initial.config;
-const persistence = createSavedConfigurationController();
+const persistence = createSavedConfigurationController({
+  storage: persistenceStorage,
+  onUnavailable() {
+    shareStatus.textContent =
+      "当前配置已更新，但浏览器禁止本地保存；刷新后可能无法恢复。";
+  },
+});
 
 let productScene: ConfiguratorSceneController | null = null;
 let hotspotController: ReturnType<typeof renderHotspots> | null = null;
@@ -667,6 +677,7 @@ function resolveInitialConfiguration(
   hasExplicitConfiguration: boolean,
   reviewId: string | null,
   knownReview: boolean,
+  storage: StorageLike | null,
 ): { config: MechConfiguration; messages: string[] } {
   if (hasExplicitConfiguration) {
     const parsed = parseConfiguration(window.location.search);
@@ -694,7 +705,7 @@ function resolveInitialConfiguration(
         };
   }
 
-  const saved = loadConfiguration();
+  const saved = loadConfiguration(storage);
   if (saved.ok) {
     return {
       config: cloneConfiguration(saved.config),
@@ -704,9 +715,14 @@ function resolveInitialConfiguration(
   const shouldAnnounce = saved.issues.some(
     (issue) => issue.code !== "missing",
   );
+  const storageUnavailable = saved.issues.some(
+    (issue) => issue.field === "storage" && issue.code === "unavailable",
+  );
   return {
     config: cloneConfiguration(defaultConfiguration),
-    messages: shouldAnnounce
+    messages: storageUnavailable
+      ? ["浏览器禁止本地保存；本次仍可配置和分享，但刷新后可能无法恢复。"]
+      : shouldAnnounce
       ? ["本地保存的配置无法读取，已使用默认配置。"]
       : [],
   };

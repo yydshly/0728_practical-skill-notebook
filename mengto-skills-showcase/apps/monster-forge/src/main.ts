@@ -16,8 +16,13 @@ declare global { interface Window { __monsterForgeDiagnostics?: () => InspectorS
 
 const query = new URLSearchParams(window.location.search);
 const captureMode = query.get("capture") === "1";
-const forcedWebglFailure = query.get("forceWebglFailure") === "1";
-let remainingModelFailures = query.get("forceModelFailure") === "1" ? 1 : 0;
+const reviewControls = query.get("reviewControls") === "1";
+const forcedWebglFailure =
+  reviewControls && query.get("forceWebglFailure") === "1";
+let remainingModelFailures =
+  reviewControls && query.get("forceModelFailure") === "1" ? 1 : 0;
+let remainingRuntimeFailures =
+  reviewControls && query.get("forceRuntimeFailure") === "1" ? 1 : 0;
 const monsterById = new Map(monsters.map((monster) => [monster.id, monster]));
 const reviewedId = query.get("review");
 const initialId = reviewedId && monsterById.has(reviewedId) ? reviewedId : "ash-warden";
@@ -86,7 +91,20 @@ function initializeScene(): void {
           remainingModelFailures -= 1;
           throw new Error("模型创建失败：确定性审阅夹具已触发一次。");
         }
-        return createProceduralMonster(monster);
+        const instance = createProceduralMonster(monster);
+        if (remainingRuntimeFailures > 0) {
+          const update = instance.update.bind(instance);
+          let shouldFail = true;
+          instance.update = (deltaSeconds) => {
+            if (shouldFail) {
+              shouldFail = false;
+              remainingRuntimeFailures -= 1;
+              throw new Error("审阅模拟：运行时更新失败");
+            }
+            update(deltaSeconds);
+          };
+        }
+        return instance;
       },
       onReady: () => showSceneStatus("ready"),
       onUnavailable: (error, kind) => unavailable(kind, error),

@@ -100,9 +100,11 @@ test("recovery dodge after melee contact presents hit without an interrupted cue
     "/?fixture=wave-one&reviewControls=1&manualEnemyAi=1",
   );
   const canvas = page.locator("[data-game-canvas]");
-  await canvas.click({ position: { x: 80, y: 80 } });
+  await page.getByRole("heading", { name: "灰烬竞技场" }).click();
   await expect.poll(async () => (await diagnostics(page)).audio.unlocked)
     .toBe(true);
+  const before = (await diagnostics(page)).audio.cueCounts;
+  await canvas.click({ position: { x: 80, y: 80 } });
 
   let attackId: string | null = null;
   await expect.poll(async () => {
@@ -128,7 +130,6 @@ test("recovery dodge after melee contact presents hit without an interrupted cue
     ),
   ).toBe(attackId);
 
-  const before = (await diagnostics(page)).audio.cueCounts;
   await page.keyboard.press("Space");
   await expect.poll(async () =>
     (await diagnostics(page)).recentEvents.filter(
@@ -145,7 +146,8 @@ test("recovery dodge after melee contact presents hit without an interrupted cue
       }),
     }),
   ]);
-  await expect(page.locator("[data-feedback-caption]")).toContainText(
+  const caption = page.locator("[data-feedback-caption]");
+  await expect(caption).toContainText(
     "命中",
   );
   await expect.poll(async () =>
@@ -154,6 +156,9 @@ test("recovery dodge after melee contact presents hit without an interrupted cue
   expect(
     (await diagnostics(page)).audio.cueCounts.playerInterrupted ?? 0,
   ).toBe(before.playerInterrupted ?? 0);
+  await expect(caption).toBeHidden({ timeout: 2_000 });
+  await page.keyboard.press("Space");
+  await expect(caption).toContainText("闪避起步");
 });
 
 test("rejected audio resumes recover on one context and hit interruption stays readable", async ({

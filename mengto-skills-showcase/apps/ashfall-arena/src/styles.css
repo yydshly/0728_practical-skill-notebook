@@ -410,6 +410,59 @@ html[data-input-mode="touch"] .device-prompt {
   border-color: rgb(240 174 102 / 52%);
 }
 
+[data-game-canvas][hidden] {
+  display: none;
+}
+
+.runtime-fallback {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  width: min(520px, calc(100% - 32px));
+  padding: 24px;
+  border: 1px solid rgb(240 174 102 / 42%);
+  border-radius: 18px;
+  background: rgb(22 18 22 / 94%);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 45%);
+  transform: translate(-50%, -50%);
+}
+
+.runtime-fallback h2,
+.runtime-fallback p {
+  margin: 0;
+}
+
+.runtime-fallback h2 {
+  color: #ffd7a8;
+}
+
+.runtime-fallback p {
+  margin-top: 0.65rem;
+  color: #e8ded8;
+  line-height: 1.55;
+}
+
+.runtime-fallback dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 0.9rem;
+  margin: 1rem 0;
+}
+
+.runtime-fallback dt {
+  color: #b8aaa2;
+}
+
+.runtime-fallback dd {
+  margin: 0;
+  color: #fff4e7;
+}
+
+.runtime-fallback details {
+  color: #b8aaa2;
+}
+
 @media (hover: hover) and (pointer: fine) and (min-width: 900px) {
   .touch-controls {
     opacity: 0.5;

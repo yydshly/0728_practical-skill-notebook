@@ -18,7 +18,7 @@ test.afterEach(() => {
 });
 
 test("WebGL failure retains selected asset information and retry remains idempotent", async ({ page }) => {
-  await page.goto("/?forceWebglFailure=1");
+  await page.goto("/?reviewControls=1&forceWebglFailure=1");
   await expect(page.locator(".scene-fallback").getByRole("img", { name: /Ash Warden/ })).toBeVisible();
   await expect(page.getByText("3D 预览不可用", { exact: true })).toBeVisible();
   await expect(page.locator(".scene-fallback").getByText(/运行时程序化/)).toBeVisible();
@@ -32,7 +32,7 @@ test("WebGL failure retains selected asset information and retry remains idempot
 });
 
 test("a real one-shot model creation failure recovers the selected asset through retry", async ({ page }) => {
-  await page.goto("/?forceModelFailure=1");
+  await page.goto("/?reviewControls=1&forceModelFailure=1");
   const fallback = page.locator('[data-fallback-reason="model-creation-failed"]');
   await expect(fallback).toBeVisible();
   await expect(fallback.getByRole("img", { name: /Ash Warden/ })).toHaveAttribute("src", "/asset-catalog/monsters/ash-warden.png");
@@ -71,4 +71,29 @@ test("a real one-shot model creation failure recovers the selected asset through
   await page.getByRole("button", { name: /Ash Warden/ }).click();
   await page.getByRole("button", { name: /Mire Hound/ }).click();
   await expect(page.locator("[data-inspector] canvas")).toHaveCount(1);
+});
+
+test("a terminal update failure is identified and retry rebuilds a live scene", async ({
+  page,
+}) => {
+  await page.goto("/?reviewControls=1&forceRuntimeFailure=1");
+  const fallback = page.locator('[data-fallback-reason="runtime-failed"]');
+  await expect(fallback).toBeVisible();
+  await expect(fallback).toContainText("实时预览运行失败");
+  await expect(fallback).toContainText("审阅模拟：运行时更新失败");
+
+  await page.getByRole("button", { name: "重试 3D 预览" }).click();
+  await expect(fallback).toBeHidden();
+  await expect(page.getByRole("status")).toContainText("实时模型已就绪");
+  await expect.poll(
+    () => page.evaluate(() => window.__monsterForgeDiagnostics?.()?.frameCount ?? 0),
+  ).toBeGreaterThan(1);
+  await expect.poll(
+    () => page.evaluate(() => window.__monsterForgeDiagnostics?.()),
+  ).toMatchObject({
+    hasRendered: true,
+    lastError: null,
+    rootCount: 1,
+    selectedMonsterId: "ash-warden",
+  });
 });

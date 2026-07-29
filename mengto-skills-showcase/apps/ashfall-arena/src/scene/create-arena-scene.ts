@@ -25,12 +25,14 @@ import type { QualityTier } from "../performance/create-quality-controller";
 
 export interface ArenaScene {
   scene: Scene;
-  renderer: WebGLRenderer;
+  renderer: WebGLRenderer | null;
   setQuality(quality: QualityTier): void;
   setGateOpen(open: boolean): void;
   resize(width: number, height: number, pixelRatio?: number): void;
   render(camera: PerspectiveCamera): void;
   getDiagnostics(): {
+    available: boolean;
+    failure: string | null;
     preserveDrawingBuffer: boolean;
     qualityTier: QualityTier;
     pixelRatio: number;
@@ -53,6 +55,7 @@ export function createArenaScene(
   options: {
     preserveDrawingBuffer?: boolean;
     quality?: QualityTier;
+    onUnavailable?(error: unknown): void;
   } = {},
 ): ArenaScene {
   const preserveDrawingBuffer = options.preserveDrawingBuffer ?? false;
@@ -65,13 +68,24 @@ export function createArenaScene(
   };
   scene.background = new Color(0x121014);
   scene.fog = new Fog(0x121014, 22, 44);
-  const renderer = new WebGLRenderer({
-    canvas,
-    antialias: true,
-    alpha: false,
-    preserveDrawingBuffer,
-    powerPreference: "high-performance",
-  });
+  let renderer: WebGLRenderer;
+  try {
+    renderer = new WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: false,
+      preserveDrawingBuffer,
+      powerPreference: "high-performance",
+    });
+  } catch (error) {
+    options.onUnavailable?.(error);
+    return createUnavailableArenaScene(
+      scene,
+      preserveDrawingBuffer,
+      options.quality ?? "high",
+      error,
+    );
+  }
   renderer.setClearColor(0x121014, 1);
   renderer.shadowMap.enabled = false;
   let qualityTier = options.quality ?? "high";
@@ -298,6 +312,8 @@ export function createArenaScene(
     },
     getDiagnostics() {
       return {
+        available: true,
+        failure: null,
         preserveDrawingBuffer,
         qualityTier,
         pixelRatio: renderer.getPixelRatio(),
@@ -325,6 +341,46 @@ export function createArenaScene(
       ownedGeometry.forEach((geometry) => geometry.dispose());
       ownedMaterial.forEach((material) => material.dispose());
       renderer.dispose();
+      scene.clear();
+    },
+  };
+}
+
+function createUnavailableArenaScene(
+  scene: Scene,
+  preserveDrawingBuffer: boolean,
+  initialQuality: QualityTier,
+  error: unknown,
+): ArenaScene {
+  let qualityTier = initialQuality;
+  let disposed = false;
+  const failure = error instanceof Error ? error.message : String(error);
+  return {
+    scene,
+    renderer: null,
+    setQuality(quality) {
+      qualityTier = quality;
+    },
+    setGateOpen() {},
+    resize() {},
+    render() {},
+    getDiagnostics() {
+      return {
+        available: false,
+        failure,
+        preserveDrawingBuffer,
+        qualityTier,
+        pixelRatio: 0,
+        drawingBufferWidth: 0,
+        drawingBufferHeight: 0,
+        shadowMapEnabled: false,
+        activeLocalLights: 0,
+        localLights: [],
+      };
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
       scene.clear();
     },
   };

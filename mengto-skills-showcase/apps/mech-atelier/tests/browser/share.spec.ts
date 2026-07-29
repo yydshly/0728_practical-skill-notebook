@@ -45,6 +45,32 @@ const test = base.extend<{ cleanPage: Page }>({
   },
 });
 
+base("浏览器拒绝 localStorage getter 时仍可配置并给出中文无持久化提示", async ({
+  page,
+}) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("storage blocked by policy", "SecurityError");
+      },
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "机甲定制工坊" })).toBeVisible();
+  await expect(page.locator("[data-config-announcer]")).toContainText(
+    "浏览器禁止本地保存",
+  );
+  await page.getByRole("radio", { name: /堡垒运输型/ }).check();
+  await expect(page.locator("[data-share-status]")).toContainText(
+    "刷新后可能无法恢复",
+  );
+  expect(pageErrors).toEqual([]);
+});
+
 test("复制当前 canonical absolute URL，成功后显示中文反馈", async ({
   cleanPage: page,
 }) => {
