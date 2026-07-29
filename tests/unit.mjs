@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import * as cameraMath from '../src/camera-math.js';
-import { VILLAGE_LAYOUT, validateVillageLayout } from '../src/level-data.js';
+import {
+  collectActorColliders,
+  VILLAGE_LAYOUT,
+  validateVillageLayout,
+} from '../src/level-data.js';
 import { createMaterials } from '../src/world/materials.js';
 import { getCharacterProfile, getGaitPose } from '../src/character-motion.js';
 import { createHumanoid, createMutant, createResident } from '../src/characters.js';
@@ -18,7 +22,7 @@ import {
 } from '../src/collision.js';
 import { nearestInteraction } from '../src/interactions.js';
 import * as buildings from '../src/world/buildings.js';
-import { addPropCluster } from '../src/world/props.js';
+import { addPropCluster, addUtilityPole } from '../src/world/props.js';
 import {
   OBJECTIVE_DEFINITIONS,
   getObjectiveDefinition,
@@ -573,7 +577,7 @@ test('third-person camera snap and update stay on the player side of a nearby ho
   const player = createPlayer(
     scene,
     new THREE.Vector3(-6.2, 0, 28),
-    village.colliders,
+    village.actorColliders,
   );
   const camera = new THREE.PerspectiveCamera();
   const controller = createCameraController(camera, player, {
@@ -618,7 +622,7 @@ test('third-person camera never sweeps through village walls during abrupt corne
     const player = createPlayer(
       scene,
       new THREE.Vector3(-6.38, 0, 23.4),
-      village.colliders,
+      village.actorColliders,
     );
     const camera = new THREE.PerspectiveCamera();
     const controller = createCameraController(camera, player, {
@@ -667,6 +671,107 @@ test('village layout defines readable zones and collision separately', () => {
   assert.ok(VILLAGE_LAYOUT.buildings.length >= 7);
   assert.ok(VILLAGE_LAYOUT.colliders.length >= 10);
   assert.deepEqual(validateVillageLayout(VILLAGE_LAYOUT), []);
+});
+
+test('road lantern visuals and actor colliders derive from one light definition', () => {
+  const scene = new THREE.Scene();
+  const village = createVillage(scene);
+  const roadLights = VILLAGE_LAYOUT.lights.filter(
+    ({ kind }) => kind === 'road_lantern',
+  );
+
+  assert.equal(roadLights.length, 2);
+  for (const definition of roadLights) {
+    const source = scene.getObjectByName(definition.sourceId);
+    const root = scene.getObjectByName(definition.id);
+    const collider = village.actorColliders.find(
+      ({ id }) => id === definition.collider.id,
+    );
+
+    assert.ok(source, `missing visible source ${definition.sourceId}`);
+    assert.ok(root, `missing visible root ${definition.id}`);
+    const sourceWorldPosition = source.getWorldPosition(new THREE.Vector3());
+    assert.ok(collider, `missing ${definition.collider.id}`);
+    assert.deepEqual(
+      [sourceWorldPosition.x, sourceWorldPosition.z],
+      [definition.x, definition.z],
+    );
+    assert.equal(collider.shape, 'circle');
+    assert.equal(collider.x, definition.x);
+    assert.equal(collider.z, definition.z);
+    assert.equal(collider.radius, 0.16);
+    assert.equal(collider.blocksActors, true);
+    assert.equal(collider.blocksCamera, false);
+    assert.equal(
+      village.cameraOccluders.some((occluder) => (
+        occluder === root || Boolean(root.getObjectById(occluder.id))
+      )),
+      false,
+    );
+  }
+  assert.deepEqual(village.actorColliders, collectActorColliders(VILLAGE_LAYOUT));
+});
+
+test('utility pole factory accepts the shared authored definition without instantiating a level pole', () => {
+  const scene = new THREE.Scene();
+  const definition = {
+    id: 'future_utility_pole',
+    kind: 'utility_pole',
+    x: 2,
+    z: -3,
+    collider: {
+      id: 'future_utility_pole_body',
+      shape: 'circle',
+      radius: 0.16,
+      blocksActors: true,
+      blocksCamera: false,
+    },
+  };
+  const root = addUtilityPole(scene, definition, createMaterials());
+
+  assert.equal(root.name, definition.id);
+  assert.deepEqual([root.position.x, root.position.z], [definition.x, definition.z]);
+  assert.equal(root.userData.actorColliderId, definition.collider.id);
+  assert.equal(
+    root.children.some(({ userData }) => Boolean(userData.actorColliderId)),
+    false,
+    'crossbar and insulators must not create actor colliders',
+  );
+  assert.equal(
+    VILLAGE_LAYOUT.lights.some(({ id }) => id === definition.id),
+    false,
+  );
+});
+
+test('village validation rejects duplicate, malformed, and unknown colliders', () => {
+  const malformed = structuredClone(VILLAGE_LAYOUT);
+  const firstLamp = malformed.lights.find(({ id }) => id === 'road_lantern_a');
+  const secondLamp = malformed.lights.find(({ id }) => id === 'road_lantern_b');
+  firstLamp.collider.radius = 0;
+  firstLamp.collider.blocksActors = false;
+  firstLamp.collider.blocksCamera = true;
+  secondLamp.collider.id = firstLamp.collider.id;
+  malformed.colliders[0].shape = 'capsule';
+  malformed.colliders[1].blocksActors = 'yes';
+
+  const errors = validateVillageLayout(malformed);
+  assert.ok(errors.includes('collider:home_body:unknown-shape:capsule'));
+  assert.ok(errors.includes('collider:courtyard_body:invalid-blocksActors'));
+  assert.ok(errors.includes('collider:road_lantern_a_body:invalid-radius'));
+  assert.ok(errors.includes('collider:road_lantern_a_body:duplicate-id'));
+  assert.ok(errors.includes('light:road_lantern_a:collider-must-block-actors'));
+  assert.ok(errors.includes('light:road_lantern_a:collider-must-not-block-camera'));
+});
+
+test('village validation reports missing lamp collision and blocked patrol nodes', () => {
+  const malformed = structuredClone(VILLAGE_LAYOUT);
+  const lamp = malformed.lights.find(({ id }) => id === 'road_lantern_a');
+  delete lamp.collider;
+  malformed.navNodes[0] = [-12, 0, 28];
+
+  const errors = validateVillageLayout(malformed);
+  assert.ok(errors.includes('light:road_lantern_a:missing-actor-collider'));
+  assert.ok(errors.includes('nav-node:0:overlaps:home_body'));
 });
 
 test('every local light has a visible source id', () => {
@@ -1043,18 +1148,16 @@ test('canonical route anchors drive runtime and have player-radius collider clea
     const position = village.anchors[id];
     assert.deepEqual(position.toArray(), sourcePosition, `${id} must use canonical coordinates`);
     assert.equal(sourcePosition[1], 0, `${id} must stay on the gameplay plane`);
-    const blocked = village.colliders.some((box) => {
-      const closestX = Math.max(
-        box.x - box.halfX,
-        Math.min(sourcePosition[0], box.x + box.halfX),
-      );
-      const closestZ = Math.max(
-        box.z - box.halfZ,
-        Math.min(sourcePosition[2], box.z + box.halfZ),
-      );
-      return (sourcePosition[0] - closestX) ** 2
-        + (sourcePosition[2] - closestZ) ** 2 < 0.42 ** 2;
-    });
+    const blocked = village.actorColliders
+      .filter(({ blocksActors }) => blocksActors)
+      .some((collider) => (
+        circleColliderPenetration(
+          sourcePosition[0],
+          sourcePosition[2],
+          0.42,
+          collider,
+        ) > 0
+      ));
     assert.equal(blocked, false, `${id} must remain reachable`);
   }
 });
@@ -1062,15 +1165,15 @@ test('canonical route anchors drive runtime and have player-radius collider clea
 test('critical building walls retain solid village collision', () => {
   const village = createVillage(new THREE.Scene());
   for (const id of ['home_body', 'courtyard_body', 'barn_body']) {
-    assert.ok(village.colliders.some((collider) => collider.id === id), `missing ${id}`);
+    assert.ok(village.actorColliders.some((collider) => collider.id === id), `missing ${id}`);
   }
 
-  const home = village.colliders.find((collider) => collider.id === 'home_body');
+  const home = village.actorColliders.find((collider) => collider.id === 'home_body');
   const startX = home.x + home.halfX + 0.5;
   const player = createPlayer(
     new THREE.Scene(),
     new THREE.Vector3(startX, 0, home.z),
-    village.colliders,
+    village.actorColliders,
   );
   player.moveDirect(-0.2, 0, village.bounds);
   assert.equal(player.position.x, startX);
@@ -1091,7 +1194,7 @@ test('blocking prop visuals and colliders derive from one canonical cluster', ()
       `${cluster.id} collider must share the canonical prop ID`,
     );
     const visual = scene.getObjectByName(cluster.id);
-    const collider = village.colliders.find(({ id }) => id === cluster.id);
+    const collider = village.actorColliders.find(({ id }) => id === cluster.id);
     assert.ok(visual, `${cluster.id} visual must exist`);
     assert.ok(collider, `${cluster.id} collider must exist`);
     assert.deepEqual(
@@ -1205,12 +1308,12 @@ test('birth courtyard fence has a player-clear opening with named gate parts', (
   const opening = rightFence.position.x - rightFence.geometry.parameters.width / 2
     - (leftFence.position.x + leftFence.geometry.parameters.width / 2);
   assert.ok(opening >= 1.6, `birth gate opening must be at least 1.6u, got ${opening}`);
-  assert.equal(village.colliders.some(({ id }) => id === 'home_life'), false);
+  assert.equal(village.actorColliders.some(({ id }) => id === 'home_life'), false);
 
   const player = createPlayer(
     new THREE.Scene(),
     new THREE.Vector3(-7.4, 0, 33),
-    village.colliders,
+    village.actorColliders,
   );
   player.moveDirect(1.6, 0, village.bounds);
   assert.ok(player.position.x > -6, 'player radius must pass through the birth gate');

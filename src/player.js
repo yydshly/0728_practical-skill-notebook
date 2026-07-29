@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createHumanoid } from './characters.js';
 import { resolveCircleMove } from './collision.js';
 
-export function createPlayer(scene, spawn, colliders = []) {
+export function createPlayer(scene, spawn, actorColliders = []) {
   const rig = createHumanoid(scene, spawn, { kind: 'player', name: 'player' });
   const object = rig.root;
   const move = new THREE.Vector3();
@@ -18,7 +18,7 @@ export function createPlayer(scene, spawn, colliders = []) {
         { x, z },
         0.42,
         bounds,
-        colliders,
+        actorColliders,
       );
       object.position.x = next.x;
       object.position.z = next.z;

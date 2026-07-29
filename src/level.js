@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import { VILLAGE_LAYOUT } from './level-data.js';
+import {
+  collectActorColliders,
+  validateVillageLayout,
+  VILLAGE_LAYOUT,
+} from './level-data.js';
 import { createMaterials } from './world/materials.js';
 import { buildStructure } from './world/buildings.js';
 import { addLantern, addPropCluster } from './world/props.js';
@@ -31,18 +35,11 @@ function runtimeZones(zoneDefinitions) {
   );
 }
 
-function runtimePropColliders(clusterDefinitions) {
-  return clusterDefinitions.flatMap((cluster) => {
-    if (!cluster.collider) return [];
-    return [{
-      ...cluster.collider,
-      x: cluster.x + (cluster.collider.offsetX ?? 0),
-      z: cluster.z + (cluster.collider.offsetZ ?? 0),
-    }];
-  });
-}
-
 export function createVillage(scene) {
+  const layoutErrors = validateVillageLayout(VILLAGE_LAYOUT);
+  if (layoutErrors.length > 0) {
+    throw new Error(`Invalid village layout:\n${layoutErrors.join('\n')}`);
+  }
   const materials = createMaterials();
   const width = VILLAGE_LAYOUT.bounds.maxX - VILLAGE_LAYOUT.bounds.minX;
   const depth = VILLAGE_LAYOUT.bounds.maxZ - VILLAGE_LAYOUT.bounds.minZ;
@@ -68,10 +65,7 @@ export function createVillage(scene) {
   }
 
   const anchors = runtimeAnchors(VILLAGE_LAYOUT.anchors);
-  const colliders = [
-    ...VILLAGE_LAYOUT.colliders.map((collider) => ({ ...collider })),
-    ...runtimePropColliders(VILLAGE_LAYOUT.propClusters),
-  ];
+  const actorColliders = collectActorColliders(VILLAGE_LAYOUT);
 
   scene.updateMatrixWorld(true);
 
@@ -79,7 +73,7 @@ export function createVillage(scene) {
     anchors,
     bounds: { ...VILLAGE_LAYOUT.bounds },
     zones: runtimeZones(VILLAGE_LAYOUT.zones),
-    colliders,
+    actorColliders,
     navNodes: VILLAGE_LAYOUT.navNodes.map((position) => new THREE.Vector3(...position)),
     cameraOccluders,
     interactionAnchors: [

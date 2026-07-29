@@ -147,8 +147,11 @@ export function addPropCluster(scene, cluster, materials) {
   return root.children;
 }
 
-export function addUtilityPole(scene, { x, z }, materials) {
+export function addUtilityPole(scene, definition, materials) {
+  const { x, z } = definition;
   const root = new THREE.Group();
+  root.name = definition.id;
+  root.userData.actorColliderId = definition.collider?.id ?? null;
   root.position.set(x, 0, z);
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 4.8, 7), materials.wood);
   pole.position.y = 2.4;
@@ -180,6 +183,7 @@ export function addLantern(scene, lightDefinition, materials) {
   }
 
   const root = new THREE.Group();
+  root.name = lightDefinition.id;
   root.position.set(lightDefinition.x, 0, lightDefinition.z);
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.08, 2.6, 7), materials.wood);
   post.position.y = 1.3;

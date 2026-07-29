@@ -41,7 +41,11 @@ const atmosphere = createAtmosphere(scene, renderer);
 
 const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 120);
 const village = createVillage(scene);
-const player = createPlayer(scene, village.anchors.player_home, village.colliders);
+const player = createPlayer(
+  scene,
+  village.anchors.player_home,
+  village.actorColliders,
+);
 const cameraController = createCameraController(camera, player, { occluders: village.cameraOccluders, groundY: 0 });
 createResident(scene, village.anchors.neighbour, 'neighbour');
 createResident(scene, village.anchors.granary.clone().add(new THREE.Vector3(-1.5, 0, 1.4)), 'barn_resident');

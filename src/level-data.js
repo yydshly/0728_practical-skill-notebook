@@ -1,3 +1,5 @@
+import { circleColliderPenetration } from './collision.js';
+
 export const VILLAGE_LAYOUT = {
   bounds: { minX: -38, maxX: 38, minZ: -39, maxZ: 39 },
   anchors: {
@@ -114,6 +116,13 @@ export const VILLAGE_LAYOUT = {
       color: 0xd68b47,
       intensity: 4.2,
       distance: 9,
+      collider: {
+        id: 'road_lantern_a_body',
+        shape: 'circle',
+        radius: 0.16,
+        blocksActors: true,
+        blocksCamera: false,
+      },
     },
     {
       id: 'road_lantern_b',
@@ -125,10 +134,37 @@ export const VILLAGE_LAYOUT = {
       color: 0xd68b47,
       intensity: 4.2,
       distance: 9,
+      collider: {
+        id: 'road_lantern_b_body',
+        shape: 'circle',
+        radius: 0.16,
+        blocksActors: true,
+        blocksCamera: false,
+      },
     },
   ],
-  navNodes: [[8, 0, 17], [-1, 0, 3], [11, 0, -10], [0, 0, -35]],
+  navNodes: [[5.5, 0, 17], [-1, 0, 3], [6.5, 0, -10], [0, 0, -28]],
 };
+
+export function collectActorColliders(layout) {
+  return [
+    ...layout.colliders.map((collider) => ({ ...collider })),
+    ...layout.propClusters.flatMap((cluster) => (
+      cluster.collider ? [{
+        ...cluster.collider,
+        x: cluster.x + (cluster.collider.offsetX ?? 0),
+        z: cluster.z + (cluster.collider.offsetZ ?? 0),
+      }] : []
+    )),
+    ...layout.lights.flatMap((light) => (
+      light.collider ? [{
+        ...light.collider,
+        x: light.x + (light.collider.offsetX ?? 0),
+        z: light.z + (light.collider.offsetZ ?? 0),
+      }] : []
+    )),
+  ];
+}
 
 export function validateVillageLayout(layout) {
   const errors = [];
@@ -137,5 +173,84 @@ export function validateVillageLayout(layout) {
   for (const id of ['player_home', 'courtyard', 'sighting', 'granary', 'south_gate']) {
     if (!anchorIds.has(id)) errors.push(`anchor:${id}:missing`);
   }
+
+  const colliderIds = new Set();
+  const validActorColliders = [];
+  for (const collider of collectActorColliders(layout)) {
+    const id = typeof collider.id === 'string' && collider.id.length > 0
+      ? collider.id
+      : 'missing-id';
+    let valid = true;
+
+    if (id === 'missing-id') {
+      errors.push('collider:missing-id:invalid-id');
+      valid = false;
+    } else if (colliderIds.has(id)) {
+      errors.push(`collider:${id}:duplicate-id`);
+      valid = false;
+    } else {
+      colliderIds.add(id);
+    }
+
+    if (!['box', 'circle'].includes(collider.shape)) {
+      errors.push(`collider:${id}:unknown-shape:${collider.shape}`);
+      valid = false;
+    }
+    if (!Number.isFinite(collider.x) || !Number.isFinite(collider.z)) {
+      errors.push(`collider:${id}:invalid-position`);
+      valid = false;
+    }
+    if (collider.shape === 'box' && (
+      !Number.isFinite(collider.halfX) || collider.halfX <= 0
+      || !Number.isFinite(collider.halfZ) || collider.halfZ <= 0
+    )) {
+      errors.push(`collider:${id}:invalid-dimensions`);
+      valid = false;
+    }
+    if (collider.shape === 'circle' && (
+      !Number.isFinite(collider.radius) || collider.radius <= 0
+    )) {
+      errors.push(`collider:${id}:invalid-radius`);
+      valid = false;
+    }
+    if (typeof collider.blocksActors !== 'boolean') {
+      errors.push(`collider:${id}:invalid-blocksActors`);
+      valid = false;
+    }
+    if (typeof collider.blocksCamera !== 'boolean') {
+      errors.push(`collider:${id}:invalid-blocksCamera`);
+      valid = false;
+    }
+    if (valid && collider.blocksActors) validActorColliders.push(collider);
+  }
+
+  for (const light of layout.lights.filter(({ kind }) => kind === 'road_lantern')) {
+    if (!light.collider) {
+      errors.push(`light:${light.id}:missing-actor-collider`);
+      continue;
+    }
+    if (light.collider.shape !== 'circle') {
+      errors.push(`light:${light.id}:collider-must-be-circle`);
+    }
+    if (light.collider.blocksActors !== true) {
+      errors.push(`light:${light.id}:collider-must-block-actors`);
+    }
+    if (light.collider.blocksCamera !== false) {
+      errors.push(`light:${light.id}:collider-must-not-block-camera`);
+    }
+  }
+
+  layout.navNodes.forEach((node, index) => {
+    const [x, , z] = node;
+    if (!Number.isFinite(x) || !Number.isFinite(z)) {
+      errors.push(`nav-node:${index}:invalid-position`);
+      return;
+    }
+    for (const collider of validActorColliders) {
+      if (circleColliderPenetration(x, z, 0.46, collider) > 0) {
+        errors.push(`nav-node:${index}:overlaps:${collider.id}`);
+      }
+    }
+  });
   return errors;
 }
