@@ -9,6 +9,20 @@ import { createPursuer } from './pursuer.js';
 import { createAtmosphere } from './atmosphere.js';
 import { createGameUi } from './ui.js';
 import { nearestInteraction } from './interactions.js';
+import {
+  OBJECTIVE_DEFINITIONS,
+  getObjectiveDefinition,
+  resolveObjectiveTarget,
+  validateObjectiveDefinitions,
+} from './objectives.js';
+import {
+  computeGuidanceSnapshot,
+  projectScreenMarker,
+} from './guidance.js';
+import { createWorldObjectiveMarker } from './world-marker.js';
+import { createTutorialTracker } from './tutorial.js';
+import { createDangerController } from './danger.js';
+import { createAudioFeedback } from './audio-feedback.js';
 
 const canvas = document.querySelector('#game');
 const shell = document.querySelector('.game-shell');
@@ -30,9 +44,60 @@ const player = createPlayer(scene, village.anchors.player_home, village.collider
 const cameraController = createCameraController(camera, player, { occluders: village.cameraOccluders, groundY: 0 });
 createResident(scene, village.anchors.neighbour, 'neighbour');
 createResident(scene, village.anchors.granary.clone().add(new THREE.Vector3(-1.5, 0, 1.4)), 'barn_resident');
-const ui = createGameUi({ shell, title, objective, subtitle, interaction });
-const storyDirector = createStoryDirector({ ui });
-const pursuer = createPursuer(scene, { navNodes: village.navNodes, spawn: village.anchors.sighting.clone() });
+const ui = createGameUi({
+  shell,
+  title,
+  missionHud: document.querySelector('.mission-hud'),
+  missionStep: document.querySelector('#mission-step'),
+  missionTitle: document.querySelector('#mission-title'),
+  missionClue: document.querySelector('#mission-clue'),
+  objective,
+  subtitle,
+  approachPrompt: document.querySelector('#approach-prompt'),
+  interaction,
+  tutorialHint: document.querySelector('#tutorial-hint'),
+  compass: document.querySelector('#objective-compass'),
+  compassLabel: document.querySelector('#compass-label'),
+  compassDistance: document.querySelector('#compass-distance'),
+  marker: document.querySelector('#screen-marker'),
+  dangerState: document.querySelector('#danger-state'),
+  completionToast: document.querySelector('#completion-toast'),
+  muteToggle: document.querySelector('#mute-toggle'),
+});
+const audio = createAudioFeedback();
+const worldMarker = createWorldObjectiveMarker(scene);
+const dangerController = createDangerController();
+const pursuer = createPursuer(scene, {
+  navNodes: village.navNodes,
+  spawn: village.anchors.sighting.clone(),
+});
+const tutorial = createTutorialTracker({
+  onChange: (value) => ui.showTutorial(value),
+});
+const objectiveErrors = validateObjectiveDefinitions(
+  OBJECTIVE_DEFINITIONS,
+  new Set(Object.keys(village.anchors)),
+);
+if (objectiveErrors.length) console.error(objectiveErrors.join('\n'));
+const storyDirector = createStoryDirector({
+  ui,
+  onEvent(event) {
+    if (event.type === 'objective-completed') {
+      ui.showCompletion(getObjectiveDefinition(event.objectiveId));
+    }
+    audio.handleStoryEvent(event);
+  },
+});
+let guidanceSnapshot = {
+  objectiveId: storyDirector.story.objective,
+  targetPosition: null,
+  distance: Infinity,
+  distanceLabel: '',
+  relativeAngle: 0,
+  proximity: 'none',
+  showWorldMarker: false,
+};
+let dangerSnapshot = dangerController.update(0, pursuer.state, Infinity);
 
 const input = { forward: false, back: false, left: false, right: false, sprint: false };
 const startTime = performance.now();
@@ -95,7 +160,38 @@ function updateInteraction() {
     ),
     2.2,
   );
-  ui.showInteraction(nearbyInteraction?.label ?? null);
+}
+
+function refreshFeedback(dt, elapsed) {
+  const objectiveId = storyDirector.story.objective;
+  const definition = getObjectiveDefinition(objectiveId);
+  const targetPosition = resolveObjectiveTarget(objectiveId, village.anchors);
+  guidanceSnapshot = {
+    objectiveId,
+    ...computeGuidanceSnapshot({
+      playerPosition: player.position,
+      targetPosition,
+      cameraYaw: cameraController.yaw,
+    }),
+  };
+  const screenMarker = projectScreenMarker(
+    targetPosition,
+    camera,
+    { width: canvas.clientWidth, height: canvas.clientHeight },
+  );
+  dangerSnapshot = dangerController.update(
+    dt,
+    pursuer.state,
+    pursuer.object.position.distanceTo(player.position),
+  );
+  ui.renderMission(definition);
+  ui.renderGuidance(definition, guidanceSnapshot, screenMarker);
+  ui.renderDanger(dangerSnapshot);
+  worldMarker.update({
+    ...guidanceSnapshot,
+    showWorldMarker: guidanceSnapshot.showWorldMarker && !ui.transitionActive,
+  }, elapsed);
+  audio.updateDanger(dangerSnapshot, elapsed);
 }
 
 function setCameraMode(mode) {
@@ -147,20 +243,46 @@ function setKey(event, pressed) {
   if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') input.sprint = pressed;
 }
 
+function unlockAudio() {
+  audio.unlock();
+}
+
 addEventListener('keydown', (event) => {
+  unlockAudio();
   setKey(event, true);
-  if (event.code === 'KeyC' && !event.repeat) setCameraMode(cameraController.mode === 'third-person' ? 'first-person' : 'third-person');
+  if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(event.code)) tutorial.complete('move');
+  if ((event.code === 'ShiftLeft' || event.code === 'ShiftRight') && !event.repeat) {
+    tutorial.complete('sprint');
+  }
+  if (event.code === 'KeyC' && !event.repeat) {
+    tutorial.complete('camera');
+    setCameraMode(cameraController.mode === 'third-person' ? 'first-person' : 'third-person');
+  }
   if (event.code === 'KeyE' && !event.repeat && nearbyInteraction) {
+    tutorial.complete('interact');
     storyDirector.interact(nearbyInteraction.kind);
     updateInteraction();
   }
 });
 addEventListener('keyup', (event) => setKey(event, false));
-canvas.addEventListener('click', () => canvas.requestPointerLock?.());
+canvas.addEventListener('click', () => {
+  unlockAudio();
+  canvas.requestPointerLock?.();
+});
 addEventListener('mousemove', (event) => {
-  if (document.pointerLockElement === canvas) cameraController.rotate(event.movementX, event.movementY);
+  if (document.pointerLockElement === canvas && (event.movementX || event.movementY)) {
+    tutorial.complete('look');
+    cameraController.rotate(event.movementX, event.movementY);
+  }
 });
 addEventListener('resize', resize);
+ui.onMute(() => {
+  ui.setMuted(audio.toggleMuted());
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) audio.suspend();
+  else audio.resume();
+});
 
 function frame(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.05);
@@ -168,9 +290,11 @@ function frame(now) {
   player.update(dt, input, village.bounds, cameraController.yaw);
   updateInteraction();
   if (!evidenceFixture?.pursuer?.frozen) pursuer.update(dt, player);
+  const elapsed = (now - startTime) / 1000;
   storyDirector.update(player, village.zones.south_gate_exit);
   cameraController.update(dt);
-  atmosphere.update((now - startTime) / 1000);
+  refreshFeedback(dt, elapsed);
+  atmosphere.update(elapsed);
   renderer.render(scene, camera);
   if (hasEvidenceParam) {
     shell.dataset.renderCalls = String(renderer.info.render.calls);
@@ -186,6 +310,7 @@ function frame(now) {
 applyEvidenceFixture();
 resize();
 cameraController.snap();
+refreshFeedback(0, 0);
 requestAnimationFrame(frame);
 
 window.__RURAL_ESCAPE__ = {
@@ -196,15 +321,26 @@ window.__RURAL_ESCAPE__ = {
   camera: cameraController,
   story: storyDirector.story,
   pursuer,
+  get guidance() { return { ...guidanceSnapshot }; },
+  get danger() { return { ...dangerSnapshot }; },
+  audio,
   rendererPixelRatio: renderer.getPixelRatio(),
   interactForTest: storyDirector.interact,
   setStoryStateForTest(flags, objectiveName) {
     Object.assign(storyDirector.story.flags, flags);
     storyDirector.story.objective = objectiveName;
     storyDirector.render();
+    this.refreshFeedbackForTest();
   },
   completeIntroForTest() {
     ui.completeIntro();
+  },
+  completeTutorialForTest(action) {
+    tutorial.complete(action);
+  },
+  refreshFeedbackForTest(dt = 1 / 60) {
+    cameraController.update(dt);
+    refreshFeedback(dt, (performance.now() - startTime) / 1000);
   },
   moveForTest(x, z) {
     player.moveDirect(x, z, village.bounds);
@@ -214,6 +350,7 @@ window.__RURAL_ESCAPE__ = {
     player.position.set(x, 0, z);
     cameraController.update();
     updateInteraction();
+    this.refreshFeedbackForTest();
   },
   updatePursuerForTest(dt) { pursuer.update(dt, player); },
   updateStoryForTest() { storyDirector.update(player, village.zones.south_gate_exit); },

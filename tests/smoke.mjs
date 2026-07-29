@@ -363,6 +363,48 @@ try {
   if (hudState.titleHidden !== 'true') throw new Error('Expected chapter title to leave the main view');
   if (!hudState.interactionHidden) throw new Error('Expected interaction prompt to start hidden');
 
+  const initialGuidance = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    game.setPlayerForTest(-8, 33);
+    game.refreshFeedbackForTest(1 / 60);
+    return {
+      objectiveId: game.guidance.objectiveId,
+      distance: game.guidance.distance,
+      proximity: game.guidance.proximity,
+      worldMarkerVisible: document.querySelector('#screen-marker').hidden === false,
+      missionStep: document.querySelector('#mission-step').textContent,
+    };
+  });
+  if (initialGuidance.objectiveId !== 'leave_home') throw new Error('Expected guided radio objective');
+  if (initialGuidance.missionStep !== '任务 1/4') throw new Error('Expected stage 1/4');
+  if (!Number.isFinite(initialGuidance.distance)) throw new Error('Expected objective distance');
+
+  const pursuerBeforeDanger = await page.evaluate(() => {
+    const game = window.__RURAL_ESCAPE__;
+    const snapshot = {
+      position: game.pursuer.object.position.toArray(),
+      rotationY: game.pursuer.object.rotation.y,
+    };
+    game.pursuer.reset();
+    game.pursuer.object.position.set(0, 0, 0);
+    game.setPlayerForTest(0, 5);
+    game.updatePursuerForTest(1 / 60);
+    game.refreshFeedbackForTest(1 / 60);
+    return snapshot;
+  });
+  const dangerHud = await page.evaluate(() => ({
+    mode: document.querySelector('.game-shell').dataset.danger,
+    label: document.querySelector('#danger-state').textContent,
+  }));
+  if (!['chase', 'threaten'].includes(dangerHud.mode)) throw new Error('Expected visible danger mode');
+  if (!dangerHud.label) throw new Error('Expected danger label');
+  await page.evaluate(({ position, rotationY }) => {
+    const pursuer = window.__RURAL_ESCAPE__.pursuer;
+    pursuer.reset();
+    pursuer.object.position.fromArray(position);
+    pursuer.object.rotation.y = rotationY;
+  }, pursuerBeforeDanger);
+
   await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(10.4, 24.4));
   const farPromptHidden = await page.evaluate(() => document.querySelector('#interaction').hidden);
   if (!farPromptHidden) throw new Error('Expected wrong-objective interaction prompt to stay hidden');
@@ -373,24 +415,42 @@ try {
     throw new Error(`Expected distant KeyE to leave objective unchanged, got ${objectiveAfterFarKey}`);
   }
 
-  await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-8.99, 32.8));
-  const outsideRadiusHidden = await page.evaluate(() => document.querySelector('#interaction').hidden);
-  if (!outsideRadiusHidden) throw new Error('Expected interaction prompt beyond radius 2.2 to stay hidden');
-
-  await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-9, 32.8));
-  const nearPromptVisible = await page.evaluate(() => !document.querySelector('#interaction').hidden);
-  if (!nearPromptVisible) throw new Error('Expected interaction prompt at radius 2.2 from the radio');
-
-  await page.keyboard.press('KeyE');
-  const objectiveAfterRadio = await page.evaluate(() => window.__RURAL_ESCAPE__.story.objective);
-  if (objectiveAfterRadio !== 'visit_courtyard') {
-    throw new Error(`Expected radio to advance objective to visit_courtyard, got ${objectiveAfterRadio}`);
+  await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-7, 32.8));
+  const approachPrompt = await page.evaluate(() => ({
+    approachVisible: !document.querySelector('#approach-prompt').hidden,
+    interactionVisible: !document.querySelector('#interaction').hidden,
+  }));
+  if (!approachPrompt.approachVisible || approachPrompt.interactionVisible) {
+    throw new Error('Expected approach-only radio prompt between 2.2m and 5m');
   }
 
+  await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-9, 32.8));
+  const interactPrompt = await page.evaluate(() => ({
+    approachVisible: !document.querySelector('#approach-prompt').hidden,
+    interactionVisible: !document.querySelector('#interaction').hidden,
+  }));
+  if (interactPrompt.approachVisible || !interactPrompt.interactionVisible) {
+    throw new Error('Expected E interaction prompt within 2.2m');
+  }
+
+  await page.keyboard.press('KeyE');
+  const radioCompletion = await page.evaluate(() => ({
+    objective: window.__RURAL_ESCAPE__.story.objective,
+    toastVisible: !document.querySelector('#completion-toast').hidden,
+  }));
+  if (radioCompletion.objective !== 'visit_courtyard') {
+    throw new Error(`Expected radio to advance objective to visit_courtyard, got ${radioCompletion.objective}`);
+  }
+  if (!radioCompletion.toastVisible) throw new Error('Expected radio completion toast');
+  await page.waitForFunction(() => document.querySelector('#completion-toast').hidden);
+
   const pursuerState = await page.evaluate(() => {
-    window.__RURAL_ESCAPE__.setPlayerForTest(0, 2);
-    window.__RURAL_ESCAPE__.updatePursuerForTest(0.016);
-    return window.__RURAL_ESCAPE__.pursuer.state;
+    const game = window.__RURAL_ESCAPE__;
+    game.pursuer.reset();
+    game.pursuer.object.position.set(0, 0, 8);
+    game.setPlayerForTest(0, 2);
+    game.updatePursuerForTest(0.016);
+    return game.pursuer.state;
   });
   if (pursuerState !== 'chase') throw new Error(`Expected pursuer chase state, got ${pursuerState}`);
 
@@ -431,10 +491,17 @@ try {
   const neighbourPromptVisible = await page.evaluate(() => !document.querySelector('#interaction').hidden);
   if (!neighbourPromptVisible) throw new Error('Expected neighbour interaction prompt');
   await page.keyboard.press('KeyE');
-  const objectiveAfterNeighbour = await page.evaluate(() => window.__RURAL_ESCAPE__.story.objective);
-  if (objectiveAfterNeighbour !== 'reach_granary') {
-    throw new Error(`Expected neighbour to advance objective to reach_granary, got ${objectiveAfterNeighbour}`);
+  const neighbourCompletion = await page.evaluate(() => ({
+    objective: window.__RURAL_ESCAPE__.story.objective,
+    toastVisible: !document.querySelector('#completion-toast').hidden,
+  }));
+  if (neighbourCompletion.objective !== 'reach_granary') {
+    throw new Error(
+      `Expected neighbour to advance objective to reach_granary, got ${neighbourCompletion.objective}`,
+    );
   }
+  if (!neighbourCompletion.toastVisible) throw new Error('Expected neighbour completion toast');
+  await page.waitForFunction(() => document.querySelector('#completion-toast').hidden);
 
   await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(13.2, -4.6));
   const flashlightPromptVisible = await page.evaluate(() => !document.querySelector('#interaction').hidden);
