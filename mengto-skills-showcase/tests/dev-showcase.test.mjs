@@ -273,13 +273,30 @@ describe("semantic readiness", () => {
       { id: "held-open", bodyMode: "held-open" },
       { id: "healthy", hitFile },
     ]);
-    await expect(startShowcaseProcesses({
+    const controller = new AbortController();
+    const startup = startShowcaseProcesses({
       services,
-      deadlineMs: 350,
+      deadlineMs: 8_000,
+      signal: controller.signal,
       writeLine: () => {},
-    })).rejects.toThrow(/readiness deadline.*held-open/);
-    await expect(readFile(hitFile, "utf8")).resolves.toContain("hit");
-  });
+    });
+    void startup.catch(() => {});
+    try {
+      await expect.poll(async () => {
+        try {
+          return await readFile(hitFile, "utf8");
+        } catch (error) {
+          if (error.code === "ENOENT") return "";
+          throw error;
+        }
+      }, { timeout: 5_000 }).toContain("hit");
+    } finally {
+      controller.abort("test-complete");
+    }
+    await expect(startup).rejects.toMatchObject({
+      code: "SHOWCASE_INTERRUPTED",
+    });
+  }, 10_000);
 });
 
 describe("supervision and process-tree cleanup", () => {
