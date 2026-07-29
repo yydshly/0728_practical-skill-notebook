@@ -27,19 +27,19 @@
       "targetLufs": -22,
       "loopStart": 0,
       "loopEnd": 48,
-      "sourcePcmSha256": "d9b8a025bd96305c2278ce9b2029f6412f800934734ac9df030ec456f6bfbdac",
+      "sourcePcmSha256": "dd76cb028116c66efa905c9d7ddd5c29de556d59598b090c2660945380fe1347",
       "analysis": {
         "peak": 0.18823242,
-        "dcOffset": -0.00000598,
-        "rms": 0.06941721,
-        "seamDelta": 0,
-        "approximateLufs": -23.862
+        "dcOffset": -0.00000732,
+        "rms": 0.06948861,
+        "seamDelta": 0.01016235,
+        "approximateLufs": -23.853
       },
       "files": {
         "wav": {
           "path": "audio-source/masters/rural-dusk-bed.wav",
           "bytes": 9216044,
-          "sha256": "a9116eb0e014fac5547fa63bc4ac43e498f16be21bb61980aac6e718870efee5"
+          "sha256": "b1ef42c43c3caeadcf0d4ab599d854b64f1d8cb5264c663f8e8603cea7834b38"
         }
       }
     },
@@ -53,19 +53,19 @@
       "targetLufs": -25,
       "loopStart": 0,
       "loopEnd": 48,
-      "sourcePcmSha256": "a8d353564306cf678272e4fada09066c766f1541990b968f747aa724990f5b92",
+      "sourcePcmSha256": "efbe1fd1bca16cc9d48680ac2e90173892cfad34c169eeaea503b64c6e370d59",
       "analysis": {
         "peak": 0.24200439,
-        "dcOffset": 0.00003626,
-        "rms": 0.06916204,
+        "dcOffset": 0.00008978,
+        "rms": 0.06929898,
         "seamDelta": 0,
-        "approximateLufs": -23.894
+        "approximateLufs": -23.876
       },
       "files": {
         "wav": {
           "path": "audio-source/masters/mutation-danger-layer.wav",
           "bytes": 9216044,
-          "sha256": "0285da58857be81f3d57fe468aae6a876881f563b329527ec7c46d601c1e3432"
+          "sha256": "ec58b1173a54d9482de259f067f3fa2dbff87892ea86e359584c1ac5e85d4f54"
         }
       }
     },

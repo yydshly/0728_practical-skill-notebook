@@ -155,6 +155,55 @@ test('loops close cleanly and stingers release to digital zero', () => {
   }
 });
 
+test('loop boundary crossfades preserve edge energy and sample continuity', () => {
+  const boundaryFrames = Math.round(SCORE_FORMAT.sampleRate * 0.1);
+
+  for (const [rendered] of renderPairs) {
+    const { definition, pcm } = rendered;
+    if (definition.kind !== 'loop') {
+      continue;
+    }
+
+    let boundarySquareSum = 0;
+    let referenceSquareSum = 0;
+    for (let frame = 0; frame < boundaryFrames; frame += 1) {
+      const headOffset = frame * SCORE_FORMAT.channels;
+      const headReferenceOffset =
+        (boundaryFrames + frame) * SCORE_FORMAT.channels;
+      const tailOffset =
+        (definition.sampleFrames - boundaryFrames + frame) *
+        SCORE_FORMAT.channels;
+      const tailReferenceOffset =
+        (definition.sampleFrames - 2 * boundaryFrames + frame) *
+        SCORE_FORMAT.channels;
+
+      for (let channel = 0; channel < SCORE_FORMAT.channels; channel += 1) {
+        boundarySquareSum +=
+          pcm[headOffset + channel] ** 2 + pcm[tailOffset + channel] ** 2;
+        referenceSquareSum +=
+          pcm[headReferenceOffset + channel] ** 2 +
+          pcm[tailReferenceOffset + channel] ** 2;
+      }
+    }
+
+    const boundaryToReferenceRms = Math.sqrt(
+      boundarySquareSum / referenceSquareSum,
+    );
+    assert.ok(
+      boundaryToReferenceRms >= 0.85 && boundaryToReferenceRms <= 1.25,
+      `${definition.id} boundary/reference RMS ${boundaryToReferenceRms}`,
+    );
+
+    for (let channel = 0; channel < SCORE_FORMAT.channels; channel += 1) {
+      const first = pcm[channel];
+      const last =
+        pcm[(definition.sampleFrames - 1) * SCORE_FORMAT.channels + channel];
+      const seamDelta = Math.abs(last - first) / 32_768;
+      assert.ok(seamDelta <= 0.02, `${definition.id} seam delta ${seamDelta}`);
+    }
+  }
+});
+
 test('escape resolution widens stereo while its low opening stays centered', () => {
   const escape = renderPairs.find(
     ([{ definition }]) => definition.id === 'south-gate-escape-stinger',

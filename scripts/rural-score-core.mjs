@@ -269,27 +269,19 @@ function renderEscape(definition, pcm) {
 
 function applyLoopBoundaryBlend(pcm, sampleFrames, channels, sampleRate) {
   const blendFrames = Math.round(sampleRate * 0.1);
-  const boundary = new Float64Array(channels);
-  for (let channel = 0; channel < channels; channel += 1) {
-    boundary[channel] =
-      (pcm[channel] + pcm[(sampleFrames - 1) * channels + channel]) / 2;
-  }
-
-  for (let frame = 0; frame < blendFrames; frame += 1) {
-    const progress = frame / (blendFrames - 1);
-    const boundaryGain = Math.cos(progress * (Math.PI / 2));
-    const contentGain = Math.sin(progress * (Math.PI / 2));
-    const endBoundaryGain = Math.sin(progress * (Math.PI / 2));
-    const endContentGain = Math.cos(progress * (Math.PI / 2));
-    const startOffset = frame * channels;
-    const endOffset = (sampleFrames - blendFrames + frame) * channels;
+  for (let distance = 0; distance < blendFrames; distance += 1) {
+    const progress = distance / (blendFrames - 1);
+    const crossfadeAngle = (1 - progress) * (Math.PI / 4);
+    const ownGain = Math.cos(crossfadeAngle);
+    const oppositeGain = Math.sin(crossfadeAngle);
+    const headOffset = distance * channels;
+    const tailOffset = (sampleFrames - 1 - distance) * channels;
 
     for (let channel = 0; channel < channels; channel += 1) {
-      pcm[startOffset + channel] =
-        boundary[channel] * boundaryGain + pcm[startOffset + channel] * contentGain;
-      pcm[endOffset + channel] =
-        pcm[endOffset + channel] * endContentGain +
-        boundary[channel] * endBoundaryGain;
+      const head = pcm[headOffset + channel];
+      const tail = pcm[tailOffset + channel];
+      pcm[headOffset + channel] = head * ownGain + tail * oppositeGain;
+      pcm[tailOffset + channel] = tail * ownGain - head * oppositeGain;
     }
   }
 }
