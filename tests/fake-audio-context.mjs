@@ -46,6 +46,12 @@ export class FakeAudioParam {
     return this;
   }
 
+  exponentialRampToValueAtTime(value, time) {
+    this.value = value;
+    this.addCall('exponentialRampToValueAtTime', arguments);
+    return this;
+  }
+
   setTargetAtTime(value, time, timeConstant) {
     this.value = value;
     this.addCall('setTargetAtTime', arguments);
@@ -146,6 +152,11 @@ export class FakeOscillatorNode extends FakeConnectableNode {
     this.context.events.push({ type: 'oscillator-stop', oscillator: this, args });
     return this.stopPlan?.();
   }
+
+  emitEnded() {
+    this.context.events.push({ type: 'oscillator-ended', oscillator: this });
+    this.onended?.();
+  }
 }
 
 export class FakeAudioBuffer {
@@ -178,11 +189,23 @@ export class FakeAudioContext {
     currentTime = 0,
     sampleRate = 48_000,
     decodePlan = {},
+    createBufferSourcePlan = null,
+    createGainPlan = null,
+    createOscillatorPlan = null,
+    resumePlan = null,
+    suspendPlan = null,
+    closePlan = null,
   } = {}) {
     this.state = state;
     this.currentTime = currentTime;
     this.sampleRate = sampleRate;
     this.decodePlan = decodePlan;
+    this.createBufferSourcePlan = createBufferSourcePlan;
+    this.createGainPlan = createGainPlan;
+    this.createOscillatorPlan = createOscillatorPlan;
+    this.resumePlan = resumePlan;
+    this.suspendPlan = suspendPlan;
+    this.closePlan = closePlan;
     this.destination = { type: 'destination' };
     this.sources = [];
     this.oscillators = [];
@@ -226,6 +249,7 @@ export class FakeAudioContext {
   }
 
   createBufferSource() {
+    this.createBufferSourcePlan?.(this);
     const source = new FakeBufferSourceNode(this);
     this.sources.push(source);
     this.events.push({ type: 'create-buffer-source', source });
@@ -233,6 +257,7 @@ export class FakeAudioContext {
   }
 
   createGain() {
+    this.createGainPlan?.(this);
     const gain = new FakeGainNode(this);
     this.gains.push(gain);
     this.events.push({ type: 'create-gain', gain });
@@ -240,6 +265,7 @@ export class FakeAudioContext {
   }
 
   createOscillator() {
+    this.createOscillatorPlan?.(this);
     const oscillator = new FakeOscillatorNode(this);
     this.oscillators.push(oscillator);
     this.events.push({ type: 'create-oscillator', oscillator });
@@ -257,16 +283,22 @@ export class FakeAudioContext {
 
   async resume() {
     this.resumeCalls.push([]);
+    this.events.push({ type: 'context-resume' });
+    await this.resumePlan?.(this);
     this.state = 'running';
   }
 
   async suspend() {
     this.suspendCalls.push([]);
+    this.events.push({ type: 'context-suspend' });
+    await this.suspendPlan?.(this);
     this.state = 'suspended';
   }
 
   async close() {
     this.closeCalls.push([]);
+    this.events.push({ type: 'context-close' });
+    await this.closePlan?.(this);
     this.state = 'closed';
   }
 }

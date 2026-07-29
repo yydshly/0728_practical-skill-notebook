@@ -1695,10 +1695,109 @@ test('danger controller distinguishes chase, close threat, recovery, and safety'
   assert.equal(danger.update(0.81, 'patrol', 18).mode, 'safe');
 });
 
-test('audio feedback remains safe without an AudioContext implementation', async () => {
+function createAudioContextCtor(options = {}) {
+  const instances = [];
+  class AudioContextCtor extends FakeAudioContext {
+    constructor() {
+      super(options);
+      instances.push(this);
+    }
+  }
+  return { AudioContextCtor, instances };
+}
+
+function createStubMusicDirectorFactory({
+  initialSnapshot = {},
+  onCreate = () => {},
+} = {}) {
+  const creations = [];
+  const defaultSnapshot = {
+    assetState: 'idle',
+    playback: 'locked',
+    mode: 'safe',
+    loopGeneration: 0,
+    startedAt: null,
+    dangerMix: 0,
+    activeVoices: 0,
+  };
+
+  function factory(options) {
+    let snapshot = { ...defaultSnapshot, ...initialSnapshot };
+    const calls = {
+      prefetch: 0,
+      unlock: [],
+      story: [],
+      danger: [],
+      suspend: 0,
+      resume: 0,
+      dispose: 0,
+    };
+    const director = {
+      prefetch() {
+        calls.prefetch += 1;
+        return Promise.resolve(true);
+      },
+      unlock(outputs) {
+        calls.unlock.push(outputs);
+        return Promise.resolve(true);
+      },
+      handleStoryEvent(event) {
+        calls.story.push(event);
+      },
+      updateDanger(danger) {
+        calls.danger.push(danger);
+      },
+      suspendTransientVoices() {
+        calls.suspend += 1;
+        return Promise.resolve(true);
+      },
+      resume() {
+        calls.resume += 1;
+        return Promise.resolve(true);
+      },
+      dispose() {
+        calls.dispose += 1;
+      },
+      getSnapshot() {
+        return snapshot;
+      },
+    };
+    const creation = {
+      calls,
+      director,
+      options,
+      emit(nextSnapshot) {
+        snapshot = { ...snapshot, ...nextSnapshot };
+        options.onStateChange(snapshot);
+      },
+    };
+    creations.push(creation);
+    onCreate(creation);
+    return director;
+  }
+
+  return { creations, factory };
+}
+
+test('audio feedback exposes a safe frozen facade when audio is unavailable', async () => {
   const audio = createAudioFeedback({ AudioContextCtor: null });
+
+  assert.deepEqual(Object.keys(audio).sort(), [
+    'dispose',
+    'getSnapshot',
+    'handleStoryEvent',
+    'prefetch',
+    'resume',
+    'setMuted',
+    'subscribe',
+    'suspend',
+    'toggleMuted',
+    'unlock',
+    'updateDanger',
+  ]);
+  assert.equal(audio.getSnapshot().contextState, 'unavailable');
   assert.equal(await audio.unlock(), false);
-  assert.equal(audio.unlocked, false);
+  assert.equal(await audio.resume(), false);
   assert.doesNotThrow(() => audio.handleStoryEvent({
     type: 'objective-completed',
     objectiveId: 'leave_home',
@@ -1707,94 +1806,492 @@ test('audio feedback remains safe without an AudioContext implementation', async
     mode: 'threaten',
     heartbeatBpm: 110,
     intensity: 1,
-  }));
-  audio.setMuted(true);
-  assert.equal(audio.muted, true);
+  }, 0));
   audio.dispose();
+  assert.deepEqual(
+    [audio.getSnapshot().contextState, audio.getSnapshot().assetState],
+    ['closed', 'disposed'],
+  );
 });
 
-test('audio feedback swallows node allocation errors after unlocking', async () => {
-  const audio = createAudioFeedback({
-    AudioContextCtor: class ThrowingAudioContext {
-      constructor() {
-        this.state = 'running';
-        this.currentTime = 0;
-        this.destination = {};
-      }
-
-      createGain() {
-        return {
-          gain: {
-            value: 0,
-            setValueAtTime() {},
-            exponentialRampToValueAtTime() {},
-            setTargetAtTime() {},
-          },
-          connect() {},
-          disconnect() {},
-        };
-      }
-
-      createOscillator() {
-        throw new Error('audio node allocation failed');
-      }
+test('audio feedback default reader rejects non-2xx assets with their URL', async (t) => {
+  const originalFetch = globalThis.fetch;
+  const warnings = [];
+  let arrayBufferCalls = 0;
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 503,
+    async arrayBuffer() {
+      arrayBufferCalls += 1;
+      return encodeAssetIdentity('exploration.ogg');
     },
   });
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  const audio = createAudioFeedback({
+    AudioContextCtor: null,
+    musicAssets: MUSIC_ASSETS,
+    logger: { warn: (...args) => warnings.push(args) },
+  });
+
+  assert.equal(await audio.prefetch(), false);
+  assert.equal(arrayBufferCalls, 0);
+  assert.match(warnings[0][1].message, /\(503\): exploration\.ogg$/);
+});
+
+test('audio feedback keeps oscillator SFX usable when music assets are omitted', async () => {
+  const harness = createAudioContextCtor({ state: 'running' });
+  const audio = createAudioFeedback({ AudioContextCtor: harness.AudioContextCtor });
+
   assert.equal(await audio.unlock(), true);
-  assert.doesNotThrow(() => audio.handleStoryEvent({ type: 'objective-completed' }));
-  assert.doesNotThrow(() => audio.updateDanger({
+  const context = harness.instances[0];
+  const sfxGain = context.gains[2];
+  assert.equal(audio.getSnapshot().assetState, 'error');
+  assert.equal(audio.getSnapshot().musicState.playback, 'error');
+
+  audio.handleStoryEvent({ type: 'objective-completed' });
+  audio.updateDanger({
     mode: 'threaten',
     heartbeatBpm: 110,
     intensity: 1,
-  }, 0));
-  audio.dispose();
+  }, 0);
+
+  assert.equal(context.oscillators.length, 5);
+  for (const voiceGain of context.gains.slice(3)) {
+    assert.deepEqual(voiceGain.connections, [sfxGain]);
+  }
 });
 
-test('audio feedback cleans up an oscillator when later node allocation fails', async () => {
-  const oscillators = [];
-  let gainAllocations = 0;
+test('audio feedback creates and reuses exactly one context, bus graph, and director', async () => {
+  const harness = createAudioContextCtor();
+  const stub = createStubMusicDirectorFactory();
   const audio = createAudioFeedback({
-    AudioContextCtor: class PartiallyThrowingAudioContext {
-      constructor() {
-        this.state = 'running';
-        this.currentTime = 0;
-        this.destination = {};
-      }
+    AudioContextCtor: harness.AudioContextCtor,
+    musicAssets: MUSIC_ASSETS,
+    musicDirectorFactory: stub.factory,
+  });
 
-      createGain() {
-        gainAllocations += 1;
-        if (gainAllocations > 1) throw new Error('voice gain allocation failed');
-        return {
-          gain: {
-            value: 0,
-            setTargetAtTime() {},
-          },
-          connect() {},
-          disconnect() {},
-        };
-      }
+  assert.deepEqual(await Promise.all([
+    audio.unlock(),
+    audio.unlock(),
+    audio.unlock(),
+  ]), [true, true, true]);
+  assert.equal(await audio.unlock(), true);
 
-      createOscillator() {
-        const calls = { disconnect: 0, stop: 0 };
-        oscillators.push(calls);
-        return {
-          frequency: { value: 0 },
-          connect() {},
-          disconnect() { calls.disconnect += 1; },
-          stop() { calls.stop += 1; },
-        };
-      }
+  assert.equal(harness.instances.length, 1);
+  assert.equal(stub.creations.length, 1);
+  const context = harness.instances[0];
+  assert.equal(context.gains.length, 3);
+  const [masterGain, musicGain, sfxGain] = context.gains;
+  assert.equal(masterGain.gain.value, 0.28);
+  assert.deepEqual(masterGain.connections, [context.destination]);
+  assert.deepEqual(musicGain.connections, [masterGain]);
+  assert.deepEqual(sfxGain.connections, [masterGain]);
+  assert.equal(context.resumeCalls.length, 1);
+  assert.equal(stub.creations[0].calls.unlock.length, 2);
+  assert.deepEqual(stub.creations[0].calls.unlock[0], {
+    context,
+    musicOutput: musicGain,
+    stingerOutput: sfxGain,
+  });
+});
+
+test('audio feedback publishes only deeply frozen observable snapshot changes', async () => {
+  const stub = createStubMusicDirectorFactory({
+    onCreate(creation) {
+      creation.emit({
+        assetState: 'ready',
+        playback: 'playing',
+        mode: 'chase',
+        loopGeneration: 1,
+        startedAt: 7.25,
+        dangerMix: 0.6,
+        activeVoices: 2,
+      });
     },
+  });
+  const audio = createAudioFeedback({
+    AudioContextCtor: null,
+    musicAssets: MUSIC_ASSETS,
+    musicDirectorFactory: stub.factory,
+  });
+  const snapshots = [];
+  const unsubscribe = audio.subscribe((snapshot) => {
+    snapshots.push(snapshot);
+    assert.strictEqual(audio.getSnapshot(), snapshot);
+  });
+
+  assert.equal(snapshots.length, 1);
+  assert.equal(Object.isFrozen(snapshots[0]), true);
+  assert.equal(Object.isFrozen(snapshots[0].musicState), true);
+  assert.equal(await audio.prefetch(), true);
+  assert.equal(snapshots.length, 2);
+  assert.deepEqual(snapshots[1], {
+    contextState: 'unavailable',
+    assetState: 'ready',
+    musicState: {
+      playback: 'playing',
+      mode: 'chase',
+      loopGeneration: 1,
+      startedAt: 7.25,
+    },
+    dangerMix: 0.6,
+    activeVoices: 2,
+    muted: false,
+  });
+
+  const changedSnapshot = audio.getSnapshot();
+  stub.creations[0].emit({});
+  assert.strictEqual(audio.getSnapshot(), changedSnapshot);
+  assert.equal(snapshots.length, 2);
+
+  let nestedUnsubscribe = null;
+  const outerUnsubscribe = audio.subscribe(() => {
+    nestedUnsubscribe ??= audio.subscribe(() => {});
+  });
+  assert.equal(typeof nestedUnsubscribe, 'function');
+  outerUnsubscribe();
+  outerUnsubscribe();
+  nestedUnsubscribe();
+  unsubscribe();
+  unsubscribe();
+  stub.creations[0].emit({ dangerMix: 0.8 });
+  assert.equal(snapshots.length, 2);
+});
+
+test('audio feedback restores and persists mute state through the master bus', async () => {
+  const stored = [];
+  const storage = {
+    getItem(key) {
+      assert.equal(key, 'test-muted');
+      return 'true';
+    },
+    setItem(key, value) {
+      stored.push([key, value]);
+    },
+  };
+  const harness = createAudioContextCtor({ state: 'running' });
+  const audio = createAudioFeedback({
+    AudioContextCtor: harness.AudioContextCtor,
+    storage,
+    storageKey: 'test-muted',
+  });
+
+  assert.equal(audio.getSnapshot().muted, true);
+  assert.equal(await audio.unlock(), true);
+  const masterGain = harness.instances[0].gains[0];
+  assert.equal(masterGain.gain.value, 0);
+
+  assert.equal(audio.setMuted(false), false);
+  assert.deepEqual(masterGain.gain.calls.at(-1), {
+    method: 'setTargetAtTime',
+    args: [0.28, 0, 0.03],
+  });
+  assert.equal(audio.toggleMuted(), true);
+  assert.deepEqual(stored, [
+    ['test-muted', 'false'],
+    ['test-muted', 'true'],
+  ]);
+});
+
+test('audio feedback swallows storage access failures', () => {
+  const storage = {
+    getItem() {
+      throw new Error('storage read denied');
+    },
+    setItem() {
+      throw new Error('storage write denied');
+    },
+  };
+  const audio = createAudioFeedback({
+    AudioContextCtor: null,
+    storage,
+    logger: { warn() {} },
+  });
+
+  assert.equal(audio.getSnapshot().muted, false);
+  assert.doesNotThrow(() => audio.setMuted(true));
+  assert.doesNotThrow(() => audio.toggleMuted());
+});
+
+test('audio feedback preserves SFX when music loading fails', async () => {
+  const harness = createAudioContextCtor({ state: 'running' });
+  const audio = createAudioFeedback({
+    AudioContextCtor: harness.AudioContextCtor,
+    musicAssets: MUSIC_ASSETS,
+    readAsset: async () => {
+      throw new Error('music offline');
+    },
+    logger: { warn() {} },
   });
 
   assert.equal(await audio.unlock(), true);
-  assert.doesNotThrow(() => audio.handleStoryEvent({ type: 'objective-completed' }));
-  assert.equal(oscillators.length, 2);
+  assert.equal(audio.getSnapshot().assetState, 'error');
+  audio.handleStoryEvent({ type: 'objective-completed' });
+  audio.updateDanger({
+    mode: 'threaten',
+    heartbeatBpm: 110,
+    intensity: 1,
+  }, 0);
+
+  const context = harness.instances[0];
+  const sfxGain = context.gains[2];
+  assert.equal(context.oscillators.length, 5);
+  assert.equal(audio.getSnapshot().activeVoices, 5);
+  for (const voiceGain of context.gains.slice(3)) {
+    assert.deepEqual(voiceGain.connections, [sfxGain]);
+  }
+});
+
+test('audio feedback caps oscillator voices and cleans natural and forced endings', async () => {
+  const harness = createAudioContextCtor({ state: 'running' });
+  const audio = createAudioFeedback({ AudioContextCtor: harness.AudioContextCtor });
+  await audio.unlock();
+
+  for (let index = 0; index < 3; index += 1) {
+    audio.handleStoryEvent({ type: 'chapter-completed' });
+  }
+
+  const context = harness.instances[0];
+  assert.equal(context.oscillators.length, 8);
+  assert.equal(audio.getSnapshot().activeVoices, 8);
+  const firstOscillator = context.oscillators[0];
+  const firstVoiceGain = context.gains[3];
+  firstOscillator.emitEnded();
+  assert.equal(audio.getSnapshot().activeVoices, 7);
+  assert.equal(firstOscillator.disconnections.length, 1);
+  assert.equal(firstVoiceGain.disconnections.length, 1);
+
+  assert.equal(await audio.suspend(), true);
+  assert.equal(audio.getSnapshot().activeVoices, 0);
+  assert.equal(context.state, 'suspended');
+  for (const oscillator of context.oscillators) {
+    assert.equal(oscillator.disconnections.length, 1);
+  }
+  for (const voiceGain of context.gains.slice(3)) {
+    assert.equal(voiceGain.disconnections.length, 1);
+  }
+  firstOscillator.emitEnded();
+  assert.equal(audio.getSnapshot().activeVoices, 0);
+});
+
+test('audio feedback cleans a partially allocated oscillator voice in reverse order', async () => {
+  const harness = createAudioContextCtor({
+    state: 'running',
+    createGainPlan(context) {
+      if (context.gains.length >= 3) {
+        throw new Error('voice gain allocation denied');
+      }
+    },
+  });
+  const audio = createAudioFeedback({
+    AudioContextCtor: harness.AudioContextCtor,
+    logger: { warn() {} },
+  });
+  await audio.unlock();
+
+  assert.doesNotThrow(() => {
+    audio.handleStoryEvent({ type: 'objective-completed' });
+  });
+
+  const context = harness.instances[0];
+  assert.equal(context.oscillators.length, 2);
   assert.deepEqual(
-    oscillators.map(({ disconnect, stop }) => [disconnect, stop]),
+    context.oscillators.map((oscillator) => [
+      oscillator.stopCalls.length,
+      oscillator.disconnections.length,
+    ]),
     [[1, 1], [1, 1]],
   );
+  assert.equal(audio.getSnapshot().activeVoices, 0);
+});
+
+test('audio feedback suspends, resumes, and disposes its full graph idempotently', async () => {
+  const order = [];
+  const harness = createAudioContextCtor({
+    state: 'running',
+    suspendPlan() {
+      order.push('context-suspend');
+    },
+    resumePlan() {
+      order.push('context-resume');
+    },
+  });
+  const stub = createStubMusicDirectorFactory();
+  const audio = createAudioFeedback({
+    AudioContextCtor: harness.AudioContextCtor,
+    musicAssets: MUSIC_ASSETS,
+    musicDirectorFactory(options) {
+      const director = stub.factory(options);
+      const creation = stub.creations.at(-1);
+      director.suspendTransientVoices = () => {
+        creation.calls.suspend += 1;
+        order.push('director-suspend');
+        return Promise.resolve(true);
+      };
+      director.resume = () => {
+        creation.calls.resume += 1;
+        order.push('director-resume');
+        return Promise.resolve(true);
+      };
+      director.dispose = () => {
+        creation.calls.dispose += 1;
+        order.push('director-dispose');
+      };
+      return director;
+    },
+  });
+  const snapshots = [];
+  audio.subscribe((snapshot) => snapshots.push(snapshot));
+  await audio.unlock();
+  audio.handleStoryEvent({ type: 'objective-completed' });
+
+  assert.equal(await audio.suspend(), true);
+  assert.deepEqual(order.slice(-2), ['director-suspend', 'context-suspend']);
+  assert.equal(await audio.resume(), true);
+  assert.deepEqual(order.slice(-2), ['context-resume', 'director-resume']);
+
+  const context = harness.instances[0];
+  const buses = context.gains.slice(0, 3);
   audio.dispose();
+  audio.dispose();
+  assert.equal(stub.creations[0].calls.dispose, 1);
+  assert.equal(context.closeCalls.length, 1);
+  assert.equal(buses.every((bus) => bus.disconnections.length === 1), true);
+  assert.deepEqual(
+    [snapshots.at(-1).contextState, snapshots.at(-1).assetState,
+      snapshots.at(-1).musicState.playback],
+    ['closed', 'disposed', 'disposed'],
+  );
+});
+
+test('audio feedback retries unlock with the same graph before one real loop generation', async () => {
+  let resumeAttempt = 0;
+  const harness = createAudioContextCtor({
+    resumePlan() {
+      resumeAttempt += 1;
+      if (resumeAttempt === 1) throw new Error('gesture was not accepted');
+    },
+  });
+  const audio = createAudioFeedback({
+    AudioContextCtor: harness.AudioContextCtor,
+    musicAssets: MUSIC_ASSETS,
+    readAsset: createAssetReader().readAsset,
+    logger: { warn() {} },
+  });
+
+  assert.equal(await audio.unlock(), false);
+  assert.equal(await audio.unlock(), true);
+
+  const context = harness.instances[0];
+  assert.equal(harness.instances.length, 1);
+  assert.equal(context.gains.length, 5);
+  assert.equal(context.sources.length, 2);
+  assert.equal(audio.getSnapshot().musicState.loopGeneration, 1);
+  assert.equal(context.resumeCalls.length, 2);
+});
+
+test('audio feedback contains rejected public operations and rejected disposal work', async () => {
+  const harness = createAudioContextCtor({ state: 'running' });
+  const audio = createAudioFeedback({
+    AudioContextCtor: harness.AudioContextCtor,
+    musicAssets: MUSIC_ASSETS,
+    musicDirectorFactory: () => ({
+      prefetch() {
+        return Promise.reject(new Error('prefetch rejected'));
+      },
+      unlock() {
+        throw new Error('director unlock rejected');
+      },
+      handleStoryEvent() {},
+      updateDanger() {},
+      suspendTransientVoices() {
+        return Promise.reject(new Error('director suspend rejected'));
+      },
+      resume() {
+        throw new Error('director resume rejected');
+      },
+      dispose() {
+        return Promise.reject(new Error('director dispose rejected'));
+      },
+      getSnapshot() {
+        return {
+          assetState: 'idle',
+          playback: 'locked',
+          mode: 'safe',
+          loopGeneration: 0,
+          startedAt: null,
+          dangerMix: 0,
+          activeVoices: 0,
+        };
+      },
+    }),
+  });
+
+  assert.equal(await audio.prefetch(), false);
+  assert.equal(await audio.unlock(), true);
+  assert.equal(await audio.suspend(), true);
+  assert.equal(await audio.resume(), true);
+  assert.doesNotThrow(() => audio.dispose());
+  await Promise.resolve();
+});
+
+test('audio feedback warning keys are emitted once by their owning layer', async () => {
+  const warnings = [];
+  let resumeAttempt = 0;
+  const storage = {
+    getItem() {
+      throw new Error('storage read denied');
+    },
+    setItem() {
+      throw new Error('storage write denied');
+    },
+  };
+  const harness = createAudioContextCtor({
+    createOscillatorPlan() {
+      throw new Error('oscillator allocation denied');
+    },
+    resumePlan() {
+      resumeAttempt += 1;
+      if (resumeAttempt === 1) throw new Error('resume denied');
+    },
+    closePlan() {
+      throw new Error('close denied');
+    },
+  });
+  const audio = createAudioFeedback({
+    AudioContextCtor: harness.AudioContextCtor,
+    musicAssets: MUSIC_ASSETS,
+    readAsset: async () => {
+      throw new Error('asset read denied');
+    },
+    storage,
+    logger: { warn: (...args) => warnings.push(args) },
+  });
+
+  audio.setMuted(true);
+  audio.toggleMuted();
+  assert.equal(await audio.unlock(), false);
+  assert.equal(await audio.unlock(), true);
+  assert.equal(await audio.unlock(), true);
+  audio.handleStoryEvent({ type: 'objective-completed' });
+  audio.handleStoryEvent({ type: 'objective-completed' });
+  audio.dispose();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  const messages = warnings.map(([message]) => message).sort();
+  assert.deepEqual(messages, [
+    '[audio-feedback:context]',
+    '[audio-feedback:oscillator-node]',
+    '[audio-feedback:resume]',
+    '[audio-feedback:storage-read]',
+    '[audio-feedback:storage-write]',
+    '[music-director:mp3-fetch]',
+    '[music-director:ogg-fetch]',
+  ]);
+  assert.equal(new Set(messages).size, messages.length);
 });
 
 test('identical mission guidance and danger frames do not rewrite rendered UI', () => {
