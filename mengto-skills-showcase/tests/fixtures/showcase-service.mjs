@@ -73,6 +73,18 @@ function htmlFor(options) {
       return `<!doctype html><script>const marker = ${JSON.stringify(exact)}</script>`;
     case "style":
       return `<!doctype html><style>x::after{content:${JSON.stringify(exact)}}</style>`;
+    case "script-prefixed-close":
+      return `<!doctype html><script>const marker = "</scriptx>${exact}";</script>`;
+    case "style-prefixed-close":
+      return `<!doctype html><style>x::after{content:"</stylex>${exact}"}</style>`;
+    case "script-hyphenated-close":
+      return `<!doctype html><script>const marker = "</script-not-a-close>${exact}";</script>`;
+    case "style-hyphenated-close":
+      return `<!doctype html><style>x::after{content:"</style-not-a-close>${exact}"}</style>`;
+    case "script-prefixed-close-then-real-marker":
+      return `<!doctype html><script>const marker = "</scriptx>${exact}";</script>${exact}`;
+    case "style-prefixed-close-then-real-marker":
+      return `<!doctype html><style>x::after{content:"</stylex>${exact}"}</style>${exact}`;
     case "text":
       return `<!doctype html><p>${exact.replaceAll("<", "&lt;")}</p>`;
     case "json":

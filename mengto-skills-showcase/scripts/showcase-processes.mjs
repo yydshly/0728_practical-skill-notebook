@@ -88,6 +88,19 @@ function parseStartTag(source) {
   return { tagName, attributes, ambiguous };
 }
 
+function findRawTextCloseStart(html, lowerHtml, tagName, start) {
+  const needle = `</${tagName}`;
+  let closeStart = lowerHtml.indexOf(needle, start);
+  while (closeStart >= 0) {
+    const following = html[closeStart + needle.length];
+    if (ASCII_WHITESPACE.test(following ?? "") || following === "/" || following === ">") {
+      return closeStart;
+    }
+    closeStart = lowerHtml.indexOf(needle, closeStart + needle.length);
+  }
+  return -1;
+}
+
 function showcaseMetaContents(html) {
   const contents = [];
   const lowerHtml = html.toLowerCase();
@@ -109,7 +122,12 @@ function showcaseMetaContents(html) {
     const closing = trimmed.startsWith("/");
     const parsed = parseStartTag(closing ? trimmed.slice(1) : trimmed);
     if (!closing && ["script", "style"].includes(parsed.tagName)) {
-      const closeStart = lowerHtml.indexOf(`</${parsed.tagName}`, tag.end);
+      const closeStart = findRawTextCloseStart(
+        html,
+        lowerHtml,
+        parsed.tagName,
+        tag.end,
+      );
       if (closeStart < 0) break;
       index = readTag(html, closeStart).end;
       continue;

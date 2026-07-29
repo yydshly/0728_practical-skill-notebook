@@ -177,6 +177,56 @@ describe("semantic readiness", () => {
     })).rejects.toThrow(/readiness deadline.*expected-app/);
   });
 
+  it.each([
+    "script-prefixed-close",
+    "style-prefixed-close",
+    "script-hyphenated-close",
+    "style-hyphenated-close",
+  ])("does not accept a marker after a prefixed %s raw-text close", async (bodyMode) => {
+    const service = await fixtureTreeService(bodyMode, {
+      id: "expected-app",
+      bodyMode,
+      spawnGrandchild: false,
+    });
+    let failure;
+    let supervisor;
+    try {
+      supervisor = await startShowcaseProcesses({
+        services: [service],
+        deadlineMs: 250,
+        writeLine: () => {},
+      });
+    } catch (error) {
+      failure = error;
+    } finally {
+      await supervisor?.stop("test-cleanup");
+    }
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toMatch(/readiness deadline.*expected-app/);
+    await expectPidFileTreeStopped(service.pidFile);
+    await preflightPorts([service]);
+  });
+
+  it.each([
+    "script-prefixed-close-then-real-marker",
+    "style-prefixed-close-then-real-marker",
+  ])("accepts a marker after the real close following a prefixed %s", async (bodyMode) => {
+    const service = await fixtureTreeService(bodyMode, {
+      id: "expected-app",
+      bodyMode,
+      spawnGrandchild: false,
+    });
+    const supervisor = await startShowcaseProcesses({
+      services: [service],
+      deadlineMs: 1_500,
+      writeLine: () => {},
+    });
+    await supervisor.stop("test-complete");
+    await expect(supervisor.done).resolves.toBeUndefined();
+    await expectPidFileTreeStopped(service.pidFile);
+    await preflightPorts([service]);
+  });
+
   it("probes other pending services while one response remains held open", async () => {
     const directory = await import("node:fs/promises").then(({ mkdtemp }) =>
       mkdtemp(join(tmpdir(), "showcase-probe-hit-")));
