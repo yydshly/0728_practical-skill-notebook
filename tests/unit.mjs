@@ -22,9 +22,77 @@ import {
   validateObjectiveDefinitions,
 } from '../src/objectives.js';
 import { createStoryDirector } from '../src/story.js';
+import {
+  computeGuidanceSnapshot,
+  formatObjectiveDistance,
+  projectScreenMarker,
+} from '../src/guidance.js';
+import { createWorldObjectiveMarker } from '../src/world-marker.js';
 
 const { computeThirdPersonPose } = cameraMath;
 const { buildVillageGate } = buildings;
+
+test('guidance reports distance, relative direction, and staged proximity', () => {
+  const far = computeGuidanceSnapshot({
+    playerPosition: new THREE.Vector3(0, 0, 0),
+    targetPosition: new THREE.Vector3(10, 0, 0),
+    cameraYaw: 0,
+  });
+  assert.equal(far.distance, 10);
+  assert.ok(Math.abs(far.relativeAngle - Math.PI / 2) < 0.0001);
+  assert.equal(far.showWorldMarker, true);
+  assert.equal(far.proximity, 'far');
+
+  const approach = computeGuidanceSnapshot({
+    playerPosition: new THREE.Vector3(7, 0, 0),
+    targetPosition: new THREE.Vector3(10, 0, 0),
+    cameraYaw: 0,
+  });
+  assert.equal(approach.proximity, 'approach');
+  assert.equal(formatObjectiveDistance(approach.distance), '灏卞湪闄勮繎');
+
+  const interact = computeGuidanceSnapshot({
+    playerPosition: new THREE.Vector3(8, 0, 0),
+    targetPosition: new THREE.Vector3(10, 0, 0),
+    cameraYaw: 0,
+  });
+  assert.equal(interact.proximity, 'interact');
+});
+
+test('screen marker clamps an off-camera target to a safe viewport edge', () => {
+  const camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.1, 120);
+  camera.position.set(0, 2, 0);
+  camera.lookAt(0, 1, -1);
+  camera.updateMatrixWorld(true);
+  const marker = projectScreenMarker(
+    new THREE.Vector3(20, 0, -1),
+    camera,
+    { width: 1280, height: 720 },
+    48,
+  );
+  assert.ok(marker);
+  assert.equal(marker.edge, true);
+  assert.ok(marker.x >= 48 && marker.x <= 1232);
+  assert.ok(marker.y >= 48 && marker.y <= 672);
+});
+
+test('world objective marker stays decorative and follows guidance visibility', () => {
+  const scene = new THREE.Scene();
+  const marker = createWorldObjectiveMarker(scene);
+  marker.update({
+    targetPosition: new THREE.Vector3(3, 0, 4),
+    showWorldMarker: true,
+    proximity: 'approach',
+  }, 0.5);
+  assert.equal(marker.object.parent, scene);
+  assert.equal(marker.object.visible, true);
+  assert.deepEqual(marker.object.position.toArray(), [3, 0.03, 4]);
+  assert.equal(marker.object.userData.decorativeOnly, true);
+  marker.update({ targetPosition: null, showWorldMarker: false, proximity: 'none' }, 1);
+  assert.equal(marker.object.visible, false);
+  marker.dispose();
+  assert.equal(marker.object.parent, null);
+});
 
 test('objective definitions map the four story stages to stable village anchors', () => {
   assert.deepEqual(
