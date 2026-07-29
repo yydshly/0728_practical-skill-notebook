@@ -3,17 +3,25 @@ import { extname, join, relative } from "node:path";
 
 const textExtensions = new Set([".html", ".js", ".css", ".json", ".map"]);
 const forbiddenLoopback = /127\.0\.0\.1|localhost|\[::1\]/gi;
-const jsUrlControl =
-  String.raw`(?:[\t\n\r]|\\[tnr]|\\x0(?:9|a|d)|\\u000(?:9|a|d)|\\u\{0*(?:9|a|d)\})*`;
+const jsUrlControlAtom =
+  String.raw`(?:[\t\n\r]|\\[tnr]|\\x0(?:9|[aA]|[dD])|\\u000(?:9|[aA]|[dD])|\\u\{0*(?:9|[aA]|[dD])\}|\\(?:\r\n|[\n\r\u2028\u2029]))`;
+const jsUrlControl = `(?:${jsUrlControlAtom})*`;
+const jsUrlLetterAtoms = {
+  h: String.raw`(?:[hH]|\\[hH]|\\x(?:68|48)|\\u(?:0068|0048)|\\u\{0*(?:68|48)\})`,
+  t: String.raw`(?:[tT]|\\T|\\x(?:74|54)|\\u(?:0074|0054)|\\u\{0*(?:74|54)\})`,
+  p: String.raw`(?:[pP]|\\[pP]|\\x(?:70|50)|\\u(?:0070|0050)|\\u\{0*(?:70|50)\})`,
+  s: String.raw`(?:[sS]|\\[sS]|\\x(?:73|53)|\\u(?:0073|0053)|\\u\{0*(?:73|53)\})`,
+};
 const jsUrlColon =
-  String.raw`(?::|\\:|\\x3a|\\u003a|\\u\{0*3a\}|%3a)`;
+  String.raw`(?::|\\:|\\x3[aA]|\\u003[aA]|\\u\{0*3[aA]\}|%3[aA])`;
 const jsUrlSlash =
-  String.raw`(?:\/|\\\/|\\x2f|\\u002f|\\u\{0*2f\}|%2f|\\\\|\\x5c|\\u005c|\\u\{0*5c\})`;
+  String.raw`(?:\/|\\\/|\\x2[fF]|\\u002[fF]|\\u\{0*2[fF]\}|%2[fF]|\\\\|\\x5[cC]|\\u005[cC]|\\u\{0*5[cC]\})`;
 const remoteStart = new RegExp(
-  `h${jsUrlControl}t${jsUrlControl}t${jsUrlControl}`
-    + `p${jsUrlControl}s?${jsUrlControl}${jsUrlColon}`
+  `${jsUrlLetterAtoms.h}${jsUrlControl}${jsUrlLetterAtoms.t}${jsUrlControl}`
+    + `${jsUrlLetterAtoms.t}${jsUrlControl}${jsUrlLetterAtoms.p}${jsUrlControl}`
+    + `(?:${jsUrlLetterAtoms.s})?${jsUrlControl}${jsUrlColon}`
     + `${jsUrlSlash}${jsUrlSlash}`,
-  "gi",
+  "g",
 );
 const hubThreeToken = /(?:^|[^a-z0-9])three(?:\.module)?(?:[^a-z0-9]|$)/i;
 const ASCII_WHITESPACE = /[\t\n\f\r ]/;
@@ -202,6 +210,19 @@ function findRawTextCloseStart(html, tagName, start) {
   return -1;
 }
 
+export function findHtmlCommentEnd(html, start) {
+  const contentStart = start + 4;
+  if (html[contentStart] === ">") return contentStart + 1;
+  if (html[contentStart] === "-" && html[contentStart + 1] === ">") {
+    return contentStart + 2;
+  }
+  for (let index = contentStart; index < html.length; index += 1) {
+    if (html.startsWith("-->", index)) return index + 3;
+    if (html.startsWith("--!>", index)) return index + 4;
+  }
+  return html.length;
+}
+
 function htmlStartTagAttributes(html) {
   const attributes = [];
   let index = 0;
@@ -209,8 +230,7 @@ function htmlStartTagAttributes(html) {
     const tagStart = html.indexOf("<", index);
     if (tagStart < 0) break;
     if (html.startsWith("<!--", tagStart)) {
-      const commentEnd = html.indexOf("-->", tagStart + 4);
-      index = commentEnd < 0 ? html.length : commentEnd + 3;
+      index = findHtmlCommentEnd(html, tagStart);
       continue;
     }
     const tag = readHtmlTag(html, tagStart);
@@ -237,7 +257,7 @@ function htmlStartTagAttributes(html) {
 
 function decodeHtmlAttribute(value) {
   return value.replace(
-    /&(?:#([0-9]+);?|#x([0-9a-f]+);?|(colon|sol|lowbar|amp|tab|newline);)/gi,
+    /&(?:#([0-9]+);?|#x([0-9a-f]+);?|(colon|sol|bsol|lowbar|amp|tab|newline);)/gi,
     (reference, decimal, hexadecimal, named) => {
       if (decimal || hexadecimal) {
         const codePoint = Number.parseInt(
@@ -254,6 +274,7 @@ function decodeHtmlAttribute(value) {
       }
       return {
         amp: "&",
+        bsol: "\\",
         colon: ":",
         lowbar: "_",
         newline: "\n",
@@ -282,17 +303,44 @@ function srcsetCandidates(value) {
     ) index += 1;
     if (index >= value.length) break;
     const start = index;
-    const isDataUrl = value.slice(index, index + 5).toLowerCase() === "data:";
     while (
       index < value.length
       && !ASCII_WHITESPACE.test(value[index])
-      && (isDataUrl || value[index] !== ",")
     ) index += 1;
-    let candidate = value.slice(start, index);
-    if (!isDataUrl) candidate = candidate.replace(/,+$/, "");
-    if (candidate) candidates.push(candidate);
-    while (index < value.length && value[index] !== ",") index += 1;
-    if (value[index] === ",") index += 1;
+    const url = value.slice(start, index);
+    if (url.endsWith(",")) {
+      const candidate = url.replace(/,+$/, "");
+      if (candidate) candidates.push(candidate);
+      continue;
+    }
+    if (url) candidates.push(url);
+
+    let state = "in descriptor";
+    while (index < value.length) {
+      const character = value[index];
+      if (state === "in descriptor") {
+        if (ASCII_WHITESPACE.test(character)) {
+          state = "after descriptor";
+        } else if (character === ",") {
+          index += 1;
+          break;
+        } else if (character === "(") {
+          state = "in parens";
+        }
+      } else if (state === "in parens") {
+        if (character === ")") state = "in descriptor";
+      } else if (ASCII_WHITESPACE.test(character)) {
+        // Remain after the descriptor.
+      } else if (character === ",") {
+        index += 1;
+        break;
+      } else if (character === "(") {
+        state = "in parens";
+      } else {
+        state = "in descriptor";
+      }
+      index += 1;
+    }
   }
   return candidates;
 }

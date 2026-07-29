@@ -10,7 +10,10 @@ import { platform } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { scanShowcaseText } from "./verify-showcase-links.mjs";
+import {
+  findHtmlCommentEnd,
+  scanShowcaseText,
+} from "./verify-showcase-links.mjs";
 
 const execFileAsync = promisify(execFile);
 const defaultWorkspaceRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -228,8 +231,7 @@ function showcaseMetaContents(html) {
     const tagStart = html.indexOf("<", index);
     if (tagStart < 0) break;
     if (html.startsWith("<!--", tagStart)) {
-      const commentEnd = html.indexOf("-->", tagStart + 4);
-      index = commentEnd < 0 ? html.length : commentEnd + 3;
+      index = findHtmlCommentEnd(html, tagStart);
       continue;
     }
     const tag = readTag(html, tagStart);

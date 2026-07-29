@@ -349,6 +349,17 @@ describe("exact-target failure cleanup", () => {
       .resolves.toBeUndefined();
   });
 
+  it.each([
+    ["abrupt empty comment", `<!-->${marker("showcase-hub")}`],
+    ["abrupt empty comment after dash", `<!--->${marker("showcase-hub")}`],
+    ["comment end bang", `<!-- fake --!>${marker("showcase-hub")}`],
+  ])("finds a real marker after an HTML %s", async (_label, markerHtml) => {
+    const root = await createBuildRoot({
+      markerById: { "showcase-hub": markerHtml },
+    });
+    await expect(runFixtureBuild(root)).resolves.toBe(join(root, "dist", "showcase"));
+  });
+
   it("cleans a real scan failure and keeps the generated scan error", async () => {
     const root = await createBuildRoot();
     await writeFile(
@@ -716,6 +727,44 @@ describe("final showcase text scan", () => {
     await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
   });
 
+  it.each([
+    [String.raw`const value="htt\ps://cdn.example.test/app.js"`, "identity p"],
+    [String.raw`const value="http\s://cdn.example.test/app.js"`, "identity s"],
+    [String.raw`const value="\x68ttps://cdn.example.test/app.js"`, "hex h"],
+    [String.raw`const value="h\x74tps://cdn.example.test/app.js"`, "hex t"],
+    [String.raw`const value="htt\x70s://cdn.example.test/app.js"`, "hex p"],
+    [String.raw`const value="http\x73://cdn.example.test/app.js"`, "hex s"],
+    [String.raw`const value="\u0068ttps://cdn.example.test/app.js"`, "Unicode h"],
+    [String.raw`const value="h\u0074tps://cdn.example.test/app.js"`, "Unicode t"],
+    [String.raw`const value="htt\u0070s://cdn.example.test/app.js"`, "Unicode p"],
+    [String.raw`const value="http\u0073://cdn.example.test/app.js"`, "Unicode s"],
+    [String.raw`const value="\u{68}ttps://cdn.example.test/app.js"`, "code-point h"],
+    [String.raw`const value="h\u{74}tps://cdn.example.test/app.js"`, "code-point t"],
+    [String.raw`const value="htt\u{70}s://cdn.example.test/app.js"`, "code-point p"],
+    [String.raw`const value="http\u{73}://cdn.example.test/app.js"`, "code-point s"],
+    [`const value="ht\\\ntps://cdn.example.test/app.js"`, "LF continuation"],
+    [`const value="ht\\\r\ntps://cdn.example.test/app.js"`, "CRLF continuation"],
+    [`const value="ht\\\u2028tps://cdn.example.test/app.js"`, "LS continuation"],
+    [`const value="ht\\\u2029tps://cdn.example.test/app.js"`, "PS continuation"],
+  ])("rejects report matrix JavaScript scheme representation %s", async (
+    content,
+    _label,
+  ) => {
+    const root = await createScanTree();
+    await addScanAsset(root, "monster-forge/assets/extra.js", content);
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
+  it("rejects mixed valid JavaScript atoms without treating \\t as identity t", async () => {
+    const root = await createScanTree();
+    await addScanAsset(
+      root,
+      "monster-forge/assets/extra.js",
+      String.raw`const value="\h\T\x74\u{70}\s://cdn.example.test/app.js"`,
+    );
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
   it("does not allow an escaped XHTML URL to enter the literal Three whitelist", async () => {
     const root = await createScanTree();
     await addScanAsset(
@@ -837,6 +886,21 @@ describe("final showcase text scan", () => {
       "srcset root-assets candidate",
       /\/assets\//i,
     ],
+    [
+      '<a href="https&colon;&bsol;&bsol;cdn.example.test/app.js">CDN</a>',
+      "named backslash scalar remote",
+      /remote URL/i,
+    ],
+    [
+      '<script src="&bsol;assets&bsol;evil.js"></script>',
+      "named backslash root assets",
+      /\/assets\//i,
+    ],
+    [
+      '<a href="&bsol;&bsol;cdn.example.test/app.js">CDN</a>',
+      "named backslash network path",
+      /remote URL/i,
+    ],
   ])("rejects an HTML %s violation after attribute decoding", async (
     addition,
     _label,
@@ -877,6 +941,30 @@ describe("final showcase text scan", () => {
       "ping third remote URL",
       '<a href="../" ping="./one ./two https&colon;&sol;&sol;cdn.example.test/three">Hub</a>',
     ],
+    [
+      "srcset named-backslash second candidate",
+      '<img srcset="./local.png 1x, &bsol;&bsol;cdn.example.test/remote.png 2x">',
+    ],
+    [
+      "imagesrcset named-backslash third candidate",
+      '<link rel="preload" imagesrcset="./one.png 1x, ./two.png 2x, &bsol;&bsol;cdn.example.test/remote.png 3x">',
+    ],
+    [
+      "ping named-backslash third URL",
+      '<a href="../" ping="./one ./two &bsol;&bsol;cdn.example.test/three">Hub</a>',
+    ],
+    [
+      "srcset remote after descriptorless data candidate",
+      '<img srcset="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==, https&colon;&sol;&sol;cdn.example.test/remote.png 2x">',
+    ],
+    [
+      "srcset third remote after descriptorless data candidate",
+      '<img srcset="data:image/gif;base64,AAAA, ./local.png 1x, https&colon;&sol;&sol;cdn.example.test/remote.png 2x">',
+    ],
+    [
+      "imagesrcset remote after descriptorless data candidate",
+      '<link rel="preload" imagesrcset="data:image/gif;base64,AAAA, https&colon;&sol;&sol;cdn.example.test/remote.png 2x">',
+    ],
   ])("rejects a remote URL in an HTML %s", async (_label, addition) => {
     const root = await createScanTree();
     const path = join(root, "monster-forge", "index.html");
@@ -896,6 +984,14 @@ describe("final showcase text scan", () => {
     [
       "local imagesrcset candidates",
       '<link rel="preload" imagesrcset="./one.png 1x, ../two.png 2x">',
+    ],
+    [
+      "descriptorless data followed by local srcset candidate",
+      '<img srcset="data:image/gif;base64,AAAA, ./local.png 2x">',
+    ],
+    [
+      "data payload comma and descriptor",
+      '<img srcset="data:image/svg+xml,%3Csvg%3E 1x, ./local.png 2x">',
     ],
     [
       "local ping URLs",
@@ -935,6 +1031,18 @@ describe("final showcase text scan", () => {
     ].join("");
     await writeFile(path, `${await readFile(path, "utf8")}${inert}`, "utf8");
     await expect(scanShowcaseText(root)).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ["abrupt empty comment", "<!-->"],
+    ["abrupt empty comment after dash", "<!--->"],
+    ["comment end bang", "<!-- fake --!>"],
+  ])("scans a real start tag after an HTML %s", async (_label, comment) => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    const addition = `${comment}<a href="https&colon;&sol;&sol;cdn.example.test/x">CDN</a>`;
+    await writeFile(path, `${await readFile(path, "utf8")}${addition}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
   });
 
   it("preserves an ampersand character reference in a local navigation query", async () => {
