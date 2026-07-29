@@ -117,13 +117,24 @@ test('rendered PCM has exact dimensions and safe normalized analysis', () => {
 
 test('source masters retain headroom after their authored loudness gain', () => {
   for (const [rendered] of renderPairs) {
-    const { definition, analysis } = rendered;
-    const samplePeakDbfs = 20 * Math.log10(analysis.peak);
-    const requiredGainDb = definition.targetLufs - analysis.approximateLufs;
+    const { definition, pcm } = rendered;
+    let normalizedPeak = 0;
+    let normalizedSquareSum = 0;
+    for (const sample of pcm) {
+      const normalized = sample / 32_768;
+      normalizedPeak = Math.max(normalizedPeak, Math.abs(normalized));
+      normalizedSquareSum += normalized * normalized;
+    }
+    const normalizedRms = Math.sqrt(normalizedSquareSum / pcm.length);
+    const samplePeakDbfs = 20 * Math.log10(Math.max(normalizedPeak, 1e-12));
+    const approximateLufs =
+      -0.691 + 20 * Math.log10(Math.max(normalizedRms, 1e-12));
+    const requiredGainDb = definition.targetLufs - approximateLufs;
     const predictedNormalizedPeakDbfs = samplePeakDbfs + requiredGainDb;
     assert.ok(
       predictedNormalizedPeakDbfs <= -2,
-      `${definition.id} predicted normalized peak ${predictedNormalizedPeakDbfs}`,
+      `${definition.id} predicted normalized peak ${predictedNormalizedPeakDbfs} ` +
+        `(sample peak ${samplePeakDbfs}, loudness proxy ${approximateLufs})`,
     );
   }
 });
