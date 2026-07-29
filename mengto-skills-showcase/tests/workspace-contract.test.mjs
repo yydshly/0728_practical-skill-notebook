@@ -68,10 +68,11 @@ describe("showcase workspace", () => {
     });
   });
 
-  it("declares three independent apps and five shared package workspaces", async () => {
+  it("keeps the hub and product apps in the shared workspace", async () => {
     const manifest = await readJson("../package.json");
     expect(manifest.workspaces).toEqual(["apps/*", "packages/*"]);
     expect(manifest.scripts).toMatchObject({
+      "dev:hub": "npm run dev --workspace @showcase/hub",
       validate: "node scripts/validate-workspace.mjs",
       test: "vitest run",
       build: "npm run build --workspaces --if-present",
@@ -79,6 +80,7 @@ describe("showcase workspace", () => {
   });
 
   it.each([
+    ["showcase-hub", "@showcase/hub"],
     ["monster-forge", "@showcase/monster-forge"],
     ["ashfall-arena", "@showcase/ashfall-arena"],
     ["mech-atelier", "@showcase/mech-atelier"],

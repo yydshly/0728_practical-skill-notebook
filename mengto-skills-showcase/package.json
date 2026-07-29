@@ -8,6 +8,7 @@
   },
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
+    "dev:hub": "npm run dev --workspace @showcase/hub",
     "dev:forge": "npm run dev --workspace @showcase/monster-forge",
     "dev:arena": "npm run dev --workspace @showcase/ashfall-arena",
     "dev:atelier": "npm run dev --workspace @showcase/mech-atelier",

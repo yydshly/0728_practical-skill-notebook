@@ -1,0 +1,14 @@
+{
+  "name": "@showcase/hub",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4172 --strictPort",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@showcase/showcase-guide": "*",
+    "@showcase/ui-system": "*"
+  }
+}
