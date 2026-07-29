@@ -682,9 +682,47 @@ describe("final showcase text scan", () => {
       'const value="HTTPS%3A%2f/cdn.example.test/app.js"',
       "percent colon and mixed slashes",
     ],
+    [
+      String.raw`const value="https\:/\/cdn.example.test/app.js"`,
+      "identity-escaped colon and mixed slashes",
+    ],
+    [
+      String.raw`const value="ht\ttps://cdn.example.test/app.js"`,
+      "tab escape inside the scheme",
+    ],
+    [
+      String.raw`const value="ht\x09tps://cdn.example.test/app.js"`,
+      "hex tab escape inside the scheme",
+    ],
+    [
+      String.raw`const value="htt\u000aps://cdn.example.test/app.js"`,
+      "Unicode line-feed escape inside the scheme",
+    ],
+    [
+      String.raw`const value="http\rs://cdn.example.test/app.js"`,
+      "carriage-return escape inside the scheme",
+    ],
+    [
+      String.raw`const value="https:\\\\cdn.example.test/app.js"`,
+      "two runtime backslashes",
+    ],
+    [
+      String.raw`const value="https:\\\/cdn.example.test/app.js"`,
+      "runtime backslash and slash",
+    ],
   ])("rejects a remote URL with %s", async (content, _label) => {
     const root = await createScanTree();
     await addScanAsset(root, "monster-forge/assets/extra.js", content);
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
+  it("does not allow an escaped XHTML URL to enter the literal Three whitelist", async () => {
+    const root = await createScanTree();
+    await addScanAsset(
+      root,
+      "monster-forge/assets/extra.js",
+      String.raw`document.createElementNS("http\:/\/www.w3.org/1999/xhtml", "canvas")`,
+    );
     await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
   });
 
@@ -707,6 +745,11 @@ describe("final showcase text scan", () => {
     [
       '<a href="&sol;&sol;cdn.example.test/app.js">CDN</a>',
       "protocol-relative remote URL",
+      /remote URL/i,
+    ],
+    [
+      '<a href="&sol;&sol;showcase.invalid/app.js">CDN</a>',
+      "protocol-relative URL matching the parser sentinel host",
       /remote URL/i,
     ],
     [
@@ -739,6 +782,61 @@ describe("final showcase text scan", () => {
       "named root assets",
       /\/assets\//i,
     ],
+    [
+      '<a href="https&#9;://cdn.example.test/tab.js">CDN</a>',
+      "numeric tab in a remote scheme",
+      /remote URL/i,
+    ],
+    [
+      '<a href="https&Tab;://cdn.example.test/tab.js">CDN</a>',
+      "named tab in a remote scheme",
+      /remote URL/i,
+    ],
+    [
+      '<a href="htt&NewLine;ps://cdn.example.test/line.js">CDN</a>',
+      "named line feed in a remote scheme",
+      /remote URL/i,
+    ],
+    [
+      '<a href="https&#13;://cdn.example.test/cr.js">CDN</a>',
+      "numeric carriage return in a remote scheme",
+      /remote URL/i,
+    ],
+    [
+      '<a href="https:&#92;&#92;cdn.example.test/backslash.js">CDN</a>',
+      "special-scheme backslashes",
+      /remote URL/i,
+    ],
+    [
+      '<a href="https:/&#92;cdn.example.test/mixed.js">CDN</a>',
+      "special-scheme mixed slash and backslash",
+      /remote URL/i,
+    ],
+    [
+      '<a href="&#1; https://cdn.example.test/c0.js &#31;">CDN</a>',
+      "surrounding C0 controls and spaces",
+      /remote URL/i,
+    ],
+    [
+      '<form action="https&colon;&sol;&sol;cdn.example.test/submit"></form>',
+      "form action remote URL",
+      /remote URL/i,
+    ],
+    [
+      '<button formaction="https:&#92;&#92;cdn.example.test/submit">Go</button>',
+      "button formaction special-scheme URL",
+      /remote URL/i,
+    ],
+    [
+      '<video poster="&sol;&sol;cdn.example.test/poster.png"></video>',
+      "video poster protocol-relative URL",
+      /remote URL/i,
+    ],
+    [
+      '<img srcset="./local.png 1x, &sol;assets/evil.png 2x">',
+      "srcset root-assets candidate",
+      /\/assets\//i,
+    ],
   ])("rejects an HTML %s violation after attribute decoding", async (
     addition,
     _label,
@@ -748,6 +846,66 @@ describe("final showcase text scan", () => {
     const path = join(root, "monster-forge", "index.html");
     await writeFile(path, `${await readFile(path, "utf8")}${addition}`, "utf8");
     await expect(scanShowcaseText(root)).rejects.toThrow(expected);
+  });
+
+  it.each([
+    [
+      "srcset second entity-decoded remote candidate",
+      '<img srcset="./local.png 1x, https&#58;//cdn.example.test/remote.png 2x">',
+    ],
+    [
+      "srcset third remote candidate",
+      '<img srcset="./one.png 1x, ./two.png 2x, https://cdn.example.test/three.png 3x">',
+    ],
+    [
+      "srcset protocol-relative candidate",
+      '<img srcset="./local.png 1x, &sol;&sol;cdn.example.test/remote.png 2x">',
+    ],
+    [
+      "srcset control-normalized candidate",
+      '<img srcset="./local.png 1x, &#1;https&colon;&sol;&sol;cdn.example.test/remote.png&#31; 2x">',
+    ],
+    [
+      "srcset special-scheme backslash candidate",
+      '<img srcset="./one.png 1x, ./two.png 2x, https:&#92;&#92;cdn.example.test/three.png 3x">',
+    ],
+    [
+      "imagesrcset second remote candidate",
+      '<link rel="preload" imagesrcset="./local.png 1x, https&#58;//cdn.example.test/remote.png 2x">',
+    ],
+    [
+      "ping third remote URL",
+      '<a href="../" ping="./one ./two https&colon;&sol;&sol;cdn.example.test/three">Hub</a>',
+    ],
+  ])("rejects a remote URL in an HTML %s", async (_label, addition) => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    await writeFile(path, `${await readFile(path, "utf8")}${addition}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
+  it.each([
+    [
+      "local srcset candidates",
+      '<img srcset="./one.png 1x, ../two.png 2x, nested/three.png 3x">',
+    ],
+    [
+      "data and local srcset candidates",
+      '<img srcset="data:image/png;base64,AAAA 1x, ./local.png 2x">',
+    ],
+    [
+      "local imagesrcset candidates",
+      '<link rel="preload" imagesrcset="./one.png 1x, ../two.png 2x">',
+    ],
+    [
+      "local ping URLs",
+      '<a href="../" ping="./one ../two">Hub</a>',
+    ],
+  ])("accepts HTML %s", async (_label, addition) => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    await writeFile(path, `${await readFile(path, "utf8")}${addition}`, "utf8");
+    await expect(scanShowcaseText(root)).resolves.toBeUndefined();
   });
 
   it("requires ./assets/ in a real href or src attribute", async () => {
@@ -768,6 +926,8 @@ describe("final showcase text scan", () => {
     const root = await createScanTree();
     const path = join(root, "monster-forge", "index.html");
     const inert = [
+      '<!doctype fake SYSTEM "https&colon;&sol;&sol;cdn.example/">',
+      '<?fake href="https&colon;&sol;&sol;cdn.example/"?>',
       '<!-- <a href="https&colon;&sol;&sol;cdn.example/" target="&lowbar;blank"> -->',
       "<script>const fake='src=&quot;&sol;assets/fake.js&quot;';</script>",
       "<style>.fake{content:'https&colon;&sol;&sol;cdn.example/'}</style>",

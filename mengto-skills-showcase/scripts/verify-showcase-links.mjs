@@ -3,8 +3,18 @@ import { extname, join, relative } from "node:path";
 
 const textExtensions = new Set([".html", ".js", ".css", ".json", ".map"]);
 const forbiddenLoopback = /127\.0\.0\.1|localhost|\[::1\]/gi;
-const remoteStart =
-  /https?(?::|\\x3a|\\u003a|\\u\{0*3a\}|%3a)(?:\/|\\\/|\\x2f|\\u002f|\\u\{0*2f\}|%2f){2}/gi;
+const jsUrlControl =
+  String.raw`(?:[\t\n\r]|\\[tnr]|\\x0(?:9|a|d)|\\u000(?:9|a|d)|\\u\{0*(?:9|a|d)\})*`;
+const jsUrlColon =
+  String.raw`(?::|\\:|\\x3a|\\u003a|\\u\{0*3a\}|%3a)`;
+const jsUrlSlash =
+  String.raw`(?:\/|\\\/|\\x2f|\\u002f|\\u\{0*2f\}|%2f|\\\\|\\x5c|\\u005c|\\u\{0*5c\})`;
+const remoteStart = new RegExp(
+  `h${jsUrlControl}t${jsUrlControl}t${jsUrlControl}`
+    + `p${jsUrlControl}s?${jsUrlControl}${jsUrlColon}`
+    + `${jsUrlSlash}${jsUrlSlash}`,
+  "gi",
+);
 const hubThreeToken = /(?:^|[^a-z0-9])three(?:\.module)?(?:[^a-z0-9]|$)/i;
 const ASCII_WHITESPACE = /[\t\n\f\r ]/;
 const htmlUrlAttributes = new Set([
@@ -12,10 +22,13 @@ const htmlUrlAttributes = new Set([
   "data",
   "formaction",
   "href",
+  "imagesrcset",
+  "ping",
   "poster",
   "src",
   "srcset",
 ]);
+const htmlSrcsetAttributes = new Set(["imagesrcset", "srcset"]);
 const htmlEntryAssetAttributes = new Set(["href", "src"]);
 const productDirectories = new Set([
   "monster-forge",
@@ -224,7 +237,7 @@ function htmlStartTagAttributes(html) {
 
 function decodeHtmlAttribute(value) {
   return value.replace(
-    /&(?:#([0-9]+);?|#x([0-9a-f]+);?|(colon|sol|lowbar|amp);)/gi,
+    /&(?:#([0-9]+);?|#x([0-9a-f]+);?|(colon|sol|lowbar|amp|tab|newline);)/gi,
     (reference, decimal, hexadecimal, named) => {
       if (decimal || hexadecimal) {
         const codePoint = Number.parseInt(
@@ -243,10 +256,79 @@ function decodeHtmlAttribute(value) {
         amp: "&",
         colon: ":",
         lowbar: "_",
+        newline: "\n",
         sol: "/",
+        tab: "\t",
       }[named.toLowerCase()];
     },
   );
+}
+
+const htmlUrlBase = new URL("https://showcase.invalid/__showcase_base__/");
+
+function normalizeHtmlUrlValue(value) {
+  return value
+    .replace(/[\t\n\r]/g, "")
+    .replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, "");
+}
+
+function srcsetCandidates(value) {
+  const candidates = [];
+  let index = 0;
+  while (index < value.length) {
+    while (
+      index < value.length
+      && (ASCII_WHITESPACE.test(value[index]) || value[index] === ",")
+    ) index += 1;
+    if (index >= value.length) break;
+    const start = index;
+    const isDataUrl = value.slice(index, index + 5).toLowerCase() === "data:";
+    while (
+      index < value.length
+      && !ASCII_WHITESPACE.test(value[index])
+      && (isDataUrl || value[index] !== ",")
+    ) index += 1;
+    let candidate = value.slice(start, index);
+    if (!isDataUrl) candidate = candidate.replace(/,+$/, "");
+    if (candidate) candidates.push(candidate);
+    while (index < value.length && value[index] !== ",") index += 1;
+    if (value[index] === ",") index += 1;
+  }
+  return candidates;
+}
+
+function htmlAttributeUrls(name, value) {
+  if (htmlSrcsetAttributes.has(name)) return srcsetCandidates(value);
+  if (name === "ping") return value.split(ASCII_WHITESPACE).filter(Boolean);
+  return [value];
+}
+
+function urlAttributeFailures(value) {
+  const failures = [];
+  const url = normalizeHtmlUrlValue(value);
+  if (!url) return failures;
+  let parsed;
+  try {
+    parsed = new URL(url, htmlUrlBase);
+  } catch {
+    return failures;
+  }
+  const isHttp = parsed.protocol === "http:" || parsed.protocol === "https:";
+  const isNetworkPath = /^(?:\/|\\){2}/.test(url);
+  if (
+    isHttp
+    && (
+      /^https?:/i.test(url)
+      || isNetworkPath
+      || parsed.origin !== htmlUrlBase.origin
+    )
+  ) {
+    failures.push(`forbidden remote URL ${url}`);
+  }
+  if (parsed.origin === htmlUrlBase.origin && parsed.pathname.startsWith("/assets/")) {
+    failures.push("uses forbidden /assets/");
+  }
+  return failures;
 }
 
 function htmlAttributeFailures(attributes) {
@@ -257,12 +339,8 @@ function htmlAttributeFailures(attributes) {
       failures.push("target=_blank");
     }
     if (!htmlUrlAttributes.has(name)) continue;
-    const url = decoded.trimStart();
-    if (/^(?:https?:)?\/\//i.test(url)) {
-      failures.push(`forbidden remote URL ${url}`);
-    }
-    if (url.toLowerCase().startsWith("/assets/")) {
-      failures.push("uses forbidden /assets/");
+    for (const url of htmlAttributeUrls(name, decoded)) {
+      failures.push(...urlAttributeFailures(url));
     }
   }
   return failures;
@@ -352,7 +430,7 @@ export async function scanShowcaseText(root) {
     } else {
       const entryAsset = htmlStartTagAttributes(indexText).some(({ name, value }) =>
         htmlEntryAssetAttributes.has(name)
-        && decodeHtmlAttribute(value).trimStart().startsWith("./assets/"));
+        && normalizeHtmlUrlValue(decodeHtmlAttribute(value)).startsWith("./assets/"));
       if (!entryAsset) {
         failures.push(`${directory} index is missing ./assets/`);
       }
