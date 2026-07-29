@@ -64,16 +64,38 @@ export function renderHotspots(
   function updateButton(
     button: HTMLButtonElement,
     projection: HotspotProjection,
+    layerWidth: number,
+    layerHeight: number,
   ): void {
     button.dataset.hotspotVisibility = projection.hiddenReason;
     button.hidden = !projection.visible;
-    button.style.transform = `translate3d(${projection.x.toFixed(2)}px, ${projection.y.toFixed(2)}px, 0)`;
+    if (!projection.visible) return;
+    const halfWidth = button.offsetWidth / 2;
+    const halfHeight = button.offsetHeight / 2;
+    const x = Math.min(
+      Math.max(projection.x, halfWidth),
+      Math.max(halfWidth, layerWidth - halfWidth),
+    );
+    const y = Math.min(
+      Math.max(projection.y, halfHeight),
+      Math.max(halfHeight, layerHeight - halfHeight),
+    );
+    button.style.transform =
+      `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) ` +
+      "translate(-50%, -50%)";
   }
 
   const update = (): void => {
     if (disposed) return;
+    const layerWidth = container.clientWidth;
+    const layerHeight = container.clientHeight;
     for (const [slot, button] of buttons) {
-      updateButton(button, scene.projectHotspot(slot));
+      updateButton(
+        button,
+        scene.projectHotspot(slot),
+        layerWidth,
+        layerHeight,
+      );
     }
   };
   const unsubscribe = scene.onFrame(update);

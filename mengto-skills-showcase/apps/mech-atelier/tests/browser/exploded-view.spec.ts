@@ -93,6 +93,83 @@ test("热点跟随拖拽并把焦点送到对应配置组首个可用选项", as
   }
 });
 
+test("真实旋转会隐藏被机体遮挡的装甲热点，同时保留可见背部热点", async ({
+  cleanPage: page,
+}) => {
+  await page.goto("/?reviewControls=1");
+  const canvas = page.locator("[data-product-canvas]");
+  const armor = page.locator('[data-part-hotspot="armor"]');
+  const rear = page.locator('[data-part-hotspot="rearModule"]');
+
+  await expect(armor).toBeVisible();
+  await dragCanvas(page, canvas, -330, 0);
+  await expect(rear).toBeVisible();
+  await expect(armor).toBeHidden();
+});
+
+test("真实缩放旋转到舞台边缘时每个可见热点仍完整可触达", async ({
+  cleanPage: page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await page.goto("/?reviewControls=1");
+  await page.getByRole("button", { name: "分解视图" }).click();
+  await expect
+    .poll(async () => (await sceneSnapshot(page)).exploded.progress)
+    .toBe(1);
+
+  const canvas = page.locator("[data-product-canvas]");
+  await canvas.hover();
+  await page.mouse.wheel(0, -420);
+  await dragCanvas(page, canvas, 92, 56);
+  await page.mouse.wheel(0, -320);
+
+  const measurement = await page.locator("[data-part-hotspots]").evaluate(
+    (layer) => {
+      const layerRect = layer.getBoundingClientRect();
+      const visible = [...layer.querySelectorAll<HTMLButtonElement>(
+        "button:not([hidden])",
+      )].map((button) => {
+        const rect = button.getBoundingClientRect();
+        return {
+          label: button.getAttribute("aria-label"),
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+        };
+      });
+      const gaps = visible.flatMap((rect) => [
+        rect.left - layerRect.left,
+        rect.top - layerRect.top,
+        layerRect.right - rect.right,
+        layerRect.bottom - rect.bottom,
+      ]);
+      return {
+        layer: {
+          left: layerRect.left,
+          top: layerRect.top,
+          right: layerRect.right,
+          bottom: layerRect.bottom,
+        },
+        visible,
+        nearestEdgeGap: Math.min(...gaps),
+      };
+    },
+  );
+
+  expect(measurement.visible.length).toBeGreaterThan(0);
+  expect(
+    measurement.visible.filter(
+      (rect) =>
+        rect.left < measurement.layer.left - 0.5 ||
+        rect.top < measurement.layer.top - 0.5 ||
+        rect.right > measurement.layer.right + 0.5 ||
+        rect.bottom > measurement.layer.bottom + 0.5,
+    ),
+  ).toEqual([]);
+  expect(measurement.nearestEdgeGap).toBeLessThan(18);
+});
+
 test("reduced motion 即时切换，分解中换件并重复五十次仍无漂移", async ({
   cleanPage: page,
 }) => {
@@ -147,4 +224,20 @@ async function sceneSnapshot(page: Page): Promise<SceneSnapshot> {
     if (!debug) throw new Error("Mech debug controls are missing");
     return debug.snapshot();
   });
+}
+
+async function dragCanvas(
+  page: Page,
+  canvas: ReturnType<Page["locator"]>,
+  deltaX: number,
+  deltaY: number,
+): Promise<void> {
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Product canvas has no bounding box");
+  const startX = box.x + box.width / 2 - deltaX / 2;
+  const startY = box.y + box.height / 2 - deltaY / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + deltaX, startY + deltaY, { steps: 8 });
+  await page.mouse.up();
 }

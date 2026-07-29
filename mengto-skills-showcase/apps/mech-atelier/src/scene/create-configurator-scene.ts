@@ -17,6 +17,7 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   PointLight,
+  Raycaster,
   Scene,
   SRGBColorSpace,
   TorusGeometry,
@@ -66,7 +67,12 @@ export interface HotspotProjection {
   readonly x: number;
   readonly y: number;
   readonly visible: boolean;
-  readonly hiddenReason: "visible" | "behind-camera" | "offscreen" | "invalid";
+  readonly hiddenReason:
+    | "visible"
+    | "behind-camera"
+    | "offscreen"
+    | "occluded"
+    | "invalid";
 }
 
 export interface ProductCapture {
@@ -196,6 +202,9 @@ export function createConfiguratorScene(
   const hotspotWorld = new Vector3();
   const hotspotView = new Vector3();
   const hotspotNdc = new Vector3();
+  const hotspotDirection = new Vector3();
+  const hotspotRaycaster = new Raycaster();
+  const hotspotIntersections: ReturnType<Raycaster["intersectObject"]> = [];
 
   const ids = new WeakMap<object, number>();
   let nextId = 1;
@@ -442,14 +451,42 @@ export function createConfiguratorScene(
         hotspotNdc.y > 1 ||
         hotspotNdc.z < -1 ||
         hotspotNdc.z > 1;
+      let occluded = false;
+      if (!behindCamera && !offscreen) {
+        const targetPart = assembly.parts.get(slot);
+        const hotspotDistance = hotspotDirection
+          .copy(hotspotWorld)
+          .sub(camera.position)
+          .length();
+        if (targetPart && hotspotDistance > 0.001) {
+          hotspotRaycaster.set(
+            camera.position,
+            hotspotDirection.multiplyScalar(1 / hotspotDistance),
+          );
+          hotspotRaycaster.near = 0;
+          hotspotRaycaster.far = hotspotDistance + 0.08;
+          hotspotIntersections.length = 0;
+          hotspotRaycaster.intersectObject(
+            assembly.root,
+            true,
+            hotspotIntersections,
+          );
+          const nearest = hotspotIntersections[0];
+          occluded =
+            nearest !== undefined &&
+            !isDescendantOf(nearest.object, targetPart);
+        }
+      }
       return {
         x: MathUtils.clamp(x, 0, renderWidth),
         y: MathUtils.clamp(y, 0, renderHeight),
-        visible: !behindCamera && !offscreen,
+        visible: !behindCamera && !offscreen && !occluded,
         hiddenReason: behindCamera
           ? "behind-camera"
           : offscreen
             ? "offscreen"
+            : occluded
+              ? "occluded"
             : "visible",
       };
     },
@@ -630,6 +667,15 @@ export function createConfiguratorScene(
 function pointerSpan(pointers: ReadonlyMap<number, Vector2>): number {
   const [first, second] = [...pointers.values()];
   return first && second ? first.distanceTo(second) : 0;
+}
+
+function isDescendantOf(object: Object3D, root: Object3D): boolean {
+  let current: Object3D | null = object;
+  while (current) {
+    if (current === root) return true;
+    current = current.parent;
+  }
+  return false;
 }
 
 function toVisualConfiguration(
