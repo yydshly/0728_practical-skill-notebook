@@ -30,6 +30,7 @@ export function installReviewApi<Diagnostics>(
     readState(): Readonly<GameState>;
     commit(result: StepGameResult): void;
     readDiagnostics(): Diagnostics;
+    assertMutationAllowed?(): void;
   },
 ): { dispose(): void } {
   let sequence = 0;
@@ -46,6 +47,7 @@ export function installReviewApi<Diagnostics>(
 
   const api: AshfallReviewApi<Diagnostics> = {
     triggerPlayerHit() {
+      dependencies.assertMutationAllowed?.();
       const state = dependencies.readState();
       if (state.status !== "playing" || state.paused) return;
       const attackerId =
@@ -69,6 +71,7 @@ export function installReviewApi<Diagnostics>(
       );
     },
     setPlayerHealth(value) {
+      dependencies.assertMutationAllowed?.();
       const state = dependencies.readState();
       if (
         state.status !== "playing" ||
@@ -103,6 +106,7 @@ export function installReviewApi<Diagnostics>(
       );
     },
     defeatEnemy(id) {
+      dependencies.assertMutationAllowed?.();
       const state = dependencies.readState();
       const enemy = state.enemies[id];
       if (!enemy) throw new Error(`Unknown enemy: ${id}`);

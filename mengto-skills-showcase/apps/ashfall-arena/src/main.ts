@@ -1254,6 +1254,7 @@ const getPerformanceSnapshot = (
 };
 
 const reviewApi = installReviewApi(reviewControls, {
+  assertMutationAllowed: assertGuideGateClosed,
   readState: () => state,
   commit(result) {
     assertGuideGateClosed();

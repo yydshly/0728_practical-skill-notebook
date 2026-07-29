@@ -457,29 +457,69 @@ test("direct diagnostics mutators reject while the guide is open without changin
   expect(result.after).toEqual(result.before);
 });
 
-test("window review commits reject while the guide is open without changing state", async ({
-  page,
-}) => {
-  await page.goto("/?fixture=wave-one&reviewControls=1&guideReview=1");
-  const result = await page.evaluate(() => {
-    const diagnostics = window.__ashfallDiagnostics!;
-    const before = diagnostics.getSerializableState();
-    let outcome = "resolved";
-    try {
-      window.__review!.setPlayerHealth(before.player.health - 1);
-    } catch (error) {
-      outcome = error instanceof Error ? error.message : String(error);
-    }
-    return {
-      before,
-      after: diagnostics.getSerializableState(),
-      outcome,
-    };
-  });
+for (const legalMutation of ["triggerPlayerHit", "setPlayerHealth"] as const) {
+  test(`window review writes reject before ${legalMutation} consumes its first attack id`, async ({
+    page,
+  }) => {
+    await page.goto("/?fixture=wave-one&reviewControls=1&guideReview=1");
+    const blocked = await page.evaluate(() => {
+      const diagnostics = window.__ashfallDiagnostics!;
+      const review = window.__review!;
+      const before = diagnostics.getSerializableState();
+      const enemyId = Object.values(before.enemies).find(
+        ({ health }) => health > 0,
+      )!.id;
+      const calls = [
+        () => review.triggerPlayerHit(),
+        () => review.setPlayerHealth(before.player.health - 1),
+        () => review.defeatEnemy(enemyId),
+      ];
+      const outcomes = calls.map((call) => {
+        try {
+          call();
+          return "resolved";
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        }
+      });
+      return {
+        before,
+        after: diagnostics.getSerializableState(),
+        outcomes,
+      };
+    });
 
-  expect(result.outcome).toBe("guide gate is open");
-  expect(result.after).toEqual(result.before);
-});
+    expect(blocked.outcomes).toEqual([
+      "guide gate is open",
+      "guide gate is open",
+      "guide gate is open",
+    ]);
+    expect(blocked.after).toEqual(blocked.before);
+
+    await page.getByRole("button", { name: "关闭说明" }).click();
+    const receivedAttackIds = await page.evaluate((mutation) => {
+      const diagnostics = window.__ashfallDiagnostics!;
+      const review = window.__review!;
+      const before = diagnostics.getSerializableState();
+      if (mutation === "triggerPlayerHit") {
+        review.triggerPlayerHit();
+      } else {
+        review.setPlayerHealth(before.player.health - 1);
+      }
+      return diagnostics
+        .getSerializableState()
+        .combat.receivedAttackIds.slice(
+          before.combat.receivedAttackIds.length,
+        );
+    }, legalMutation);
+
+    expect(receivedAttackIds).toEqual([
+      legalMutation === "triggerPlayerHit"
+        ? "review:player-hit:1"
+        : "review:set-health:1",
+    ]);
+  });
+}
 
 test("a blocked localStorage getter keeps Ashfall onboarding usable", async ({
   page,

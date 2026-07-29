@@ -27,9 +27,9 @@
 
 | 门槛 | 结果 |
 | --- | --- |
-| Ashfall onboarding 聚焦矩阵 | RED：`21` 项中 `15` 通过、`6` 按预期失败；GREEN：`21/21` 通过（`27.3s`） |
-| Ashfall 单元测试 | `16` 个文件，`312/312` 通过（`1.11s`） |
-| Ashfall 开发服务浏览器全套 | 严格串行启动两个独立 Playwright 进程：普通功能矩阵 `62/62`（`2.7m`），独占性能矩阵 `5/5`（`30.2s`），合计 `67/67` |
+| Ashfall onboarding 聚焦矩阵 | 初始 Task 9 RED：`21` 项中 `15` 通过、`6` 按预期失败；审查修复 RED：sequence 用例 `2/2` 按预期以 `:4` 失败；最终 GREEN：`22/22` 通过（`26.9s`） |
+| Ashfall 单元测试 | `16` 个文件，`312/312` 通过（`1.09s`） |
+| Ashfall 开发服务浏览器全套 | 严格串行启动两个独立 Playwright 进程：普通功能矩阵 `63/63`（`2.5m`），独占性能矩阵 `5/5`（`24.2s`），合计 `68/68` |
 | 根工作区测试 | 前序历史证据，本轮未重跑：`37` 个文件，`450/450` 通过 |
 | Ashfall 生产预览 | 先重新构建并检查包体预算，再以 `dist` 运行；`1/1` 通过 |
 | Skill 安装器回归 | 前序历史证据，本轮未重跑：`4/4` 通过 |
@@ -47,6 +47,7 @@ npm test --workspace @showcase/ashfall-arena
 
 cd apps/ashfall-arena
 $env:ASHFALL_PLAYWRIGHT_PORT='4194'
+npx playwright test --config playwright.config.ts onboarding-guide.spec.ts --grep "window review writes"
 npx playwright test --config playwright.config.ts onboarding-guide.spec.ts
 npx playwright test --config playwright.config.ts
 $env:ASHFALL_PERFORMANCE_PORT='4195'
@@ -59,16 +60,16 @@ git diff --check
 git status --porcelain=v1
 ```
 
-Playwright 的服务配置使用 `--strictPort` 且不复用已有服务。普通浏览器矩阵和 `release-performance.spec.ts` 严格串行运行，各自创建新的浏览器与 Vite 服务；本轮成功运行使用 `4194` 和 `4195`，测试完成后服务退出。这样性能采样不承受前 `62` 项在长期浏览器/GPU 进程中的累积影响，所有既有性能阈值和超时保持不变。
+Playwright 的服务配置使用 `--strictPort` 且不复用已有服务。普通浏览器矩阵和 `release-performance.spec.ts` 严格串行运行，各自创建新的浏览器与 Vite 服务；本轮成功运行使用 `4194` 和 `4195`，测试完成后服务退出。这样性能采样不承受前 `63` 项在长期浏览器/GPU 进程中的累积影响，所有既有性能阈值和超时保持不变。
 
 ## Task 9 导览状态与生命周期证据
 
 - pause、upgrade、defeated、complete 四种既有 modal 均与产品导览排他：请求导览时页面始终只有一个打开的 dialog；恢复战斗、选择真实升级、从检查点重试或确认新开一局后，导览分别可手动打开或完成 pending 自动重试。
 - 连续 `5` 次关闭/重开导览后，深拷贝的可序列化 `GameState`、`ashfall-arena:v1` 原始保存字符串、listener registration 数均与之前完全相同；`.showcase-guide-dialog` 与 `.showcase-guide-trigger` 始终各只有 `1` 个。
-- `guideGateOpen` 为 true 时，`advanceInput`、`triggerCameraShake`、`queueEnemyMove`、`drivePlayerDodge`、`drivePlayerStrike`、`drivePlayerDefeat`、`retryLatestCheckpoint` 以及 `window.__review` 的 commit 路径都以 `guide gate is open` 拒绝；拒绝前后权威状态完全相同。只读 snapshot、`getSerializableState`、`resetPerformanceSamples` 和测试设置所需的 `setManualReviewClock` 保持可用。
+- `guideGateOpen` 为 true 时，`advanceInput`、`triggerCameraShake`、`queueEnemyMove`、`drivePlayerDodge`、`drivePlayerStrike`、`drivePlayerDefeat`、`retryLatestCheckpoint` 以及 `window.__review` 的三个写入口都以 `guide gate is open` 拒绝；拒绝发生在读取状态、分配 attack ID 或任何副作用之前，权威状态保持不变，关闭导览后的首次合法 player-hit / set-health ID 仍分别以 `review:player-hit:1` / `review:set-health:1` 开始。只读 snapshot、`getSerializableState`、`resetPerformanceSamples` 和测试设置所需的 `setManualReviewClock` 保持可用。
 - localStorage getter 抛出 `SecurityError` 时，导览仍能自动打开、关闭并手动重开；返回能力展厅保持没有 `target` 的普通同标签页链接，并保留 `#product-ashfall-arena` 锚点。
 - WebGL fallback 在禁用旧游戏控件后创建独立导览；导览按钮、复选框和返回链接可用，而模拟、输入采样、RAF、音频上下文和表现时钟均未启动。诊断固定报告 information-fallback、`guideGateOpen=false`、`inputSampleCount=0`、`contextState=not-created`。
-- live 与 fallback 的 pagehide 都先销毁各自导览，再清理其余拥有的资源；disposal snapshot 报告 `disposed=true`、`guideGateOpen=false`、`recoveryFrames=0`，诊断 API 和导览 DOM 均已移除。销毁没有调用普通 close 恢复分支。
+- live pagehide 的实际顺序是设置 disposed、取消 RAF，再依次销毁 input、audio、guide；fallback pagehide 则先销毁其独立 guide，再清理其余拥有的资源。两者的 disposal snapshot 都报告 `disposed=true`、`guideGateOpen=false`、`recoveryFrames=0`，诊断 API 和导览 DOM 均已移除，且都没有调用普通 close 恢复分支。
 - Task 8 的音频 trigger/gameplay 键矩阵由本轮完整功能浏览器套件继续覆盖：导览按钮、Escape 关闭和导航键保持音频中性；关闭后的真实 W/J、画布 Space 与 pointer 游戏手势仍可按既有契约解锁，重复游戏手势不重复创建 AudioContext。
 - 这些字段只存在于运行时 review diagnostics；本轮没有改变 `GameState`、保存 schema、`state.paused` 或 `stepGame()` 语义。
 
@@ -146,11 +147,11 @@ Ashfall 使用真实代码分包，没有通过提高 Vite warning limit 隐藏�
 | --- | ---: | ---: |
 | `three-runtime-BF9wd6mB.js` | `335.79 KiB` | `80.94 KiB` |
 | `three-runtime-C-7BDurz.js` | `178.40 KiB` | `47.95 KiB` |
-| `index-DOnlx8nw.js` | `127.14 KiB` | `39.75 KiB` |
+| `index-DPmEmFta.js` | `127.24 KiB` | `39.79 KiB` |
 | `game-assets-DS5U0l33.js` | `16.46 KiB` | `6.13 KiB` |
 | `index-CKHNb0m9.css` | `14.54 KiB` | `3.91 KiB` |
 
-- JavaScript gzip 合计：`174.77 KiB / 190.00 KiB`
+- JavaScript gzip 合计：`174.81 KiB / 190.00 KiB`
 - CSS gzip 合计：`3.91 KiB / 8.00 KiB`
 - 每个 Ashfall JavaScript 分包均小于 `500 KiB`，构建没有 Ashfall 大 chunk 警告。
 
@@ -210,7 +211,7 @@ $task9Commit = git log --format=%H --grep="^test: close Ashfall onboarding state
 git revert $task9Commit
 ```
 
-不要使用 `git reset --hard`。证据文档提交与产品候选分离；若只需撤销文档，应只 revert 对应的 evidence-only 提交。
+不要使用 `git reset --hard`。本 Task 9 验证文档与对应产品代码属于同一提交，不是分离的 evidence-only 提交；回滚时应按精确 Task 9 提交整体执行可审计的 revert。
 
 ## 非目标与遗留限制
 
