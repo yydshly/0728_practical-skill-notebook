@@ -651,6 +651,147 @@ describe("final showcase text scan", () => {
   });
 
   it.each([
+    [String.raw`const value="https:\x2f\x2fcdn.example.test/app.js"`, "hex slashes"],
+    [
+      String.raw`const value="https:\u{2f}\u{2F}cdn.example.test/app.js"`,
+      "code-point Unicode slashes",
+    ],
+    ['const value="https:%2f%2Fcdn.example.test/app.js"', "percent slashes"],
+    [
+      String.raw`const value="https:/\x2Fcdn.example.test/app.js"`,
+      "literal and hex slashes",
+    ],
+    [
+      String.raw`const value="https:\/\u002Fcdn.example.test/app.js"`,
+      "escaped and Unicode slashes",
+    ],
+    [
+      String.raw`const value="https:\u{2f}%2Fcdn.example.test/app.js"`,
+      "Unicode and percent slashes",
+    ],
+    [String.raw`const value="https\x3a//cdn.example.test/app.js"`, "hex colon"],
+    [
+      String.raw`const value="https\u003A/\x2fcdn.example.test/app.js"`,
+      "Unicode colon and mixed slashes",
+    ],
+    [
+      String.raw`const value="https\u{3a}\/%2fcdn.example.test/app.js"`,
+      "code-point Unicode colon and mixed slashes",
+    ],
+    [
+      'const value="HTTPS%3A%2f/cdn.example.test/app.js"',
+      "percent colon and mixed slashes",
+    ],
+  ])("rejects a remote URL with %s", async (content, _label) => {
+    const root = await createScanTree();
+    await addScanAsset(root, "monster-forge/assets/extra.js", content);
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
+  it.each([
+    [
+      '<link rel="stylesheet" href="https&#58;//cdn.example.test/app.css">',
+      "decimal remote colon",
+      /remote URL/i,
+    ],
+    [
+      '<script src="https&#x3a;&sol;&sol;cdn.example.test/app.js"></script>',
+      "hex and named remote delimiters",
+      /remote URL/i,
+    ],
+    [
+      '<a href="https&colon;&#47;&#x2f;cdn.example.test/">CDN</a>',
+      "named and numeric mixed remote delimiters",
+      /remote URL/i,
+    ],
+    [
+      '<a href="&sol;&sol;cdn.example.test/app.js">CDN</a>',
+      "protocol-relative remote URL",
+      /remote URL/i,
+    ],
+    [
+      '<a href="../" target="_bl&#97;nk">Hub</a>',
+      "decimal target blank",
+      /target=_blank/i,
+    ],
+    [
+      '<a href="../" target="_bl&#x61;nk">Hub</a>',
+      "hex target blank",
+      /target=_blank/i,
+    ],
+    [
+      '<a href="../" target="&lowbar;blank">Hub</a>',
+      "named target blank",
+      /target=_blank/i,
+    ],
+    [
+      '<script src="&#47;assets/evil.js"></script>',
+      "decimal root assets",
+      /\/assets\//i,
+    ],
+    [
+      '<link rel="stylesheet" href="&#x2f;assets/evil.css">',
+      "hex root assets",
+      /\/assets\//i,
+    ],
+    [
+      '<script src="&sol;assets/evil.js"></script>',
+      "named root assets",
+      /\/assets\//i,
+    ],
+  ])("rejects an HTML %s violation after attribute decoding", async (
+    addition,
+    _label,
+    expected,
+  ) => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    await writeFile(path, `${await readFile(path, "utf8")}${addition}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(expected);
+  });
+
+  it("requires ./assets/ in a real href or src attribute", async () => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    await writeFile(
+      path,
+      validIndex("monster-forge").replace(
+        '<script type="module" src="./assets/index.js"></script>',
+        "<main>Documentation: ./assets/index.js</main>",
+      ),
+      "utf8",
+    );
+    await expect(scanShowcaseText(root)).rejects.toThrow("./assets/");
+  });
+
+  it("ignores character references outside real start-tag attributes", async () => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    const inert = [
+      '<!-- <a href="https&colon;&sol;&sol;cdn.example/" target="&lowbar;blank"> -->',
+      "<script>const fake='src=&quot;&sol;assets/fake.js&quot;';</script>",
+      "<style>.fake{content:'https&colon;&sol;&sol;cdn.example/'}</style>",
+      "<p>https&colon;&sol;&sol;cdn.example/ &lowbar;blank &sol;assets/fake.js</p>",
+    ].join("");
+    await writeFile(path, `${await readFile(path, "utf8")}${inert}`, "utf8");
+    await expect(scanShowcaseText(root)).resolves.toBeUndefined();
+  });
+
+  it("preserves an ampersand character reference in a local navigation query", async () => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    await writeFile(
+      path,
+      validIndex("monster-forge").replace(
+        `href="../#product-monster-forge"`,
+        `href="../?mode=review&amp;source=hub#product-monster-forge"`,
+      ),
+      "utf8",
+    );
+    await expect(scanShowcaseText(root)).resolves.toBeUndefined();
+  });
+
+  it.each([
     ["quoted target blank", '<a href="../" target="_blank">Hub</a>'],
     ["self-closing target blank", '<a href="../" target=_blank/>'],
   ])("rejects an HTML %s violation for that reason", async (_label, addition) => {

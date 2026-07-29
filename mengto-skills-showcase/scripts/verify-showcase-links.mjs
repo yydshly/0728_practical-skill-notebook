@@ -3,8 +3,20 @@ import { extname, join, relative } from "node:path";
 
 const textExtensions = new Set([".html", ".js", ".css", ".json", ".map"]);
 const forbiddenLoopback = /127\.0\.0\.1|localhost|\[::1\]/gi;
-const remoteStart = /https?:\/\/|https?:\\\/\\\/|https?:\\u002f\\u002f|https?%3a%2f%2f/gi;
+const remoteStart =
+  /https?(?::|\\x3a|\\u003a|\\u\{0*3a\}|%3a)(?:\/|\\\/|\\x2f|\\u002f|\\u\{0*2f\}|%2f){2}/gi;
 const hubThreeToken = /(?:^|[^a-z0-9])three(?:\.module)?(?:[^a-z0-9]|$)/i;
+const ASCII_WHITESPACE = /[\t\n\f\r ]/;
+const htmlUrlAttributes = new Set([
+  "action",
+  "data",
+  "formaction",
+  "href",
+  "poster",
+  "src",
+  "srcset",
+]);
+const htmlEntryAssetAttributes = new Set(["href", "src"]);
 const productDirectories = new Set([
   "monster-forge",
   "ashfall-arena",
@@ -78,6 +90,184 @@ function remoteFailures(text, relativePath) {
   return failures;
 }
 
+function readHtmlTag(html, start) {
+  let quote;
+  for (let index = start + 1; index < html.length; index += 1) {
+    const character = html[index];
+    if (quote) {
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      continue;
+    }
+    if (character === ">") {
+      return { source: html.slice(start + 1, index), end: index + 1 };
+    }
+  }
+  return { source: html.slice(start + 1), end: html.length };
+}
+
+function parseHtmlStartTag(source) {
+  let index = 0;
+  while (ASCII_WHITESPACE.test(source[index] ?? "")) index += 1;
+  const nameStart = index;
+  while (
+    index < source.length
+    && !ASCII_WHITESPACE.test(source[index])
+    && source[index] !== "/"
+  ) index += 1;
+  const tagName = source.slice(nameStart, index).toLowerCase();
+  const attributes = [];
+  while (index < source.length) {
+    while (ASCII_WHITESPACE.test(source[index] ?? "")) index += 1;
+    if (source[index] === "/" || index >= source.length) break;
+    const attributeStart = index;
+    while (
+      index < source.length
+      && !ASCII_WHITESPACE.test(source[index])
+      && !["=", "/"].includes(source[index])
+    ) index += 1;
+    const name = source.slice(attributeStart, index).toLowerCase();
+    if (!name) {
+      index += 1;
+      continue;
+    }
+    while (ASCII_WHITESPACE.test(source[index] ?? "")) index += 1;
+    let value = "";
+    if (source[index] === "=") {
+      index += 1;
+      while (ASCII_WHITESPACE.test(source[index] ?? "")) index += 1;
+      const quote = source[index];
+      if (quote === "'" || quote === '"') {
+        index += 1;
+        const valueStart = index;
+        while (index < source.length && source[index] !== quote) index += 1;
+        value = source.slice(valueStart, index);
+        if (source[index] === quote) index += 1;
+      } else {
+        const valueStart = index;
+        while (
+          index < source.length
+          && !ASCII_WHITESPACE.test(source[index])
+        ) index += 1;
+        value = source.slice(valueStart, index);
+        if (value.endsWith("/")) value = value.slice(0, -1);
+      }
+    }
+    attributes.push({ name, value });
+  }
+  return { tagName, attributes };
+}
+
+function hasAsciiTagNameAt(html, start, tagName) {
+  for (let offset = 0; offset < tagName.length; offset += 1) {
+    const character = html.charCodeAt(start + offset);
+    const lowercase = tagName.charCodeAt(offset);
+    if (character !== lowercase && character !== lowercase - 32) return false;
+  }
+  return true;
+}
+
+function findRawTextCloseStart(html, tagName, start) {
+  let closeStart = html.indexOf("<", start);
+  while (closeStart >= 0) {
+    const nameStart = closeStart + 2;
+    const following = html[nameStart + tagName.length];
+    if (
+      html[closeStart + 1] === "/"
+      && hasAsciiTagNameAt(html, nameStart, tagName)
+      && (
+        ASCII_WHITESPACE.test(following ?? "")
+        || following === "/"
+        || following === ">"
+      )
+    ) return closeStart;
+    closeStart = html.indexOf("<", closeStart + 1);
+  }
+  return -1;
+}
+
+function htmlStartTagAttributes(html) {
+  const attributes = [];
+  let index = 0;
+  while (index < html.length) {
+    const tagStart = html.indexOf("<", index);
+    if (tagStart < 0) break;
+    if (html.startsWith("<!--", tagStart)) {
+      const commentEnd = html.indexOf("-->", tagStart + 4);
+      index = commentEnd < 0 ? html.length : commentEnd + 3;
+      continue;
+    }
+    const tag = readHtmlTag(html, tagStart);
+    const trimmed = tag.source.trimStart();
+    if (trimmed.startsWith("!") || trimmed.startsWith("?")) {
+      index = tag.end;
+      continue;
+    }
+    const closing = trimmed.startsWith("/");
+    const parsed = parseHtmlStartTag(closing ? trimmed.slice(1) : trimmed);
+    if (!closing) {
+      attributes.push(...parsed.attributes);
+      if (["script", "style"].includes(parsed.tagName)) {
+        const closeStart = findRawTextCloseStart(html, parsed.tagName, tag.end);
+        if (closeStart < 0) break;
+        index = readHtmlTag(html, closeStart).end;
+        continue;
+      }
+    }
+    index = tag.end;
+  }
+  return attributes;
+}
+
+function decodeHtmlAttribute(value) {
+  return value.replace(
+    /&(?:#([0-9]+);?|#x([0-9a-f]+);?|(colon|sol|lowbar|amp);)/gi,
+    (reference, decimal, hexadecimal, named) => {
+      if (decimal || hexadecimal) {
+        const codePoint = Number.parseInt(
+          decimal ?? hexadecimal,
+          decimal ? 10 : 16,
+        );
+        if (
+          Number.isInteger(codePoint)
+          && codePoint >= 0
+          && codePoint <= 0x10ffff
+          && !(codePoint >= 0xd800 && codePoint <= 0xdfff)
+        ) return String.fromCodePoint(codePoint);
+        return reference;
+      }
+      return {
+        amp: "&",
+        colon: ":",
+        lowbar: "_",
+        sol: "/",
+      }[named.toLowerCase()];
+    },
+  );
+}
+
+function htmlAttributeFailures(attributes) {
+  const failures = [];
+  for (const { name, value } of attributes) {
+    const decoded = decodeHtmlAttribute(value);
+    if (name === "target" && decoded.toLowerCase() === "_blank") {
+      failures.push("target=_blank");
+    }
+    if (!htmlUrlAttributes.has(name)) continue;
+    const url = decoded.trimStart();
+    if (/^(?:https?:)?\/\//i.test(url)) {
+      failures.push(`forbidden remote URL ${url}`);
+    }
+    if (url.toLowerCase().startsWith("/assets/")) {
+      failures.push("uses forbidden /assets/");
+    }
+  }
+  return failures;
+}
+
 export async function walkFiles(root, directory = root) {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -126,11 +316,10 @@ export async function scanShowcaseText(root) {
     if (directory === "." && hubThreeToken.test(text)) {
       failures.push(`${relativePath}: forbidden Hub Three runtime`);
     }
-    if (
-      extname(path).toLowerCase() === ".html"
-      && /target\s*=\s*(?:"_blank"|'_blank'|_blank(?=[\t\n\f\r />]|$))/i.test(text)
-    ) {
-      failures.push(`${relativePath}: target=_blank`);
+    if (extname(path).toLowerCase() === ".html") {
+      const attributes = htmlStartTagAttributes(text);
+      failures.push(...htmlAttributeFailures(attributes).map((failure) =>
+        `${relativePath}: ${failure}`));
     }
     textByDirectory.set(
       directory,
@@ -161,11 +350,11 @@ export async function scanShowcaseText(root) {
     if (indexText === undefined) {
       failures.push(`${directory} is missing index.html`);
     } else {
-      if (!indexText.includes("./assets/")) {
+      const entryAsset = htmlStartTagAttributes(indexText).some(({ name, value }) =>
+        htmlEntryAssetAttributes.has(name)
+        && decodeHtmlAttribute(value).trimStart().startsWith("./assets/"));
+      if (!entryAsset) {
         failures.push(`${directory} index is missing ./assets/`);
-      }
-      if (/=\s*(?:"\/assets\/|'\/assets\/|\/assets\/)/i.test(indexText)) {
-        failures.push(`${directory} index uses forbidden /assets/`);
       }
     }
   }
