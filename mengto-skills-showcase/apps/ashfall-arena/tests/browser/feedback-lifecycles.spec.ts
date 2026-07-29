@@ -131,6 +131,10 @@ test("recovery dodge after melee contact presents hit without an interrupted cue
   ).toBe(attackId);
 
   await page.keyboard.press("Space");
+  const caption = page.locator("[data-feedback-caption]");
+  await expect(caption).toContainText(
+    "命中",
+  );
   await expect.poll(async () =>
     (await diagnostics(page)).recentEvents.filter(
       ({ event }) =>
@@ -146,10 +150,6 @@ test("recovery dodge after melee contact presents hit without an interrupted cue
       }),
     }),
   ]);
-  const caption = page.locator("[data-feedback-caption]");
-  await expect(caption).toContainText(
-    "命中",
-  );
   await expect.poll(async () =>
     (await diagnostics(page)).audio.cueCounts.playerHit,
   ).toBe((before.playerHit ?? 0) + 1);
@@ -159,6 +159,89 @@ test("recovery dodge after melee contact presents hit without an interrupted cue
   await expect(caption).toBeHidden({ timeout: 2_000 });
   await page.keyboard.press("Space");
   await expect(caption).toContainText("闪避起步");
+});
+
+test("caption priority survives consume boundaries, expires, and lets active healing replace damage", async ({
+  page,
+}) => {
+  await page.goto(
+    "/?fixture=fresh&reviewControls=1&safeTraining=1",
+  );
+  const caption = page.locator("[data-feedback-caption]");
+  await page.evaluate(() =>
+    window.__ashfallDiagnostics!.setManualReviewClock(true)
+  );
+
+  await page.evaluate(() => window.__review!.triggerPlayerHit());
+  await expect(caption).toContainText("受击");
+  await page.evaluate(() =>
+    window.__ashfallDiagnostics!.advanceInput({}, 60)
+  );
+  await page.evaluate(() =>
+    window.__ashfallDiagnostics!.advanceInput(
+      { dodgePressed: true },
+      1,
+    )
+  );
+  await expect(caption).toContainText("受击");
+
+  await page.evaluate(() =>
+    window.__ashfallDiagnostics!.advanceInput({}, 60)
+  );
+  await expect(caption).toBeHidden({ timeout: 2_000 });
+  await page.evaluate(() =>
+    window.__ashfallDiagnostics!.advanceInput(
+      { dodgePressed: true },
+      1,
+    )
+  );
+  await expect(caption).toContainText("闪避起步");
+
+  await page.evaluate(() => {
+    window.__ashfallDiagnostics!.advanceInput({}, 60);
+    window.__review!.setPlayerHealth(80);
+    window.__review!.triggerPlayerHit();
+    window.__ashfallDiagnostics!.advanceInput({}, 60);
+    window.__ashfallDiagnostics!.advanceInput(
+      { healPressed: true },
+      1,
+    );
+  });
+  await expect(caption).toContainText("治疗");
+});
+
+test("upgrade and completion captions replace an active damage caption", async ({
+  page,
+}) => {
+  const caption = page.locator("[data-feedback-caption]");
+  await page.goto(
+    "/?fixture=wave-one&reviewControls=1&manualEnemyAi=1",
+  );
+  await page.evaluate(() => window.__review!.triggerPlayerHit());
+  await expect(caption).toContainText("受击");
+  for (const enemyId of [
+    "wave-one-crawler-a",
+    "wave-one-crawler-b",
+    "wave-one-warden",
+  ]) {
+    await page.evaluate((id) =>
+      window.__ashfallDiagnostics!.drivePlayerStrike(id), enemyId);
+  }
+  await expect(caption).toContainText("第一波完成：请选择升级");
+
+  await page.goto(
+    "/?fixture=boss&reviewControls=1&manualEnemyAi=1",
+  );
+  await page.evaluate(() =>
+    window.__ashfallDiagnostics!.setManualReviewClock(true)
+  );
+  await expect(caption).toBeHidden({ timeout: 3_000 });
+  await page.evaluate(() => window.__review!.triggerPlayerHit());
+  await expect(caption).toContainText("受击");
+  await page.evaluate(() =>
+    window.__ashfallDiagnostics!.drivePlayerStrike("boss-sovereign")
+  );
+  await expect(caption).toContainText("竞技场挑战完成");
 });
 
 test("rejected audio resumes recover on one context and hit interruption stays readable", async ({

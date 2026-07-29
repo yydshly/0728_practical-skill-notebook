@@ -41,13 +41,48 @@ function Get-DirectoryFingerprint {
     Sort-Object FullName |
     ForEach-Object {
       $relative = (Get-ChildRelativePath -Parent $Path -Child $_.FullName).Replace("\", "/")
-      $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+      $hash = Get-CanonicalFileHash -Path $_.FullName
       "$relative`:$hash"
     }
   $payload = [System.Text.Encoding]::UTF8.GetBytes(($records -join "`n"))
   $sha = [System.Security.Cryptography.SHA256]::Create()
   try {
     return ([System.BitConverter]::ToString($sha.ComputeHash($payload))).Replace("-", "").ToLowerInvariant()
+  } finally {
+    $sha.Dispose()
+  }
+}
+
+function Get-CanonicalFileHash {
+  param([Parameter(Mandatory = $true)][string]$Path)
+
+  [byte[]]$bytes = [System.IO.File]::ReadAllBytes($Path)
+  $textExtensions = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase
+  )
+  foreach ($extension in @(
+    ".bat", ".cjs", ".cmd", ".css", ".csv", ".htm", ".html",
+    ".ini", ".js", ".json", ".jsx", ".md", ".mjs", ".ps1",
+    ".psm1", ".py", ".sh", ".svg", ".toml", ".ts", ".tsx",
+    ".txt", ".xml", ".yaml", ".yml"
+  )) {
+    [void]$textExtensions.Add($extension)
+  }
+
+  if ($textExtensions.Contains([System.IO.Path]::GetExtension($Path))) {
+    try {
+      $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
+      $text = $strictUtf8.GetString($bytes)
+      $canonicalText = $text.Replace("`r`n", "`n").Replace("`r", "`n")
+      $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($canonicalText)
+    } catch [System.Text.DecoderFallbackException] {
+      # A file with a text-looking extension but invalid UTF-8 remains binary.
+    }
+  }
+
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return ([System.BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
   } finally {
     $sha.Dispose()
   }
@@ -77,6 +112,17 @@ try {
   $actualCommit = (& git -C $sourceRoot rev-parse HEAD).Trim()
   if ($LASTEXITCODE -ne 0 -or $actualCommit -ne $lock.commit) {
     Write-Error "Pinned skill source HEAD drifted: actual $actualCommit; locked $($lock.commit)"
+    exit 1
+  }
+  $sourceStatus = @(
+    & git -C $sourceRoot status --porcelain=v1 --untracked-files=all
+  )
+  $sourceStatusExit = $LASTEXITCODE
+  if (
+    $sourceStatusExit -ne 0 -or
+    ($sourceStatus | Where-Object { $_.Trim().Length -gt 0 }).Count -gt 0
+  ) {
+    Write-Error "Pinned skill source checkout is dirty; installation requires the clean locked commit."
     exit 1
   }
   $repositoryRoot = (& git -C $projectRoot rev-parse --show-toplevel).Trim()

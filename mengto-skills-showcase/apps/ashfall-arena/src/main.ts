@@ -54,6 +54,7 @@ import {
 import "./styles.css";
 
 interface AshfallSnapshot {
+  runtimeMode: "live" | "information-fallback";
   status: GameState["status"];
   encounterPhase: GameState["encounter"]["phase"];
   gateOpen: boolean;
@@ -108,7 +109,7 @@ interface AshfallSnapshot {
 }
 
 interface AshfallPerformanceSnapshot {
-  performanceControl: "live" | "empty";
+  performanceControl: "live" | "empty" | "information-fallback";
   qualityMode: QualityMode;
   qualityTier: QualityTier;
   quality: QualityDiagnostics;
@@ -349,6 +350,7 @@ let hud: HudController | null = null;
 
 const showArenaFallback = (error: unknown) => {
   canvas.hidden = true;
+  canvas.tabIndex = -1;
   canvas.setAttribute("aria-hidden", "true");
   document.documentElement.dataset.renderMode = "information-fallback";
   const phaseLabel = ({
@@ -390,6 +392,66 @@ const showArenaFallback = (error: unknown) => {
   technical.append(technicalLabel, technicalDetail);
   fallback.append(heading, message, summary, technical);
   canvas.after(fallback);
+
+  const setStaticText = (selector: string, value: string) => {
+    const element = app.querySelector<HTMLElement>(selector);
+    if (element) element.textContent = value;
+  };
+  setStaticText(
+    "[data-health]",
+    `${state.player.health} / ${state.player.maxHealth}`,
+  );
+  setStaticText(
+    "[data-stamina]",
+    `${Math.round(state.player.stamina)} / ${state.player.maxStamina}`,
+  );
+  setStaticText(
+    "[data-weapon]",
+    state.player.weaponId === "oathblade" ? "誓约刃" : "余烬弓",
+  );
+  setStaticText("[data-action]", "静态信息");
+  setStaticText("[data-healing]", `治疗瓶 × ${state.player.healingCharges}`);
+  setStaticText("[data-souls]", `灵魂 ${state.player.souls}`);
+  setStaticText(
+    "[data-upgrade]",
+    state.player.upgradeId === null
+      ? "升级：未选择"
+      : state.player.upgradeId === "vitality"
+        ? "升级：活力"
+        : "升级：力量",
+  );
+  setStaticText(
+    ".objective-card h2",
+    ({
+      training: state.encounter.trainingSpawned
+        ? "完成攻击与格挡训练"
+        : "进入第一个琥珀训练环",
+      "wave-one": "击败第一波敌人",
+      elite: "击败钟甲精英并开启王庭闸门",
+      boss: "击败钟鸣君主",
+      complete: "竞技场挑战完成",
+    } as const)[state.encounter.phase],
+  );
+  setStaticText(
+    ".objective-card p:last-child",
+    "静态信息模式不会接收游戏输入、播放音频或推进战斗状态。",
+  );
+  setStaticText(
+    ".arena-status",
+    `${phaseLabel} · 静态信息模式`,
+  );
+  setStaticText(
+    "[data-device-prompt]",
+    "3D 不可用：游戏输入与音频均未启动",
+  );
+  const audioSettings =
+    app.querySelector<HTMLFieldSetElement>(".audio-settings");
+  if (audioSettings) audioSettings.disabled = true;
+  for (const control of app.querySelectorAll<
+    HTMLButtonElement | HTMLInputElement
+  >("button, input")) {
+    control.disabled = true;
+  }
 };
 
 const arena = createArenaScene(canvas, {
@@ -397,6 +459,169 @@ const arena = createArenaScene(canvas, {
   quality: qualityTier,
   onUnavailable: showArenaFallback,
 });
+
+if (arena.renderer === null) {
+  const neutralInput: GameIntent = {
+    moveX: 0,
+    moveY: 0,
+    attackPressed: false,
+    guardHeld: false,
+    dodgePressed: false,
+    lockPressed: false,
+    healPressed: false,
+    switchWeaponPressed: false,
+    pausePressed: false,
+  };
+  const emptyFrameSnapshot = (): FramePerformanceSnapshot => ({
+    sampleCount: 0,
+    averageMs: 0,
+    medianMs: 0,
+    p95Ms: 0,
+    maxMs: 0,
+  });
+  const informationPerformanceSnapshot = (
+    runtimeDisposed = false,
+  ): AshfallPerformanceSnapshot => ({
+    performanceControl: "information-fallback",
+    qualityMode,
+    qualityTier,
+    quality: qualityController.getDiagnostics(),
+    frame: emptyFrameSnapshot(),
+    work: emptyFrameSnapshot(),
+    renderer: {
+      submittedFrames: 0,
+      calls: 0,
+      triangles: 0,
+      geometries: 0,
+      textures: 0,
+      pixelRatio: 0,
+      drawingBufferWidth: 0,
+      drawingBufferHeight: 0,
+      shadowMapEnabled: false,
+      activeLocalLights: 0,
+    },
+    heap: { supported: false },
+    lifecycle: {
+      disposed: runtimeDisposed,
+      sceneChildren: runtimeDisposed ? 0 : arena.scene.children.length,
+      entityRoots: 0,
+      listenerRegistrations: runtimeDisposed ? 0 : 1,
+      pooledObjects: 0,
+      activePooledObjects: 0,
+    },
+  });
+  const informationSnapshot = (): AshfallSnapshot => ({
+    runtimeMode: "information-fallback",
+    status: state.status,
+    encounterPhase: state.encounter.phase,
+    gateOpen: state.encounter.gateOpen,
+    playerHealth: state.player.health,
+    player: {
+      x: state.player.position.x,
+      z: state.player.position.y,
+    },
+    cameraTarget: {
+      x: state.player.position.x,
+      z: state.player.position.y,
+    },
+    canvasCount: document.querySelectorAll("[data-game-canvas]").length,
+    playerRootCount: 0,
+    frameCount: 0,
+    tick: state.tick,
+    droppedSeconds: 0,
+    manualReviewClock: false,
+    paused: state.paused,
+    preserveDrawingBuffer: arena.getDiagnostics().preserveDrawingBuffer,
+    input: { ...neutralInput },
+    lockTargetId: state.player.lockTargetId,
+    weaponId: state.player.weaponId,
+    action: state.player.action,
+    activeAttackId: state.combat.activeAttack?.id ?? null,
+    projectileCount: state.combat.projectiles.length,
+    enemyModelRootCount: 0,
+    enemyFallbackRootCount: 0,
+    enemies: Object.values(state.enemies)
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((enemy) => ({
+        id: enemy.id,
+        kind: enemy.kind,
+        health: enemy.health,
+        action: enemy.action,
+        intent: enemy.intent,
+        currentMoveId: enemy.currentMoveId,
+        movePhase: enemy.movePhase,
+        moveElapsedTicks: enemy.moveElapsedTicks,
+        cooldownTicks: enemy.cooldownTicks,
+      })),
+    recentEvents: [],
+    camera: {
+      target: {
+        x: state.player.position.x,
+        y: 0,
+        z: state.player.position.y,
+      },
+      desiredDistance: 0,
+      resolvedDistance: 0,
+      occlusionLimited: false,
+      occluderId: null,
+      lockFraming: false,
+      reducedMotion: window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches,
+      shakeAmplitude: 0,
+    },
+    localLights: [],
+    performance: informationPerformanceSnapshot(),
+  });
+  const rejectInformationInput = (): never => {
+    throw new Error("3D 不可用：静态信息模式不接受游戏输入。");
+  };
+  if (reviewControls) {
+    window.__ashfallDiagnostics = {
+      snapshot: informationSnapshot,
+      resetPerformanceSamples() {},
+      setManualReviewClock: rejectInformationInput,
+      advanceInput: rejectInformationInput,
+      triggerCameraShake: rejectInformationInput,
+      getSerializableState: () =>
+        JSON.parse(JSON.stringify(state)) as GameState,
+      queueEnemyMove: rejectInformationInput,
+      drivePlayerDodge: rejectInformationInput,
+      drivePlayerStrike: rejectInformationInput,
+      drivePlayerDefeat: rejectInformationInput,
+      retryLatestCheckpoint: rejectInformationInput,
+    };
+  }
+
+  const fallbackResize = () => {
+    const rect = stage.getBoundingClientRect();
+    arena.resize(
+      Math.max(1, Math.round(rect.width)),
+      Math.max(1, Math.round(rect.height)),
+    );
+  };
+  const fallbackResizeObserver = new ResizeObserver(fallbackResize);
+  fallbackResizeObserver.observe(stage);
+  fallbackResize();
+  let fallbackDisposed = false;
+  const disposeInformationFallback = () => {
+    if (fallbackDisposed) return;
+    fallbackDisposed = true;
+    fallbackResizeObserver.disconnect();
+    arena.dispose();
+    if (reviewControls) {
+      window.__ashfallReleaseDisposalSnapshot =
+        informationPerformanceSnapshot(true);
+    }
+    delete window.__ashfallDiagnostics;
+    document.documentElement.dataset.runtimeDisposed = "true";
+  };
+  window.addEventListener(
+    "pagehide",
+    disposeInformationFallback,
+    { once: true },
+  );
+} else {
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const vfx = createVfx(arena.scene, {
   reducedMotion: reducedMotion.matches,
@@ -962,6 +1187,7 @@ if (reviewControls) {
       const arenaDiagnostics = arena.getDiagnostics();
       const entityDiagnostics = synchronizer.getDiagnostics();
       return {
+        runtimeMode: "live",
         status: state.status,
         encounterPhase: state.encounter.phase,
         gateOpen: state.encounter.gateOpen,
@@ -1286,3 +1512,4 @@ const dispose = () => {
   document.documentElement.dataset.runtimeDisposed = "true";
 };
 window.addEventListener("pagehide", dispose, { once: true });
+}

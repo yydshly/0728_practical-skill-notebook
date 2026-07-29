@@ -79,6 +79,32 @@ describe("showcase workspace", () => {
     expect(manifest.private).toBe(true);
   });
 
+  it("runs Ashfall browser behavior and performance in isolated Playwright processes", async () => {
+    const manifest = await readJson("../apps/ashfall-arena/package.json");
+    const functionalConfig = await readFile(
+      new URL("../apps/ashfall-arena/playwright.config.ts", import.meta.url),
+      "utf8",
+    );
+    const performanceConfig = await readFile(
+      new URL(
+        "../apps/ashfall-arena/playwright.performance.config.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(manifest.scripts["test:browser"]).toBe(
+      "playwright test --config playwright.config.ts && playwright test --config playwright.performance.config.ts",
+    );
+    expect(functionalConfig).toContain(
+      'testIgnore: "**/release-performance.spec.ts"',
+    );
+    expect(performanceConfig).toContain(
+      'testMatch: "**/release-performance.spec.ts"',
+    );
+    expect(performanceConfig).toContain("reuseExistingServer: false");
+  });
+
   it("records exactly the approved skills with unique names and source paths", async () => {
     const selection = await readJson("../config/selected-skills.json");
     expect(selection.skills).toHaveLength(16);

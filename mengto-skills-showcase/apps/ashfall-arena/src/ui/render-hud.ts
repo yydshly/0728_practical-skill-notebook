@@ -206,6 +206,7 @@ export function createHudController(
   ambience.value = String(initialAudioSettings.ambience);
 
   let captionRemaining = 0;
+  let captionPriority = Number.POSITIVE_INFINITY;
   let focusedStatus: GameState["status"] | "paused" | null = null;
   let focusGameRequested = false;
   let disposed = false;
@@ -267,38 +268,42 @@ export function createHudController(
     dialog.addEventListener("keydown", trapDialogFocus);
   }
 
-  const setCaption = (value: string, duration = 1.25) => {
+  const setCaption = (
+    value: string,
+    duration = 1.25,
+    priority = Number.POSITIVE_INFINITY,
+  ) => {
     if (value.length === 0) {
       setText(feedbackCaption, "");
       feedbackCaption.hidden = true;
       captionRemaining = 0;
+      captionPriority = Number.POSITIVE_INFINITY;
       return;
     }
     setText(feedbackCaption, value);
     feedbackCaption.hidden = false;
     captionRemaining = duration;
+    captionPriority = priority;
   };
 
   const consume = (
     events: readonly GameEvent[],
     state: Readonly<GameState>,
   ) => {
-    let batchPriority = Number.POSITIVE_INFINITY;
-    const setBatchCaption = (
+    const requestCaption = (
       value: string,
       duration: number,
       priority: number,
     ) => {
-      if (priority > batchPriority) return;
-      batchPriority = priority;
-      setCaption(value, duration);
+      if (captionRemaining > 0 && priority > captionPriority) return;
+      setCaption(value, duration, priority);
     };
     for (const event of events) {
       if (
         event.type === "action-started" &&
         event.actorId === state.player.id
       ) {
-        setBatchCaption(
+        requestCaption(
           event.actionId === "dodge"
             ? "闪避起步"
             : `攻击起手：${ATTACK_LABELS[event.actionId]}`,
@@ -309,7 +314,7 @@ export function createHudController(
         event.type === "attack-resolved" &&
         event.actorId === state.player.id
       ) {
-        setBatchCaption(
+        requestCaption(
           formatAttackResolutionCaption(event.result),
           event.result === "hit"
             ? 0.8
@@ -326,7 +331,7 @@ export function createHudController(
         event.type === "damage" &&
         event.targetId === state.player.id
       ) {
-        setBatchCaption(
+        requestCaption(
           event.guardBroken
             ? `格挡崩解：承受 ${event.amount} 点伤害`
             : event.guarded
@@ -336,7 +341,7 @@ export function createHudController(
           1,
         );
       } else if (event.type === "enemy-telegraph") {
-        setBatchCaption(
+        requestCaption(
           `敌人预警：${formatTelegraphLabel(
             state.enemies[event.enemyId]?.kind ?? "",
             event.moveId,
@@ -345,15 +350,15 @@ export function createHudController(
           2,
         );
       } else if (event.type === "boss-phase") {
-        setBatchCaption(`首领进入第 ${event.phase} 阶段`, 1.8, 1);
+        requestCaption(`首领进入第 ${event.phase} 阶段`, 1.8, 0);
       } else if (event.type === "drop") {
-        setBatchCaption("战利品已落地", 0.9, 3);
+        requestCaption("战利品已落地", 0.9, 3);
       } else if (event.type === "upgrade-offered") {
-        setBatchCaption("第一波完成：请选择升级", 1.8, 1);
+        requestCaption("第一波完成：请选择升级", 1.8, 0);
       } else if (event.type === "encounter-complete") {
-        setBatchCaption("竞技场挑战完成", 2.2, 1);
+        requestCaption("竞技场挑战完成", 2.2, 0);
       } else if (event.type === "healed") {
-        setBatchCaption(`治疗：恢复 ${event.amount} 点生命`, 1, 2);
+        requestCaption(`治疗：恢复 ${event.amount} 点生命`, 1, 1);
       }
     }
   };

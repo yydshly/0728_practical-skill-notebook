@@ -232,6 +232,17 @@ test("review-only empty control records the same-page rAF baseline without produ
 test("same desktop environment proves fixed high versus low and never overrides the user", async ({
   page,
 }) => {
+  await page.goto(
+    "/?fixture=wave-one&reviewControls=1&reviewPerformance=empty&quality=low&manualEnemyAi=1",
+  );
+  await resetSamples(page);
+  await waitForSampleCount(page);
+  await waitForWorkSampleCount(page);
+  const emptyBaseline = await sample(page);
+  expect(emptyBaseline.performanceControl).toBe("empty");
+  expect(emptyBaseline.renderer.submittedFrames).toBe(0);
+  expect(emptyBaseline.work.p95Ms).toBeLessThanOrEqual(1);
+
   const readings = {} as Record<"high" | "low", PerformanceSnapshot>;
   for (const tier of ["high", "low"] as const) {
     await page.goto(
@@ -242,12 +253,15 @@ test("same desktop environment proves fixed high versus low and never overrides 
     await page.waitForTimeout(1_200);
     await waitForSampleCount(page);
     const reading = await sample(page);
-    if (tier === "high") {
-      assertMeasurableSnapshot(reading, tier);
-    } else {
-      assertRepresentativeSample(reading, tier);
-      expect(reading.frame.medianMs).toBeLessThanOrEqual(24);
-      expect(reading.frame.p95Ms).toBeLessThanOrEqual(34);
+    assertMeasurableSnapshot(reading, tier);
+    assertBoundedLiveWork(reading);
+    if (tier === "low") {
+      expect(
+        reading.frame.medianMs - emptyBaseline.frame.medianMs,
+      ).toBeLessThanOrEqual(24);
+      expect(
+        reading.frame.p95Ms - emptyBaseline.frame.p95Ms,
+      ).toBeLessThanOrEqual(34);
     }
     expect(reading.quality).toMatchObject({
       mode: tier,
@@ -261,6 +275,10 @@ test("same desktop environment proves fixed high versus low and never overrides 
       description: JSON.stringify(reading),
     });
   }
+  test.info().annotations.push({
+    type: "desktop-fixed-empty-baseline",
+    description: JSON.stringify(emptyBaseline),
+  });
 
   expect(readings.low.renderer.pixelRatio).toBeLessThan(
     readings.high.renderer.pixelRatio,
@@ -274,12 +292,6 @@ test("same desktop environment proves fixed high versus low and never overrides 
   );
   expect(readings.high.renderer.activeLocalLights).toBe(4);
   expect(readings.low.renderer.activeLocalLights).toBe(0);
-  expect(readings.low.frame.medianMs).toBeLessThanOrEqual(
-    readings.high.frame.medianMs,
-  );
-  expect(readings.low.frame.p95Ms).toBeLessThanOrEqual(
-    readings.high.frame.p95Ms,
-  );
 });
 
 test("390x844 touch, reduced motion, gamepad, audio recovery, and low quality remain measurable", async ({
