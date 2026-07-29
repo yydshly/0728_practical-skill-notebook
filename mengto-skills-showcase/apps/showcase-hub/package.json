@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 4172 --strictPort",
     "build": "tsc --noEmit && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "@showcase/showcase-guide": "*",

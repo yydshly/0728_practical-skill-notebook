@@ -1,5 +1,380 @@
+:root {
+  color: #f3eee5;
+  background: #11100e;
+  font-family:
+    Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html[data-product-dialog-scroll-lock="true"] {
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  min-width: 20rem;
+  background:
+    radial-gradient(circle at 78% 8%, rgb(159 75 36 / 18%), transparent 31rem),
+    #11100e;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid #f3b765;
+  outline-offset: 4px;
+}
+
 #app {
   margin: 0 auto;
-  max-width: 72rem;
-  padding: 2rem;
+  max-width: 90rem;
+  padding: 0 clamp(1.25rem, 4vw, 5rem);
+}
+
+.hero {
+  display: grid;
+  align-content: center;
+  min-height: min(45rem, 92vh);
+  padding: 7rem 0 5rem;
+  border-bottom: 1px solid #4b443b;
+}
+
+.eyebrow,
+.section-number {
+  margin: 0 0 1rem;
+  color: #d9a45d;
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  max-width: 18ch;
+  margin-bottom: 1.5rem;
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: clamp(2.75rem, 6vw, 5.8rem);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.hero-summary {
+  max-width: 49rem;
+  color: #c8c0b5;
+  font-size: clamp(1rem, 1.6vw, 1.25rem);
+  line-height: 1.8;
+}
+
+.hero-actions,
+.product-actions,
+.product-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.hero-actions {
+  margin-top: 1.5rem;
+}
+
+.primary-action,
+.product-actions a,
+.product-dialog-actions a {
+  display: inline-flex;
+  min-height: 2.9rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.15rem;
+  border: 1px solid #eab065;
+  background: #eab065;
+  color: #16120d;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.text-action {
+  padding: 0.75rem;
+  color: #d6cec3;
+  text-underline-offset: 0.3em;
+}
+
+.showcase-section {
+  padding: clamp(4.5rem, 9vw, 8rem) 0;
+  border-bottom: 1px solid #4b443b;
+}
+
+.section-heading {
+  max-width: 48rem;
+  margin-bottom: 2.5rem;
+}
+
+.section-heading h2 {
+  margin-bottom: 0.75rem;
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: clamp(2rem, 4vw, 3.8rem);
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+
+.section-heading > p:last-child,
+.workflow > p,
+.validation > p {
+  color: #bbb3a8;
+  line-height: 1.75;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+[data-product-card] {
+  overflow: hidden;
+  border: 1px solid #49433b;
+  border-top: 3px solid var(--accent-color, #d9a45d);
+  background: #1a1815;
+}
+
+[data-product-card][data-accent="warm-orange"] {
+  --accent-color: #e69a42;
+}
+
+[data-product-card][data-accent="ember-red"] {
+  --accent-color: #e15c47;
+}
+
+[data-product-card][data-accent="precision-cyan"] {
+  --accent-color: #59b8bb;
+}
+
+[data-product-card] img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  background: #27231e;
+}
+
+.product-card-body {
+  display: grid;
+  gap: 1rem;
+  padding: 1.4rem;
+}
+
+.product-card-body h3 {
+  margin-bottom: 0;
+  font-size: 1.35rem;
+  line-height: 1.35;
+}
+
+.product-summary {
+  min-height: 3.2em;
+  margin-bottom: 0;
+  color: #d4cdc3;
+  line-height: 1.6;
+}
+
+.product-facts {
+  padding-top: 0.85rem;
+  border-top: 1px solid #3c3730;
+}
+
+.product-facts p {
+  margin-bottom: 0.55rem;
+  color: #aaa197;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.product-facts strong {
+  color: #eee8df;
+}
+
+.product-actions button,
+.product-dialog-actions button {
+  min-height: 2.9rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid #696158;
+  background: transparent;
+  color: #eee8df;
+  cursor: pointer;
+}
+
+.product-actions a {
+  margin-left: auto;
+  border-color: var(--accent-color);
+  background: var(--accent-color);
+}
+
+.business-guide ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid #4b443b;
+  list-style: none;
+}
+
+.business-guide li {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: space-between;
+  padding: 1.5rem 0;
+  border-bottom: 1px solid #4b443b;
+  font-size: clamp(1.05rem, 2vw, 1.45rem);
+}
+
+.business-guide strong {
+  color: #d9a45d;
+}
+
+.workflow-line {
+  max-width: 64rem;
+  color: #f2ece3 !important;
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: clamp(1.35rem, 2.8vw, 2.35rem);
+}
+
+details {
+  max-width: 56rem;
+  margin-top: 1.5rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #4b443b;
+  background: #181613;
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+details li {
+  margin-top: 0.5rem;
+  color: #bbb3a8;
+}
+
+.product-dialog {
+  width: min(44rem, calc(100% - 2rem));
+  max-height: min(50rem, calc(100dvh - 2rem));
+  margin: auto;
+  padding: 0;
+  border: 1px solid #645b51;
+  background: #1b1916;
+  color: #eee8df;
+  box-shadow: 0 2rem 7rem rgb(0 0 0 / 65%);
+}
+
+.product-dialog::backdrop {
+  background: rgb(5 4 3 / 78%);
+  backdrop-filter: blur(0.35rem);
+}
+
+.product-dialog-panel {
+  overflow-y: auto;
+  max-height: min(50rem, calc(100dvh - 2rem));
+  padding: clamp(1.5rem, 4vw, 3rem);
+}
+
+.product-dialog h2 {
+  margin-bottom: 0.75rem;
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  font-weight: 500;
+}
+
+.product-dialog h3 {
+  margin: 1.5rem 0 0.65rem;
+}
+
+.product-dialog li,
+.product-dialog p {
+  color: #c8c0b5;
+  line-height: 1.65;
+}
+
+.dialog-capabilities {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.dialog-capabilities section {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid #454039;
+}
+
+.dialog-capabilities h3 {
+  margin-top: 0;
+}
+
+.dialog-capabilities p {
+  overflow-wrap: anywhere;
+  margin-bottom: 0;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+.dialog-duration,
+.dialog-boundary {
+  padding: 0.8rem 1rem;
+  background: #27231e;
+}
+
+.product-dialog-actions {
+  position: sticky;
+  bottom: 0;
+  justify-content: flex-end;
+  padding-top: 1rem;
+  background: #1b1916;
+}
+
+@media (max-width: 62rem) {
+  .product-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .product-summary {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 38rem) {
+  .hero {
+    min-height: auto;
+  }
+
+  .business-guide li {
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .dialog-capabilities {
+    grid-template-columns: 1fr;
+  }
 }
