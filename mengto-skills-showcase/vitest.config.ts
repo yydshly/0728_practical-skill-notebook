@@ -6,6 +6,8 @@ export default defineConfig({
       ...configDefaults.exclude,
       "apps/*/tests/browser/**",
       "apps/*/tests/production/**",
+      "packages/*/tests/browser/**",
+      "tests/browser/**",
     ],
   },
 });

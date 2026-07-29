@@ -7,7 +7,7 @@
     "./styles.css": "./src/styles.css"
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --config ../../vitest.config.ts",
     "test:browser": "playwright test"
   }
 }

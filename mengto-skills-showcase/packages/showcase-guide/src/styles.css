@@ -4,3 +4,118 @@
   --showcase-guide-text: #f6f2e9;
   --showcase-guide-muted: #c5c0b7;
 }
+
+[data-guide-scroll-lock="true"] {
+  overflow: hidden;
+}
+
+.showcase-guide-trigger {
+  position: fixed;
+  inset-block-start: max(12px, env(safe-area-inset-top));
+  inset-inline-end: max(12px, env(safe-area-inset-right));
+  z-index: 1000;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--showcase-guide-accent) 70%, white);
+  border-radius: 999px;
+  background: var(--showcase-guide-surface);
+  color: var(--showcase-guide-text);
+  font: inherit;
+  font-weight: 700;
+}
+
+.showcase-guide-dialog {
+  inline-size: min(720px, calc(100vw - 32px));
+  max-inline-size: none;
+  max-block-size: calc(100dvh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  overflow: visible;
+  background: transparent;
+  color: var(--showcase-guide-text);
+}
+
+.showcase-guide-dialog::backdrop {
+  background: rgb(5 7 10 / 78%);
+  backdrop-filter: blur(4px);
+}
+
+.showcase-guide-panel {
+  max-block-size: min(760px, calc(100dvh - 32px));
+  overflow: auto;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--showcase-guide-accent) 45%, transparent);
+  border-radius: inherit;
+  background: var(--showcase-guide-surface);
+  color: var(--showcase-guide-text);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
+  padding:
+    max(24px, env(safe-area-inset-top))
+    max(24px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom))
+    max(24px, env(safe-area-inset-left));
+}
+
+.showcase-guide-panel :is(p, li) {
+  color: var(--showcase-guide-muted);
+}
+
+.showcase-guide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.showcase-guide-actions :is(button, a),
+.showcase-guide-trigger,
+.showcase-guide-panel label {
+  min-inline-size: 44px;
+  min-block-size: 44px;
+}
+
+.showcase-guide-actions :is(button, a) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1px solid var(--showcase-guide-accent);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--showcase-guide-text);
+  font: inherit;
+  text-decoration: none;
+}
+
+.showcase-guide-panel label {
+  display: flex;
+  align-items: center;
+}
+
+.showcase-guide-dialog :focus-visible,
+.showcase-guide-trigger:focus-visible {
+  outline: 3px solid var(--showcase-guide-accent);
+  outline-offset: 3px;
+}
+
+@media (max-width: 520px) {
+  .showcase-guide-dialog {
+    inline-size: 100%;
+    max-inline-size: none;
+    margin: auto 0 0;
+  }
+
+  .showcase-guide-panel {
+    max-block-size: 100dvh;
+    border-radius: 20px 20px 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .showcase-guide-dialog,
+  .showcase-guide-dialog::backdrop,
+  .showcase-guide-panel {
+    animation: none;
+    transition-duration: 0.01ms;
+  }
+}
