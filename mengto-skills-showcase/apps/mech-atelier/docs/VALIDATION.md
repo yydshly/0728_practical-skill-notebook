@@ -35,16 +35,16 @@
 
 ## 性能与资源证据
 
-所有性能采样都在 1440×900 同页、稳定预热后读取；“默认/normal”使用当前的 `control` 渲染配置。诊断将浏览器 `requestAnimationFrame` 回调间隔与包围 `renderer.render()` 的 CPU 时长分开记录。
+所有性能采样都在 1440×900 同页、稳定预热后读取；“默认/normal”使用当前的 `control` 渲染配置。诊断将浏览器 `requestAnimationFrame` 回调间隔与包围 `renderer.render()` 的 CPU **提交**时长分开记录。后者不等待 GPU，不是完整 frame-time，也不能代表 GPU 完成时间。
 
 | 场景 | 渲染时长 p50 / p95（第 1 轮） | 渲染时长 p50 / p95（第 2 轮） | 结论 |
 | --- | --- | --- | --- |
-| 1440 默认 control | 1.00 / 2.40 ms | 1.10 / 2.50 ms | 满足 p50 < 24 ms、p95 < 34 ms |
-| 1440 review full（阴影） | 2.30 / 4.80 ms | 1.80 / 3.70 ms | 仅 review 使用；仍低于阈值 |
-| 390×844 control，DPR 0.6 | 1.10 / 2.10 ms | 0.40 / 1.70 ms | 两次移动采样均通过 |
+| 1440 默认 control | 1.00 / 2.40 ms | 1.10 / 2.50 ms | CPU 提交观察值，不是帧时间门槛 |
+| 1440 review full（阴影） | 2.30 / 4.80 ms | 1.80 / 3.70 ms | 仅 review 使用的 CPU 提交观察值 |
+| 390×844 control，DPR 0.6 | 1.10 / 2.10 ms | 0.40 / 1.70 ms | 两次移动 CPU 提交观察值 |
 | review empty 同页基线 | 0 / 0 ms | 0 / 0 ms | 不调用 `renderer.render()` |
 
-空基线的 rAF 为约 16.7ms，而完整 review 采样的 rAF 常见 50–66.7ms；两者在渲染时长已分别为 0ms 和约 1–3ms 的情况下仍明显不同。这说明无头浏览器的 rAF 是调度节拍，不能直接当作渲染耗时；因此发布判定使用分离的 `renderer.render()` 时长，而不是 rAF。
+生产构建前台稳定窗口会输出 `MECH_RAF_CADENCE_OBSERVATION`/性能矩阵中的 rAF p50、p95，供观察调度节拍；本次 Chromium 无头环境常见约 16.7、33.3、50 或 66.7ms，不能强行解释为真实设备帧率。空基线的 rAF 约 16.7ms、CPU 提交 0ms，而完整 review 的 rAF 常见 50–66.7ms、CPU 提交约 1–3ms，说明两者是不同层面的信号。未使用 `gl.finish()`；当前未取得可验证的 `EXT_disjoint_timer_query` GPU timer，因此 GPU 完成时间**未测量**。
 
 50 次真实部件切换前后，full review 保持 `calls=51`、`triangles=4362`、`geometries=23`、`textures=3`、`listeners=7`。性能矩阵还比对 full（DPR 1/0.75/0.6）、no-shadows、key-light、control、empty 和关闭热点：review-only 的 empty 控制可证明调度与实际渲染分离；高阴影仅在 review profile 中启用，不会成为常规体验的默认负担。
 
@@ -63,5 +63,5 @@
 
 ## 已知边界
 
-- 这份记录不声称已完成真人可用性研究、真实低端设备性能或线上商业流程验证；它只证明所列的本地自动化与生产预览通过。
+- 这份记录不声称已完成真人可用性研究、真实低端设备性能、GPU 完成时间或线上商业流程验证；它只证明所列的本地自动化与生产预览行为通过。
 - Review 参数和诊断全局只在明确的 review URL 上暴露；普通 URL 不暴露诊断对象，也不会持久化这些参数。
