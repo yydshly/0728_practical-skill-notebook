@@ -63,6 +63,28 @@ export interface ConfiguratorSceneSnapshot {
   exploded: ExplodedViewSnapshot;
 }
 
+export interface ConfiguratorSceneDiagnostics {
+  /** Time between browser animation-frame callbacks; scheduler evidence only. */
+  readonly rafIntervals: readonly number[];
+  /** CPU duration spent in renderer.render for each callback. */
+  readonly renderDurations: readonly number[];
+  readonly renderer: {
+    readonly calls: number;
+    readonly triangles: number;
+    readonly geometries: number;
+    readonly textures: number;
+  };
+  readonly listeners: number;
+  readonly resources: { readonly geometries: number; readonly textures: number };
+  readonly quality: "full" | "no-shadows" | "key-light" | "control" | "empty";
+  readonly pixelRatio: number;
+}
+
+export interface ConfiguratorSceneOptions {
+  readonly quality?: "full" | "no-shadows" | "key-light" | "control" | "empty";
+  readonly maxPixelRatio?: number;
+}
+
 export interface HotspotProjection {
   readonly x: number;
   readonly y: number;
@@ -92,6 +114,7 @@ export interface ConfiguratorSceneController {
   resetView(): void;
   snapshot(): ConfiguratorSceneSnapshot;
   nonEmptyPixelCount(): number;
+  diagnostics(): ConfiguratorSceneDiagnostics;
   dispose(): void;
 }
 
@@ -153,7 +176,10 @@ const defaultPitch = 0.2;
 export function createConfiguratorScene(
   canvas: HTMLCanvasElement,
   initial: MechConfiguration,
+  options: ConfiguratorSceneOptions = {},
 ): ConfiguratorSceneController {
+  const quality = options.quality ?? "full";
+  const maxPixelRatio = options.maxPixelRatio ?? 1.5;
   const renderer = new WebGLRenderer({
     canvas,
     alpha: false,
@@ -162,7 +188,7 @@ export function createConfiguratorScene(
   });
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = quality === "full";
 
   const scene = new Scene();
   const camera = new PerspectiveCamera(35, 1, 0.1, 100);
@@ -179,6 +205,11 @@ export function createConfiguratorScene(
   scene.add(stage.root);
 
   const lights = createLights();
+  if (quality === "key-light" || quality === "control") {
+    lights.rim.visible = false;
+    lights.accent.visible = false;
+  }
+  if (quality === "control") lights.key.visible = false;
   scene.add(lights.root);
 
   const target = new Vector3();
@@ -199,6 +230,8 @@ export function createConfiguratorScene(
   let previousFrameTime = performance.now();
   let previousExplodedProgress = 0;
   const frameListeners = new Set<() => void>();
+  const rafIntervals: number[] = [];
+  const renderDurations: number[] = [];
   const hotspotWorld = new Vector3();
   const hotspotView = new Vector3();
   const hotspotNdc = new Vector3();
@@ -287,7 +320,7 @@ export function createConfiguratorScene(
     if (width === renderWidth && height === renderHeight) return;
     renderWidth = width;
     renderHeight = height;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxPixelRatio));
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     computeFit();
@@ -381,8 +414,13 @@ export function createConfiguratorScene(
 
   function renderFrame(timestamp: number): void {
     if (disposed) return;
+    const frameMilliseconds = Math.min(Math.max(timestamp - previousFrameTime, 0), 100);
+    if (frameMilliseconds > 0) {
+      rafIntervals.push(frameMilliseconds);
+      if (rafIntervals.length > 120) rafIntervals.shift();
+    }
     const deltaSeconds = Math.min(
-      Math.max((timestamp - previousFrameTime) / 1000, 0),
+      frameMilliseconds / 1000,
       0.1,
     );
     previousFrameTime = timestamp;
@@ -392,7 +430,11 @@ export function createConfiguratorScene(
       previousExplodedProgress = explodedProgress;
       computeFit();
     }
-    renderer.render(scene, camera);
+    const renderStarted = performance.now();
+    if (quality !== "empty") renderer.render(scene, camera);
+    const renderDuration = performance.now() - renderStarted;
+    renderDurations.push(renderDuration);
+    if (renderDurations.length > 120) renderDurations.shift();
     for (const listener of frameListeners) listener();
     raf = requestAnimationFrame(renderFrame);
   }
@@ -641,6 +683,30 @@ export function createConfiguratorScene(
         if (red + green + blue > 88) count += 1;
       }
       return count;
+    },
+    diagnostics() {
+      const render = renderer.info.render;
+      const memory = renderer.info.memory;
+      return {
+        rafIntervals: [...rafIntervals],
+        renderDurations: [...renderDurations],
+        renderer: {
+          calls: render.calls,
+          triangles: render.triangles,
+          geometries: memory.geometries,
+          textures: memory.textures,
+        },
+        // Five canvas pointer/wheel handlers, one media-query listener, and
+        // the active frame subscriber(s); ResizeObserver is tracked separately
+        // by the browser and does not add a DOM listener.
+        listeners: 6 + frameListeners.size,
+        resources: {
+          geometries: memory.geometries,
+          textures: memory.textures,
+        },
+        quality,
+        pixelRatio: renderer.getPixelRatio(),
+      };
     },
     dispose() {
       if (disposed) return;

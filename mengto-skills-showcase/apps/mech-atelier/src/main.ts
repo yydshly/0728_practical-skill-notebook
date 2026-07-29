@@ -19,6 +19,8 @@ import {
 } from "./persistence/saved-config";
 import {
   createConfiguratorScene,
+  type ConfiguratorSceneController,
+  type ConfiguratorSceneDiagnostics,
   type ConfiguratorSceneSnapshot,
 } from "./scene/create-configurator-scene";
 import {
@@ -28,12 +30,14 @@ import {
 import { renderHotspots } from "./ui/render-hotspots";
 import { renderOptionGroups } from "./ui/render-option-groups";
 import { renderSummary } from "./ui/render-summary";
+import { renderFallback, type RenderFallbackController } from "./ui/render-fallback";
 
 type DebugWindow = typeof window & {
   __MECH_ATELIER_DEBUG__?: {
     snapshot(): ConfiguratorSceneSnapshot;
     nonEmptyPixelCount(): number;
     lastPosterMetadata(): ProductPosterMetadata | null;
+    diagnostics(): ConfiguratorSceneDiagnostics;
   };
 };
 
@@ -138,13 +142,14 @@ app.innerHTML = `
         <p class="asset-disclosure">项目自制程序化概念模型 · L2 可检查</p>
       </section>
 
-      <aside class="configuration-panel" aria-label="机甲配置面板">
+      <aside class="configuration-panel" aria-label="机甲配置面板" role="dialog" aria-modal="false">
         <div class="panel-intro">
           <div>
             <p class="section-kicker">ASSEMBLY MATRIX</p>
             <h2>部件配置</h2>
           </div>
           <span>10 组参数</span>
+          <button class="panel-close" type="button" data-close-config aria-label="关闭配置面板">关闭</button>
         </div>
         <div
           class="config-announcer"
@@ -192,6 +197,7 @@ app.innerHTML = `
         </footer>
       </aside>
     </div>
+    <button class="mobile-configure" type="button" data-open-config aria-expanded="false" aria-controls="mech-configuration-panel">开始配置</button>
   </div>
 `;
 
@@ -223,11 +229,43 @@ const exportPosterButton = requiredElement<HTMLButtonElement>(
   "[data-export-poster]",
 );
 const posterStatus = requiredElement<HTMLElement>("[data-poster-status]");
+const openConfigButton = requiredElement<HTMLButtonElement>("[data-open-config]");
+const closeConfigButton = requiredElement<HTMLButtonElement>("[data-close-config]");
+const configurationPanel = requiredElement<HTMLElement>(".configuration-panel");
+configurationPanel.id = "mech-configuration-panel";
 
 const search = new URLSearchParams(window.location.search);
 const hasExplicitConfiguration = hasConfigurationQuery(search);
 const reviewId = search.get("review");
 const knownReview = reviewId !== null && isKnownReview(reviewId);
+const isReviewMode = knownReview || search.get("reviewControls") === "1";
+const reviewQuality =
+  isReviewMode && search.get("reviewPerformance") === "control"
+    ? "control"
+    : isReviewMode && search.get("reviewPerformance") === "no-shadows"
+      ? "no-shadows"
+    : isReviewMode && search.get("reviewPerformance") === "key-light"
+        ? "key-light"
+      : isReviewMode && search.get("reviewPerformance") === "empty"
+        ? "empty"
+      : "full";
+const reviewPixelRatio = isReviewMode
+  ? parseReviewPixelRatio(search.get("reviewDpr"))
+  : undefined;
+const reviewHotspotsEnabled = !(
+  isReviewMode && search.get("reviewHotspots") === "off"
+);
+const useMobileRenderTier =
+  !isReviewMode && window.matchMedia("(max-width: 700px)").matches;
+const sceneQuality = useMobileRenderTier
+  ? "control"
+  : isReviewMode
+    ? reviewQuality
+    : "control";
+const scenePixelRatio = useMobileRenderTier ? 0.6 : reviewPixelRatio;
+let forcePosterReadbackFailure =
+  search.get("forcePosterReadbackFailure") === "once" &&
+  (knownReview || search.get("reviewControls") === "1");
 const initial = resolveInitialConfiguration(
   hasExplicitConfiguration,
   reviewId,
@@ -236,12 +274,53 @@ const initial = resolveInitialConfiguration(
 let configuration = initial.config;
 const persistence = createSavedConfigurationController();
 
-const productScene = createConfiguratorScene(canvas, configuration);
-const hotspotController = renderHotspots(
-  hotspotContainer,
-  productScene,
-  focusConfigurationSlot,
-);
+let productScene: ConfiguratorSceneController | null = null;
+let hotspotController: ReturnType<typeof renderHotspots> | null = null;
+let fallbackController: RenderFallbackController | null = null;
+const forceWebglFailure = search.get("forceWebglFailure");
+try {
+  if (forceWebglFailure === "1" || forceWebglFailure === "renderer") {
+    throw new Error("Review forced renderer failure");
+  }
+  productScene = createConfiguratorScene(canvas, configuration, {
+    quality: sceneQuality,
+    ...(scenePixelRatio === undefined
+      ? {}
+      : { maxPixelRatio: scenePixelRatio }),
+  });
+  productStage.dataset.renderQuality = `${sceneQuality}-${scenePixelRatio ?? "auto"}`;
+  if (reviewHotspotsEnabled) {
+    hotspotController = renderHotspots(
+      hotspotContainer,
+      productScene,
+      focusConfigurationSlot,
+    );
+  } else {
+    hotspotContainer.hidden = true;
+  }
+} catch {
+  canvas.remove();
+  hotspotContainer.replaceChildren();
+  hotspotContainer.hidden = true;
+  fallbackController = renderFallback(productStage, configuration);
+  productStage.dataset.renderMode = "fallback";
+  const reason = document.createElement("p");
+  reason.id = "fallback-reason";
+  reason.className = "fallback-reason";
+  reason.textContent = "实时 3D、分解视图、部件热点和产品海报需要可用的 WebGL；配置、摘要、保存、分享和恢复默认配置仍可使用。";
+  productStage.append(reason);
+  for (const control of [toggleExplodedButton, resetViewButton, exportPosterButton]) {
+    control.disabled = true;
+    control.setAttribute("aria-describedby", reason.id);
+  }
+  const hotspotUnavailable = document.createElement("button");
+  hotspotUnavailable.type = "button";
+  hotspotUnavailable.textContent = "部件热点";
+  hotspotUnavailable.disabled = true;
+  hotspotUnavailable.className = "fallback-hotspot-control";
+  hotspotUnavailable.setAttribute("aria-describedby", reason.id);
+  document.querySelector(".stage-controls")?.append(hotspotUnavailable);
+}
 let exploded = false;
 let lastPosterMetadata: ProductPosterMetadata | null = null;
 renderInterface();
@@ -250,14 +329,15 @@ if (hasExplicitConfiguration) replaceCurrentConfigurationUrl();
 
 const debugWindow = window as DebugWindow;
 delete debugWindow.__MECH_ATELIER_DEBUG__;
-if (
+if (productScene && (
   (!hasExplicitConfiguration && knownReview) ||
   search.get("reviewControls") === "1"
-) {
+)) {
   debugWindow.__MECH_ATELIER_DEBUG__ = {
-    snapshot: () => productScene.snapshot(),
-    nonEmptyPixelCount: () => productScene.nonEmptyPixelCount(),
+    snapshot: () => productScene!.snapshot(),
+    nonEmptyPixelCount: () => productScene!.nonEmptyPixelCount(),
     lastPosterMetadata: () => lastPosterMetadata,
+    diagnostics: () => productScene!.diagnostics(),
   };
 }
 
@@ -304,8 +384,9 @@ optionsContainer.addEventListener("change", (event) => {
   }
 });
 
-resetViewButton.addEventListener("click", () => productScene.resetView());
+resetViewButton.addEventListener("click", () => productScene?.resetView());
 toggleExplodedButton.addEventListener("click", () => {
+  if (!productScene) return;
   exploded = !exploded;
   productScene.setExploded(exploded);
   productStage.dataset.explodedState = exploded ? "exploded" : "assembled";
@@ -338,39 +419,43 @@ copyLinkButton.addEventListener("click", async () => {
   }
 });
 exportPosterButton.addEventListener("click", async () => {
+  if (!productScene) return;
   exportPosterButton.disabled = true;
   posterStatus.textContent = "正在生成当前配置海报…";
   lastPosterMetadata = null;
   try {
+    const posterConfiguration = cloneConfiguration(configuration);
     const chassis = catalog.chassis.find(
-      (candidate) => candidate.id === configuration.chassisId,
+      (candidate) => candidate.id === posterConfiguration.chassisId,
     );
-    const head = findPart(configuration.headId);
+    const head = findPart(posterConfiguration.headId);
     const moduleNames = [
-      head?.name ?? configuration.headId,
-      findPart(configuration.armorId)?.name ?? configuration.armorId,
-      findPart(configuration.leftWeaponId)?.name ??
-        configuration.leftWeaponId,
-      findPart(configuration.rightWeaponId)?.name ??
-        configuration.rightWeaponId,
-      findPart(configuration.rearModuleId)?.name ??
-        configuration.rearModuleId,
+      head?.name ?? posterConfiguration.headId,
+      findPart(posterConfiguration.armorId)?.name ?? posterConfiguration.armorId,
+      findPart(posterConfiguration.leftWeaponId)?.name ?? posterConfiguration.leftWeaponId,
+      findPart(posterConfiguration.rightWeaponId)?.name ?? posterConfiguration.rightWeaponId,
+      findPart(posterConfiguration.rearModuleId)?.name ?? posterConfiguration.rearModuleId,
     ];
     const blob = await createProductPoster({
-      configuration,
-      summary: calculateSummary(configuration, catalog),
-      chassisName: chassis?.name ?? configuration.chassisId,
-      configurationName: `${chassis?.name ?? configuration.chassisId} · ${head?.name ?? configuration.headId}方案`,
+      configuration: posterConfiguration,
+      summary: calculateSummary(posterConfiguration, catalog),
+      chassisName: chassis?.name ?? posterConfiguration.chassisId,
+      configurationName: `${chassis?.name ?? posterConfiguration.chassisId} · ${head?.name ?? posterConfiguration.headId}方案`,
       moduleNames,
-      canonicalUrl: canonicalAbsoluteUrl(),
-      captureProduct: (width, height) =>
-        productScene.captureProduct(width, height),
+      canonicalUrl: canonicalAbsoluteUrlFor(posterConfiguration),
+      captureProduct: (width, height) => {
+        if (forcePosterReadbackFailure) {
+          forcePosterReadbackFailure = false;
+          return Promise.reject(new Error("审阅模拟：渲染读取前失败"));
+        }
+        return productScene!.captureProduct(width, height);
+      },
     });
     lastPosterMetadata = blob.debugMetadata;
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = objectUrl;
-    link.download = posterFilename(configuration);
+    link.download = posterFilename(posterConfiguration);
     link.hidden = true;
     document.body.append(link);
     link.click();
@@ -400,8 +485,9 @@ window.addEventListener(
   () => {
     persistence.flush();
     persistence.dispose();
-    hotspotController.dispose();
-    productScene.dispose();
+    hotspotController?.dispose();
+    fallbackController?.dispose();
+    productScene?.dispose();
     delete debugWindow.__MECH_ATELIER_DEBUG__;
   },
   { once: true },
@@ -417,7 +503,8 @@ function applyConfiguration(
       : null;
   const normalized = normalizeConfiguration(requested, catalog);
   configuration = normalized.config;
-  productScene.updateConfiguration(configuration);
+  productScene?.updateConfiguration(configuration);
+  fallbackController?.update(configuration);
   const normalizationMessage = describeNormalization(
     requested,
     configuration,
@@ -433,6 +520,26 @@ function applyConfiguration(
   replaceCurrentConfigurationUrl();
   persistence.schedule(configuration);
 }
+
+function setConfigurationPanel(open: boolean): void {
+  document.documentElement.dataset.configurationSheet = open ? "open" : "closed";
+  openConfigButton.setAttribute("aria-expanded", String(open));
+  if (open) {
+    window.setTimeout(() => {
+      configurationPanel.querySelector<HTMLElement>("input:checked")?.focus({ preventScroll: true });
+    }, 0);
+  } else {
+    openConfigButton.focus({ preventScroll: true });
+  }
+}
+
+openConfigButton.addEventListener("click", () => setConfigurationPanel(true));
+closeConfigButton.addEventListener("click", () => setConfigurationPanel(false));
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && document.documentElement.dataset.configurationSheet === "open") {
+    setConfigurationPanel(false);
+  }
+});
 
 function focusConfigurationSlot(
   _slot: MechModuleSlot,
@@ -611,8 +718,12 @@ function renderAnnouncement(messages: readonly string[]): void {
 }
 
 function canonicalAbsoluteUrl(): string {
+  return canonicalAbsoluteUrlFor(configuration);
+}
+
+function canonicalAbsoluteUrlFor(config: MechConfiguration): string {
   return new URL(
-    serializeConfiguration(configuration),
+    serializeConfiguration(config),
     window.location.origin,
   ).href;
 }
@@ -642,6 +753,12 @@ function isKnownReview(
   value: string,
 ): value is keyof typeof reviewConfigurations {
   return Object.hasOwn(reviewConfigurations, value);
+}
+
+function parseReviewPixelRatio(value: string | null): number | undefined {
+  if (value === null) return undefined;
+  const parsed = Number(value);
+  return [1, 0.75, 0.6].includes(parsed) ? parsed : undefined;
 }
 
 function cloneConfiguration(

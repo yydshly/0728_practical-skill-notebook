@@ -175,6 +175,25 @@ describe("procedural mech assembly contract", () => {
     assembly.dispose();
   });
 
+  it("does not invalidate unchanged material programs during repeated part switches", () => {
+    const assembly = createMechAssembly(visualConfiguration);
+    const armorMaterial = meshes(assembly.parts.get("armor")!)
+      .map((mesh) => mesh.material)
+      .find((material): material is MeshStandardMaterial => material instanceof MeshStandardMaterial);
+    if (!armorMaterial) throw new Error("expected armor material");
+    const initialVersion = armorMaterial.version;
+
+    for (let index = 0; index < 50; index += 1) {
+      assembly.updateConfiguration({
+        ...visualConfiguration,
+        headId: index % 2 === 0 ? "halo-head" : "surveyor-head",
+      });
+    }
+
+    expect(armorMaterial.version).toBe(initialVersion);
+    assembly.dispose();
+  });
+
   it("replaces a chassis socket frame without rebuilding unchanged modules", () => {
     const assembly = createMechAssembly(visualConfiguration);
     const oldChassis = assembly.parts.get("chassis");

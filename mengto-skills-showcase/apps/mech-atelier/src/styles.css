@@ -150,6 +150,72 @@ input:focus-visible + span {
   isolation: isolate;
 }
 
+.render-fallback {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 46%, rgb(232 109 61 / 18%), transparent 34%),
+    linear-gradient(135deg, #0b0d0f, #17110f);
+}
+
+.fallback-illustration {
+  position: relative;
+  width: min(34vw, 320px);
+  height: min(45vh, 390px);
+  border: 1px solid rgb(242 160 111 / 38%);
+  background: repeating-linear-gradient(0deg, transparent 0 29px, rgb(255 255 255 / 5%) 30px);
+  clip-path: polygon(42% 0, 58% 0, 64% 16%, 78% 28%, 70% 54%, 78% 90%, 60% 100%, 40% 100%, 22% 90%, 30% 54%, 22% 28%, 36% 16%);
+}
+
+.fallback-illustration i {
+  position: absolute;
+  display: block;
+  border: 2px solid #eea174;
+  background: rgb(232 109 61 / 14%);
+}
+
+.fallback-head { inset: 10% 37% auto; height: 15%; }
+.fallback-core { inset: 28% 25% 35%; }
+.fallback-left { inset: 35% auto auto 7%; width: 20%; height: 28%; transform: skewY(-20deg); }
+.fallback-right { inset: 35% 7% auto auto; width: 20%; height: 28%; transform: skewY(20deg); }
+.fallback-legs { inset: auto 30% 5%; height: 28%; }
+
+.fallback-copy {
+  position: absolute;
+  bottom: 88px;
+  left: clamp(24px, 4vw, 62px);
+  display: grid;
+  max-width: 360px;
+  gap: 7px;
+  color: #f2eee7;
+}
+
+.fallback-copy strong { font-size: 16px; }
+.fallback-copy span { color: #c5beb5; font-size: 12px; line-height: 1.6; }
+.fallback-copy small { color: #eaa57a; font: 9px/1.4 "JetBrains Mono", Consolas, monospace; letter-spacing: .09em; }
+
+.fallback-reason {
+  position: absolute;
+  z-index: 5;
+  right: 24px;
+  bottom: 82px;
+  max-width: 260px;
+  margin: 0;
+  color: #f1bd9e;
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.fallback-hotspot-control { display: none; }
+
+.mobile-configure,
+.panel-close { display: none; }
+
 [data-product-canvas] {
   position: absolute;
   inset: 0;
@@ -909,6 +975,117 @@ input:checked + .option-indicator {
     padding-right: 22px;
     padding-left: 22px;
   }
+}
+
+@media (max-width: 700px), (max-height: 500px) and (orientation: landscape) {
+  html,
+  body,
+  #app,
+  .app-shell { min-height: 100svh; }
+
+  .topbar {
+    min-height: 58px;
+    padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
+  }
+
+  .wordmark small,
+  .topbar-status { display: none; }
+
+  .workspace {
+    display: block;
+    height: auto;
+    min-height: 0;
+  }
+
+  .product-stage {
+    height: min(46svh, 388px);
+    min-height: 250px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .stage-heading { top: 20px; left: 18px; max-width: 230px; }
+  .stage-heading h1 { font-size: 31px; }
+  .stage-heading > p:last-child,
+  .stage-readout,
+  .asset-disclosure { display: none; }
+  .stage-badge { top: 18px; right: 16px; max-width: 116px; }
+  .stage-badge strong { font-size: 9px; text-align: right; }
+  .stage-controls { right: 12px; bottom: 14px; left: 12px; gap: 6px; }
+  .stage-controls p { display: none; }
+  .stage-controls button { min-height: 44px; padding-inline: 11px; }
+  .fallback-copy { right: 20px; bottom: 74px; left: 20px; }
+  .fallback-reason { right: 16px; bottom: 72px; left: 16px; max-width: none; text-align: left; }
+  .fallback-illustration { width: 156px; height: 225px; opacity: .76; }
+
+  .mobile-configure {
+    position: fixed;
+    z-index: 30;
+    right: max(16px, env(safe-area-inset-right));
+    bottom: max(16px, env(safe-area-inset-bottom));
+    display: inline-flex;
+    min-width: 132px;
+    min-height: 48px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgb(232 109 61 / 76%);
+    background: #d95e32;
+    box-shadow: 0 10px 30px rgb(0 0 0 / 42%);
+    color: white;
+    font-weight: 700;
+  }
+
+  .configuration-panel {
+    position: fixed;
+    z-index: 40;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: block;
+    max-height: min(78svh, 680px);
+    padding-bottom: env(safe-area-inset-bottom);
+    border: 1px solid var(--line-strong);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -18px 55px rgb(0 0 0 / 55%);
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(calc(100% + 24px));
+    transition: transform 180ms ease;
+  }
+
+  html[data-configuration-sheet="open"] .configuration-panel { visibility: visible; pointer-events: auto; transform: translateY(0); }
+  html[data-configuration-sheet="open"] .mobile-configure { visibility: hidden; }
+
+  .panel-intro { padding: 18px 18px 14px; }
+  .panel-intro h2 { font-size: 22px; }
+  .panel-close {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--line-strong);
+    background: #17191c;
+    color: var(--ink);
+  }
+  .configuration-panel .panel-intro > span { display: none; }
+  .config-announcer { padding-inline: 18px; }
+  .option-group,
+  .summary-panel,
+  .sharing-panel { padding-right: 18px; padding-left: 18px; }
+  .option-card { min-height: 56px; }
+  .sharing-actions button { min-height: 44px; }
+  .panel-footer { padding: 18px 18px 28px; }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .topbar { min-height: 48px; }
+  .product-stage { height: calc(100svh - 48px); min-height: 0; }
+  .stage-heading { top: 12px; }
+  .stage-heading h1 { font-size: 25px; }
+  .mobile-configure { bottom: max(10px, env(safe-area-inset-bottom)); }
+  .configuration-panel { max-height: 92svh; }
 }
 
 @media (prefers-reduced-motion: reduce) {

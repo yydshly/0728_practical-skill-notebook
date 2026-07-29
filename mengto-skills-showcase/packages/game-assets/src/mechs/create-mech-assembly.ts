@@ -185,7 +185,6 @@ export function createMechAssembly(input: MechVisualConfiguration): MechAssembly
         if (channel === "secondary") material.color.set(finish.secondary);
         material.metalness = finish.metalness;
         material.roughness = finish.roughness;
-        material.needsUpdate = true;
       }
     }
   }

@@ -66,12 +66,14 @@ export function renderHotspots(
     projection: HotspotProjection,
     layerWidth: number,
     layerHeight: number,
+    width: number,
+    height: number,
   ): void {
     button.dataset.hotspotVisibility = projection.hiddenReason;
     button.hidden = !projection.visible;
     if (!projection.visible) return;
-    const halfWidth = button.offsetWidth / 2;
-    const halfHeight = button.offsetHeight / 2;
+    const halfWidth = width / 2;
+    const halfHeight = height / 2;
     const x = Math.min(
       Math.max(projection.x, halfWidth),
       Math.max(halfWidth, layerWidth - halfWidth),
@@ -89,12 +91,26 @@ export function renderHotspots(
     if (disposed) return;
     const layerWidth = container.clientWidth;
     const layerHeight = container.clientHeight;
-    for (const [slot, button] of buttons) {
+    const pending = [...buttons].map(([slot, button]) => ({
+      button,
+      projection: scene.projectHotspot(slot),
+    }));
+    // Read all layout metrics before writing transforms, preventing one
+    // read/write layout cycle per hotspot on every frame.
+    const metrics = pending.map(({ button, projection }) => ({
+      button,
+      projection,
+      width: button.offsetWidth,
+      height: button.offsetHeight,
+    }));
+    for (const { button, projection, width, height } of metrics) {
       updateButton(
         button,
-        scene.projectHotspot(slot),
+        projection,
         layerWidth,
         layerHeight,
+        width,
+        height,
       );
     }
   };

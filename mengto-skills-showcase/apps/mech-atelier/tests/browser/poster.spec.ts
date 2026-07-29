@@ -132,6 +132,28 @@ test("PNG 编码失败显示中文可操作错误且重试成功不产生空下�
   );
 });
 
+test("review-only pre-readback failure keeps the poster action retryable", async ({
+  cleanPage: page,
+}) => {
+  await page.goto("/?reviewControls=1&forcePosterReadbackFailure=once");
+  const button = page.getByRole("button", { name: "导出产品海报" });
+  let downloads = 0;
+  page.on("download", () => {
+    downloads += 1;
+  });
+
+  await button.click();
+  await expect(page.locator("[data-poster-status]")).toContainText("海报导出失败");
+  await expect(page.locator("[data-poster-status]")).toContainText("渲染读取前失败");
+  expect(downloads).toBe(0);
+  await expect(button).toBeEnabled();
+
+  const downloadPromise = page.waitForEvent("download");
+  await button.click();
+  await expect(downloadPromise).resolves.toBeDefined();
+  await expect(page.locator("[data-poster-status]")).toHaveText("产品海报已导出。");
+});
+
 interface SceneSnapshot {
   rendererId: number;
   canvasId: number;
