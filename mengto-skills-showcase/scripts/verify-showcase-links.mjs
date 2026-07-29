@@ -38,6 +38,7 @@ const htmlUrlAttributes = new Set([
 ]);
 const htmlSrcsetAttributes = new Set(["imagesrcset", "srcset"]);
 const htmlEntryAssetAttributes = new Set(["href", "src"]);
+const MAX_SRCDOC_DEPTH = 8;
 const productDirectories = new Set([
   "monster-forge",
   "ashfall-arena",
@@ -143,7 +144,11 @@ function parseHtmlStartTag(source) {
   const attributes = [];
   while (index < source.length) {
     while (ASCII_WHITESPACE.test(source[index] ?? "")) index += 1;
-    if (source[index] === "/" || index >= source.length) break;
+    if (index >= source.length) break;
+    if (source[index] === "/") {
+      index += 1;
+      continue;
+    }
     const attributeStart = index;
     while (
       index < source.length
@@ -174,10 +179,11 @@ function parseHtmlStartTag(source) {
           && !ASCII_WHITESPACE.test(source[index])
         ) index += 1;
         value = source.slice(valueStart, index);
-        if (value.endsWith("/")) value = value.slice(0, -1);
       }
     }
-    attributes.push({ name, value });
+    if (!attributes.some((attribute) => attribute.name === name)) {
+      attributes.push({ name, value });
+    }
   }
   return { tagName, attributes };
 }
@@ -223,8 +229,8 @@ export function findHtmlCommentEnd(html, start) {
   return html.length;
 }
 
-function htmlStartTagAttributes(html) {
-  const attributes = [];
+function htmlStartTags(html) {
+  const startTags = [];
   let index = 0;
   while (index < html.length) {
     const tagStart = html.indexOf("<", index);
@@ -242,7 +248,7 @@ function htmlStartTagAttributes(html) {
     const closing = trimmed.startsWith("/");
     const parsed = parseHtmlStartTag(closing ? trimmed.slice(1) : trimmed);
     if (!closing) {
-      attributes.push(...parsed.attributes);
+      startTags.push(parsed);
       if (["script", "style"].includes(parsed.tagName)) {
         const closeStart = findRawTextCloseStart(html, parsed.tagName, tag.end);
         if (closeStart < 0) break;
@@ -252,37 +258,84 @@ function htmlStartTagAttributes(html) {
     }
     index = tag.end;
   }
-  return attributes;
+  return startTags;
 }
 
+function htmlStartTagAttributes(html) {
+  return htmlStartTags(html).flatMap(({ attributes }) => attributes);
+}
+
+const htmlNamedCharacterReferences = [
+  ["NewLine", "\n"],
+  ["lowbar", "_"],
+  ["colon", ":"],
+  ["apos", "'"],
+  ["bsol", "\\"],
+  ["quot", '"'],
+  ["QUOT", '"'],
+  ["amp", "&"],
+  ["AMP", "&"],
+  ["sol", "/"],
+  ["Tab", "\t"],
+  ["gt", ">"],
+  ["GT", ">"],
+  ["lt", "<"],
+  ["LT", "<"],
+];
+const legacyHtmlNamedCharacterReferences = htmlNamedCharacterReferences
+  .filter(([name]) => ["amp", "AMP", "gt", "GT", "lt", "LT", "quot", "QUOT"]
+    .includes(name));
+
 function decodeHtmlAttribute(value) {
-  return value.replace(
-    /&(?:#([0-9]+);?|#x([0-9a-f]+);?|(colon|sol|bsol|lowbar|amp|tab|newline);)/gi,
-    (reference, decimal, hexadecimal, named) => {
-      if (decimal || hexadecimal) {
-        const codePoint = Number.parseInt(
-          decimal ?? hexadecimal,
-          decimal ? 10 : 16,
-        );
-        if (
-          Number.isInteger(codePoint)
-          && codePoint >= 0
-          && codePoint <= 0x10ffff
-          && !(codePoint >= 0xd800 && codePoint <= 0xdfff)
-        ) return String.fromCodePoint(codePoint);
-        return reference;
-      }
-      return {
-        amp: "&",
-        bsol: "\\",
-        colon: ":",
-        lowbar: "_",
-        newline: "\n",
-        sol: "/",
-        tab: "\t",
-      }[named.toLowerCase()];
-    },
-  );
+  let decoded = "";
+  let index = 0;
+  while (index < value.length) {
+    if (value[index] !== "&") {
+      decoded += value[index];
+      index += 1;
+      continue;
+    }
+
+    const numeric = value.slice(index).match(/^&#(?:x([0-9a-f]+)|([0-9]+));?/i);
+    if (numeric) {
+      const codePoint = Number.parseInt(
+        numeric[1] ?? numeric[2],
+        numeric[1] ? 16 : 10,
+      );
+      decoded += (
+        codePoint === 0
+        || codePoint > 0x10ffff
+        || (codePoint >= 0xd800 && codePoint <= 0xdfff)
+      )
+        ? "\ufffd"
+        : String.fromCodePoint(codePoint);
+      index += numeric[0].length;
+      continue;
+    }
+
+    const exact = htmlNamedCharacterReferences.find(([name]) =>
+      value.startsWith(`&${name};`, index));
+    if (exact) {
+      decoded += exact[1];
+      index += exact[0].length + 2;
+      continue;
+    }
+
+    const legacy = legacyHtmlNamedCharacterReferences.find(([name]) => {
+      if (!value.startsWith(`&${name}`, index)) return false;
+      const following = value[index + name.length + 1] ?? "";
+      return !/[a-z0-9=]/i.test(following);
+    });
+    if (legacy) {
+      decoded += legacy[1];
+      index += legacy[0].length + 1;
+      continue;
+    }
+
+    decoded += "&";
+    index += 1;
+  }
+  return decoded;
 }
 
 const htmlUrlBase = new URL("https://showcase.invalid/__showcase_base__/");
@@ -379,10 +432,34 @@ function urlAttributeFailures(value) {
   return failures;
 }
 
-function htmlAttributeFailures(attributes) {
+function htmlDocumentFailures(html, relativePath, srcdocDepth = 0) {
+  const failures = remoteFailures(html, relativePath);
+  for (const { tagName, attributes } of htmlStartTags(html)) {
+    failures.push(...htmlAttributeFailures(attributes, relativePath));
+    if (tagName !== "iframe") continue;
+    const srcdoc = attributes.find(({ name }) => name === "srcdoc");
+    if (!srcdoc) continue;
+    if (srcdocDepth >= MAX_SRCDOC_DEPTH) {
+      failures.push(
+        `srcdoc nesting depth exceeds defensive limit ${MAX_SRCDOC_DEPTH}`,
+      );
+      continue;
+    }
+    failures.push(...htmlDocumentFailures(
+      decodeHtmlAttribute(srcdoc.value),
+      relativePath,
+      srcdocDepth + 1,
+    ));
+  }
+  return failures;
+}
+
+function htmlAttributeFailures(attributes, relativePath) {
   const failures = [];
   for (const { name, value } of attributes) {
+    if (name === "srcdoc") continue;
     const decoded = decodeHtmlAttribute(value);
+    failures.push(...remoteFailures(decoded, relativePath));
     if (name === "target" && decoded.toLowerCase() === "_blank") {
       failures.push("target=_blank");
     }
@@ -437,15 +514,15 @@ export async function scanShowcaseText(root) {
     for (const match of text.matchAll(forbiddenLoopback)) {
       failures.push(`${relativePath}: forbidden loopback ${match[0]}`);
     }
-    failures.push(...remoteFailures(text, relativePath).map((failure) =>
-      `${relativePath}: ${failure}`));
+    if (extname(path).toLowerCase() === ".html") {
+      failures.push(...htmlDocumentFailures(text, relativePath).map((failure) =>
+        `${relativePath}: ${failure}`));
+    } else {
+      failures.push(...remoteFailures(text, relativePath).map((failure) =>
+        `${relativePath}: ${failure}`));
+    }
     if (directory === "." && hubThreeToken.test(text)) {
       failures.push(`${relativePath}: forbidden Hub Three runtime`);
-    }
-    if (extname(path).toLowerCase() === ".html") {
-      const attributes = htmlStartTagAttributes(text);
-      failures.push(...htmlAttributeFailures(attributes).map((failure) =>
-        `${relativePath}: ${failure}`));
     }
     textByDirectory.set(
       directory,

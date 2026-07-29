@@ -807,6 +807,222 @@ describe("final showcase text scan", () => {
     await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
   });
 
+  it("rejects the reviewed entity-decoded remote script in iframe srcdoc", async () => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    const srcdoc =
+      `<iframe srcdoc="&lt;script src='https&#58;//cdn.example.test/x.js'>&lt;/script>"></iframe>`;
+    await writeFile(path, `${await readFile(path, "utf8")}${srcdoc}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
+  it("rejects Chromium's semicolonless legacy entity srcdoc bypass", async () => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    const srcdoc =
+      `<iframe srcdoc="&lt&#115;cript src='https&#58;//cdn.example.test/x.js'>&lt/script>"></iframe>`;
+    await writeFile(path, `${await readFile(path, "utf8")}${srcdoc}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
+  it("rejects semicolonless legacy markup when the URL needs child-layer decoding", async () => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    const srcdoc =
+      `<iframe srcdoc="&lt&#115;cript src='https&amp;#58;//cdn.example.test/x.js'>&lt/script>"></iframe>`;
+    await writeFile(path, `${await readFile(path, "utf8")}${srcdoc}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
+  it.each([
+    [
+      "entity-decoded target=_blank",
+      `<iframe srcdoc="&lt;a href='../' target='_bl&amp;#97;nk'&gt;Hub&lt;/a&gt;"></iframe>`,
+      /target=_blank/i,
+    ],
+    [
+      "entity-decoded root /assets/",
+      `<iframe srcdoc="&lt;script src='&amp;#47;assets/evil.js'&gt;&lt;/script&gt;"></iframe>`,
+      /\/assets\//i,
+    ],
+  ])("rejects a nested srcdoc %s violation", async (_label, srcdoc, expected) => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    await writeFile(path, `${await readFile(path, "utf8")}${srcdoc}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(expected);
+  });
+
+  it.each([
+    [
+      "outer iframe",
+      `<iframe/srcdoc="&lt;script src='https&amp;#58;//cdn.example.test/outer-solidus.js'&gt;&lt;/script&gt;"></iframe>`,
+    ],
+    [
+      "child script",
+      `<iframe srcdoc="&lt;script/src='https&amp;#58;//cdn.example.test/child-solidus.js'&gt;&lt;/script&gt;"></iframe>`,
+    ],
+    [
+      "outer iframe after multiple solidus characters",
+      `<iframe///srcdoc="&lt;script src='https&amp;#58;//cdn.example.test/outer-multiple-solidus.js'&gt;&lt;/script&gt;"></iframe>`,
+    ],
+    [
+      "child script after multiple solidus characters",
+      `<iframe srcdoc="&lt;script///src='https&amp;#58;//cdn.example.test/child-multiple-solidus.js'&gt;&lt;/script&gt;"></iframe>`,
+    ],
+  ])("rejects Chromium's unexpected solidus recovery in the %s start tag", async (
+    _label,
+    srcdoc,
+  ) => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    await writeFile(path, `${await readFile(path, "utf8")}${srcdoc}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
+  it("rejects a root asset with a trailing slash in an unquoted attribute", async () => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    const addition = "<script src=/assets/></script>";
+    await writeFile(path, `${await readFile(path, "utf8")}${addition}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(/\/assets\//i);
+  });
+
+  it.each([
+    [
+      "style attribute URL",
+      `<iframe srcdoc="&lt;div style=&quot;background-image:url(https&amp;#58;//cdn.example.test/style.png)&quot;&gt;&lt;/div&gt;"></iframe>`,
+    ],
+    [
+      "meta refresh content URL",
+      `<iframe srcdoc="&lt;meta http-equiv=&quot;refresh&quot; content=&quot;0;url=https&amp;#58;//cdn.example.test/refresh&quot;&gt;"></iframe>`,
+    ],
+  ])("rejects a remote URL exposed by decoding a nested %s", async (
+    _label,
+    srcdoc,
+  ) => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    await writeFile(path, `${await readFile(path, "utf8")}${srcdoc}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
+  it.each([
+    [
+      "decimal",
+      `<iframe srcdoc="&#60script src='https&amp;#58;//cdn.example.test/decimal.js'>&#60/script>"></iframe>`,
+    ],
+    [
+      "hexadecimal",
+      `<iframe srcdoc="&#x3Cscript src='https&amp;#58;//cdn.example.test/hex.js'>&#x3C/script>"></iframe>`,
+    ],
+  ])("rejects a %s numeric tag delimiter without a semicolon", async (
+    _label,
+    srcdoc,
+  ) => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    await writeFile(path, `${await readFile(path, "utf8")}${srcdoc}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
+  it("rejects entity-decoded remote text in one srcdoc layer", async () => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    const srcdoc =
+      `<iframe srcdoc="&lt;p&gt;https&#58;//cdn.example.test/plain&lt;/p&gt;"></iframe>`;
+    await writeFile(path, `${await readFile(path, "utf8")}${srcdoc}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
+  it("rejects an entity-decoded remote script across multiple srcdoc layers", async () => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    const srcdoc = [
+      '<iframe srcdoc="&lt;iframe srcdoc=&quot;',
+      "&amp;lt;script src=&amp;#39;https&amp;#58;//cdn.example.test/deep.js",
+      "&amp;#39;&amp;gt;&amp;lt;/script&amp;gt;",
+      '&quot;&gt;&lt;/iframe&gt;"></iframe>',
+    ].join("");
+    await writeFile(path, `${await readFile(path, "utf8")}${srcdoc}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(/remote URL/i);
+  });
+
+  it("rejects srcdoc nesting beyond the defensive scan depth", async () => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    let srcdoc = "<p>local only</p>";
+    for (let depth = 0; depth < 10; depth += 1) {
+      const encoded = srcdoc
+        .replaceAll("&", "&amp;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+      srcdoc = `<iframe srcdoc="${encoded}"></iframe>`;
+    }
+    await writeFile(path, `${await readFile(path, "utf8")}${srcdoc}`, "utf8");
+    await expect(scanShowcaseText(root)).rejects.toThrow(/srcdoc.*(?:depth|limit)/i);
+  });
+
+  it("accepts a benign local-only iframe srcdoc", async () => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    const srcdoc = [
+      '<iframe srcdoc="&lt;a href=&quot;../?mode=review&amp;amp;',
+      "source=srcdoc#local&quot; target=&apos;_self&apos;&gt;Local&lt;/a&gt;",
+      '&lt;img src=&quot;./assets/local.png&quot;&gt;"></iframe>',
+    ].join("");
+    await writeFile(path, `${await readFile(path, "utf8")}${srcdoc}`, "utf8");
+    await expect(scanShowcaseText(root)).resolves.toBeUndefined();
+  });
+
+  it("accepts exactly eight local srcdoc document descents", async () => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    let srcdoc = "<p>local only</p>";
+    for (let depth = 0; depth < 8; depth += 1) {
+      const encoded = srcdoc
+        .replaceAll("&", "&amp;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+      srcdoc = `<iframe srcdoc="${encoded}"></iframe>`;
+    }
+    await writeFile(path, `${await readFile(path, "utf8")}${srcdoc}`, "utf8");
+    await expect(scanShowcaseText(root)).resolves.toBeUndefined();
+  });
+
+  it.each([
+    [
+      "one-layer double encoding",
+      `<iframe srcdoc="&amp;lt;script src=&amp;quot;https&amp;amp;#58;//cdn.example.test/inert.js&amp;quot;&amp;gt;&amp;lt;/script&amp;gt;"></iframe>`,
+    ],
+    [
+      "ambiguous semicolonless legacy names",
+      `<iframe srcdoc="&ltx &ampx &colon https&ampx#58;//cdn.example.test/inert"></iframe>`,
+    ],
+    [
+      "case-sensitive non-ASCII Colon entity",
+      `<iframe srcdoc="&lt;p&gt;https&Colon;&sol;&sol;cdn.example.test/inert&lt;/p&gt;"></iframe>`,
+    ],
+    [
+      "srcdoc attribute on a non-iframe",
+      `<div srcdoc="&lt;script src='https&amp;#58;//cdn.example.test/inert.js'&gt;&lt;/script&gt;"></div>`,
+    ],
+    [
+      "ignored duplicate srcdoc after a local first value",
+      `<iframe srcdoc="&lt;p&gt;local&lt;/p&gt;" srcdoc="&lt;script src='https&amp;#58;//cdn.example.test/inert.js'&gt;&lt;/script&gt;"></iframe>`,
+    ],
+    [
+      "quoted local document with a spaced self-closing solidus",
+      `<iframe srcdoc="&lt;p&gt;local&lt;/p&gt;" />`,
+    ],
+  ])("accepts srcdoc %s", async (_label, srcdoc) => {
+    const root = await createScanTree();
+    const path = join(root, "monster-forge", "index.html");
+    await writeFile(path, `${await readFile(path, "utf8")}${srcdoc}`, "utf8");
+    await expect(scanShowcaseText(root)).resolves.toBeUndefined();
+  });
+
   it.each([
     [
       '<link rel="stylesheet" href="https&#58;//cdn.example.test/app.css">',
@@ -1093,7 +1309,7 @@ describe("final showcase text scan", () => {
 
   it.each([
     ["quoted target blank", '<a href="../" target="_blank">Hub</a>'],
-    ["self-closing target blank", '<a href="../" target=_blank/>'],
+    ["self-closing target blank", '<a href="../" target=_blank />'],
   ])("rejects an HTML %s violation for that reason", async (_label, addition) => {
     const root = await createScanTree();
     const path = join(root, "monster-forge", "index.html");
