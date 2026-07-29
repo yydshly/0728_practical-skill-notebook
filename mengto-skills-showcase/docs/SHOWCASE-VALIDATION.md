@@ -13,8 +13,8 @@
 | 产品内引导 | Monster 首访任务 | 首访、重开、返回 | 浏览器交互 | 3 | continue | 集成共享引导 |
 | 产品内引导 | Ashfall 独立门禁 | 首帧、玩家暂停、升级/失败/完成、重复开关、销毁 | frame/tick/state/input/audio/save 证据 | 4 | continue | 单独阶段先写失败测试 |
 | 产品内引导 | Mech 首访任务 | 首访、重开、返回 | 浏览器交互 | 3 | continue | 集成共享引导 |
-| 产品内引导 | 引导版本与三个产品互不污染 | 关闭、持久隐藏、版本升级 | 单元 + 浏览器测试 | 1、3–4 | continue | 先写状态契约测试 |
-| 产品内引导 | 存储不可用仍可使用 | getter/read/write 抛错 | 单元 + 浏览器测试 | 1、3–4 | continue | 先写失败测试 |
+| 产品内引导 | 引导版本与三个产品互不污染 | 关闭、持久隐藏、版本升级 | 单元 + 浏览器测试 | 1、3–4 | pass | 候选 `3cc102f0fb237fa3ac724f207506b10b8f2041ac`；`npm test --workspace @showcase/showcase-guide`：9/9，`builds the exact versioned product-scoped auto-hidden key` 与 `isolates products and guide versions` 通过；`npm run test:browser --workspace @showcase/showcase-guide`：13/13，`persistent preferences remain isolated by product and guide version` 通过。 |
+| 产品内引导 | 存储不可用仍可使用 | getter/read/write 抛错 | 单元 + 浏览器测试 | 1、3–4 | pass | 候选 `3cc102f0fb237fa3ac724f207506b10b8f2041ac`；`npm test --workspace @showcase/showcase-guide`：9/9，`keeps the guide usable when storage getter/read/write throws` 三项通过；`npm run test:browser --workspace @showcase/showcase-guide`：13/13，真实 Chromium 的 `storage getter/read/write failure still permits open, close and reopen` 三项通过。 |
 | 跨产品导航 | 当前标签往返对应卡片 | DEV 与组合生产预览 | URL、锚点、焦点、无 loopback 证据 | 2–5 | continue | 添加往返浏览器旅程 |
 | 一条命令运行 | 四服务固定端口就绪与完整清理 | Windows 成功、占用、超时、崩溃、中断 | 进程树 + HTTP + 退出码证据 | 5 | continue | 添加脚本集成测试 |
 | 首次理解 | 访客能复述三产品与 Skill 关系 | 不阅读 README 的首次走查 | 真人回答记录 | 6 | continue | 实现后邀请至少一名访客走查 |
