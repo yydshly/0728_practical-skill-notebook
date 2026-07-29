@@ -70,6 +70,12 @@ try {
     viewport: { width: 1280, height: 720 },
     deviceScaleFactor: 2,
   });
+  const pageErrors = [];
+  const consoleErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded' });
 
   const title = await page.title();
@@ -378,6 +384,12 @@ try {
   if (initialGuidance.objectiveId !== 'leave_home') throw new Error('Expected guided radio objective');
   if (initialGuidance.missionStep !== '任务 1/4') throw new Error('Expected stage 1/4');
   if (!Number.isFinite(initialGuidance.distance)) throw new Error('Expected objective distance');
+  if (initialGuidance.proximity !== 'approach') {
+    throw new Error(`Expected initial radio approach guidance, got ${initialGuidance.proximity}`);
+  }
+  if (!initialGuidance.worldMarkerVisible) {
+    throw new Error('Expected initial radio marker to remain visible inside its guidance radius');
+  }
 
   const pursuerBeforeDanger = await page.evaluate(() => {
     const game = window.__RURAL_ESCAPE__;
@@ -437,11 +449,29 @@ try {
   const radioCompletion = await page.evaluate(() => ({
     objective: window.__RURAL_ESCAPE__.story.objective,
     toastVisible: !document.querySelector('#completion-toast').hidden,
+    toastText: document.querySelector('#completion-toast').textContent,
+    missionState: document.querySelector('.mission-hud').dataset.state,
+    compassHidden: document.querySelector('#objective-compass').hidden,
+    markerHidden: document.querySelector('#screen-marker').hidden,
+    approachHidden: document.querySelector('#approach-prompt').hidden,
+    interactionHidden: document.querySelector('#interaction').hidden,
   }));
   if (radioCompletion.objective !== 'visit_courtyard') {
     throw new Error(`Expected radio to advance objective to visit_courtyard, got ${radioCompletion.objective}`);
   }
   if (!radioCompletion.toastVisible) throw new Error('Expected radio completion toast');
+  if (radioCompletion.toastText !== '✓ 调查收音机') {
+    throw new Error(`Expected one radio completion message, got ${radioCompletion.toastText}`);
+  }
+  if (
+    radioCompletion.missionState !== 'complete'
+    || !radioCompletion.compassHidden
+    || !radioCompletion.markerHidden
+    || !radioCompletion.approachHidden
+    || !radioCompletion.interactionHidden
+  ) {
+    throw new Error('Expected guidance to stay suppressed during the completion transition');
+  }
   await page.waitForFunction(() => document.querySelector('#completion-toast').hidden);
 
   const pursuerState = await page.evaluate(() => {
@@ -554,6 +584,10 @@ try {
       objective: 'leave_home',
       flags: { radio: false, neighbour: false, flashlight: false },
       objectiveText: '离开主角家，调查村里的异常。',
+      missionStep: '任务 1/4',
+      missionTitle: '调查收音机',
+      compassVisible: true,
+      dangerMode: 'safe',
     },
     {
       id: 'sighting',
@@ -564,6 +598,10 @@ try {
       objective: 'escape_south_gate',
       flags: { radio: true, neighbour: true, flashlight: true },
       objectiveText: '沿主路逃往南侧村口。',
+      missionStep: '任务 4/4',
+      missionTitle: '逃往南门',
+      compassVisible: true,
+      dangerMode: 'safe',
     },
     {
       id: 'contact',
@@ -574,6 +612,10 @@ try {
       objective: 'escape_south_gate',
       flags: { radio: true, neighbour: true, flashlight: true },
       objectiveText: '沿主路逃往南侧村口。',
+      missionStep: '任务 4/4',
+      missionTitle: '逃往南门',
+      compassVisible: true,
+      dangerMode: 'threaten',
     },
     {
       id: 'south-gate',
@@ -581,6 +623,10 @@ try {
       objective: 'complete',
       flags: { radio: true, neighbour: true, flashlight: true },
       objectiveText: '第一章完成：你穿过了南侧村口。',
+      missionStep: '任务 4/4',
+      missionTitle: '逃出雾村',
+      compassVisible: false,
+      dangerMode: 'safe',
     },
   ];
 
@@ -599,6 +645,11 @@ try {
         storyObjective: game.story.objective,
         storyFlags: { ...game.story.flags },
         objectiveText: document.querySelector('#objective').textContent,
+        missionStep: document.querySelector('#mission-step').textContent,
+        missionTitle: document.querySelector('#mission-title').textContent,
+        compassVisible: !document.querySelector('#objective-compass').hidden,
+        markerVisible: !document.querySelector('#screen-marker').hidden,
+        dangerMode: shellElement.dataset.danger,
         uiPhase: shellElement.dataset.uiPhase,
         titleHidden: document.querySelector('.title-lockup').getAttribute('aria-hidden'),
       };
@@ -640,6 +691,34 @@ try {
         `Expected ${evidenceCase.id} HUD "${evidenceCase.objectiveText}", `
         + `got "${fixtureState.objectiveText}"`,
       );
+    }
+    if (
+      fixtureState.missionStep !== evidenceCase.missionStep
+      || fixtureState.missionTitle !== evidenceCase.missionTitle
+    ) {
+      throw new Error(
+        `Expected ${evidenceCase.id} mission ${evidenceCase.missionStep} `
+        + `"${evidenceCase.missionTitle}", got ${fixtureState.missionStep} `
+        + `"${fixtureState.missionTitle}"`,
+      );
+    }
+    if (fixtureState.compassVisible !== evidenceCase.compassVisible) {
+      throw new Error(
+        `Expected ${evidenceCase.id} compass visible=${evidenceCase.compassVisible}, `
+        + `got ${fixtureState.compassVisible}`,
+      );
+    }
+    if (fixtureState.dangerMode !== evidenceCase.dangerMode) {
+      throw new Error(
+        `Expected ${evidenceCase.id} danger ${evidenceCase.dangerMode}, `
+        + `got ${fixtureState.dangerMode}`,
+      );
+    }
+    if (evidenceCase.id === 'contact' && !fixtureState.markerVisible) {
+      throw new Error('Expected pursuit danger to preserve visible objective guidance');
+    }
+    if (evidenceCase.id === 'south-gate' && fixtureState.markerVisible) {
+      throw new Error('Expected completed escape guidance to stay suppressed');
     }
     if (fixtureState.uiPhase !== 'playing' || fixtureState.titleHidden !== 'true') {
       throw new Error(`Expected ${evidenceCase.id} evidence fixture to dismiss the intro`);
@@ -756,7 +835,103 @@ try {
     }
   }
 
-  console.log('Smoke test passed: visual hooks, evidence URLs, traversal, story, and camera.');
+  await page.click('#mute-toggle');
+  const mutedState = await page.evaluate(() => ({
+    pressed: document.querySelector('#mute-toggle').getAttribute('aria-pressed'),
+    muted: window.__RURAL_ESCAPE__.audio.muted,
+  }));
+  if (mutedState.pressed !== 'true' || mutedState.muted !== true) {
+    throw new Error('Expected mute control to update UI and audio state');
+  }
+
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto(
+      `http://127.0.0.1:${port}/?evidence=birth`,
+      { waitUntil: 'domcontentloaded' },
+    );
+    await page.evaluate(() => window.__RURAL_ESCAPE__.setPlayerForTest(-9, 32.8));
+    const hudRects = await page.evaluate(() => Object.fromEntries(
+      ['.mission-hud', '#objective-compass', '#interaction', '#tutorial-hint', '#mute-toggle']
+        .map((selector) => {
+          const element = document.querySelector(selector);
+          return [selector, element.hidden ? null : element.getBoundingClientRect().toJSON()];
+        }),
+    ));
+    for (const [selector, rect] of Object.entries(hudRects)) {
+      if (
+        rect
+        && (
+          rect.left < 0
+          || rect.top < 0
+          || rect.right > viewport.width
+          || rect.bottom > viewport.height
+        )
+      ) {
+        throw new Error(
+          `Expected ${selector} inside ${viewport.width}x${viewport.height}, got `
+          + `${rect.left},${rect.top},${rect.right},${rect.bottom}`,
+        );
+      }
+    }
+    const overlaps = (first, second) => Boolean(
+      first
+      && second
+      && first.left < second.right
+      && first.right > second.left
+      && first.top < second.bottom
+      && first.bottom > second.top
+    );
+    if (overlaps(hudRects['.mission-hud'], hudRects['#objective-compass'])) {
+      throw new Error(`Mission card overlaps compass at ${viewport.width}x${viewport.height}`);
+    }
+    if (overlaps(hudRects['#interaction'], hudRects['#tutorial-hint'])) {
+      throw new Error(`Interaction prompt overlaps tutorial hint at ${viewport.width}x${viewport.height}`);
+    }
+  }
+
+  const reducedPageErrors = [];
+  const reducedConsoleErrors = [];
+  const reducedPage = await browser.newPage({
+    viewport: { width: 1280, height: 720 },
+    reducedMotion: 'reduce',
+  });
+  reducedPage.on('pageerror', (error) => reducedPageErrors.push(error.message));
+  reducedPage.on('console', (message) => {
+    if (message.type() === 'error') reducedConsoleErrors.push(message.text());
+  });
+  await reducedPage.goto(
+    `http://127.0.0.1:${port}/?evidence=contact`,
+    { waitUntil: 'domcontentloaded' },
+  );
+  const reducedMotion = await reducedPage.evaluate(() => ({
+    markerAnimation: getComputedStyle(document.querySelector('#screen-marker')).animationName,
+    toastTransition: getComputedStyle(document.querySelector('#completion-toast')).transitionDuration,
+  }));
+  if (reducedMotion.markerAnimation !== 'none') {
+    throw new Error('Expected reduced-motion marker animation to be disabled');
+  }
+  if (reducedMotion.toastTransition !== '0s') {
+    throw new Error('Expected reduced-motion completion transition to be disabled');
+  }
+  await reducedPage.close();
+
+  if (pageErrors.length || reducedPageErrors.length) {
+    throw new Error(`Expected zero page errors, got ${[...pageErrors, ...reducedPageErrors].join(' | ')}`);
+  }
+  if (consoleErrors.length || reducedConsoleErrors.length) {
+    throw new Error(
+      `Expected zero console errors, got ${[...consoleErrors, ...reducedConsoleErrors].join(' | ')}`,
+    );
+  }
+
+  console.log(
+    'Smoke test passed: guidance, traversal, story, pursuit, mute, viewports, reduced motion, '
+    + 'console health, and camera.',
+  );
 } catch (error) {
   testError = error;
 } finally {
