@@ -66,7 +66,7 @@ export function createMusicDirector({
 
   const warnedFailures = new Set();
 
-  function getSnapshot() {
+  function readSnapshot() {
     return {
       assetState,
       playback,
@@ -78,12 +78,24 @@ export function createMusicDirector({
     };
   }
 
-  function publish() {
+  function notifyStateChange(snapshot) {
     try {
-      onStateChange(getSnapshot());
+      onStateChange(snapshot);
     } catch (error) {
       warnOnce('state-listener', error);
     }
+  }
+
+  function getSnapshot() {
+    const recoverySettled = settleCompletedRecovery();
+    const snapshot = readSnapshot();
+    if (recoverySettled) notifyStateChange(snapshot);
+    return snapshot;
+  }
+
+  function publish() {
+    settleCompletedRecovery();
+    notifyStateChange(readSnapshot());
   }
 
   function warnOnce(failureClass, error) {
@@ -388,7 +400,11 @@ export function createMusicDirector({
     return true;
   }
 
-  function scheduleMix(snapshot, { initial = false, publishChange = true } = {}) {
+  function scheduleMix(snapshot, {
+    initial = false,
+    initialStartTime = null,
+    publishChange = true,
+  } = {}) {
     if (terminalComplete || layerGains.length !== 2 || !contextRef) return false;
     settleCompletedRecovery();
 
@@ -408,7 +424,7 @@ export function createMusicDirector({
     );
     if (sameDangerMode) {
       const intensityDelta = Math.abs(snapshot.intensity - lastScheduledIntensity);
-      if ((intensityDelta + Number.EPSILON) < intensityThreshold) return false;
+      if (intensityDelta < intensityThreshold) return false;
       try {
         holdAndRamp(layerGains[1].gain, mix.danger, mix.duration);
       } catch (error) {
@@ -429,8 +445,17 @@ export function createMusicDirector({
     }
 
     try {
-      holdAndRamp(layerGains[0].gain, mix.exploration, mix.duration);
-      holdAndRamp(layerGains[1].gain, mix.danger, mix.duration);
+      if (
+        initial
+        && initialStartTime !== null
+        && (snapshot.mode === 'chase' || snapshot.mode === 'threaten')
+      ) {
+        layerGains[0].gain.setValueAtTime(mix.exploration, initialStartTime);
+        layerGains[1].gain.setValueAtTime(mix.danger, initialStartTime);
+      } else {
+        holdAndRamp(layerGains[0].gain, mix.exploration, mix.duration);
+        holdAndRamp(layerGains[1].gain, mix.danger, mix.duration);
+      }
     } catch (error) {
       warnOnce('mix-automation', error);
       return false;
@@ -519,6 +544,16 @@ export function createMusicDirector({
     startingStoryStingers.add(role);
     try {
       if (role === 'escape') stopActiveStingers('reveal');
+      if (
+        disposed
+        || transientsSuspended
+        || !decodedSet
+        || playback !== 'playing'
+        || !contextRef
+        || !stingerOutputRef
+      ) {
+        return false;
+      }
 
       let source = null;
       let voiceGain = null;
@@ -607,6 +642,7 @@ export function createMusicDirector({
       } else {
         scheduleMix(latestDangerSnapshot, {
           initial: true,
+          initialStartTime: synchronizedStart,
           publishChange: false,
         });
       }
@@ -707,7 +743,13 @@ export function createMusicDirector({
     if (transientsSuspended) return;
 
     if (!playStoryStinger(role)) {
-      if (!decodedSet || playback !== 'playing') pendingStoryStingers.add(role);
+      if (
+        !disposed
+        && !transientsSuspended
+        && (!decodedSet || playback !== 'playing')
+      ) {
+        pendingStoryStingers.add(role);
+      }
     }
   }
 

@@ -596,12 +596,13 @@ test('music director mix falls back to cancel and set before ramping', async () 
   await director.unlock(outputs);
   const dangerParam = context.gains[1].gain;
   dangerParam.cancelAndHoldAtTime = undefined;
+  dangerParam.value = 0.27;
 
   director.updateDanger({ mode: 'chase', intensity: 0.3 });
 
   assert.deepEqual(dangerParam.calls.slice(-3), [
     { method: 'cancelScheduledValues', args: [0] },
-    { method: 'setValueAtTime', args: [0, 0] },
+    { method: 'setValueAtTime', args: [0.27, 0] },
     { method: 'linearRampToValueAtTime', args: [0.35, 2] },
   ]);
 });
@@ -610,25 +611,29 @@ test('music director mix ignores sub-threshold same-mode intensity and updates o
   const context = new FakeAudioContext();
   const { director, outputs } = createDirectorHarness({ context });
   await director.unlock(outputs);
-  director.updateDanger({ mode: 'chase', intensity: 0.4 });
+  director.updateDanger({ mode: 'chase', intensity: 0.3 });
 
   const sourceCount = context.sources.length;
   const explorationCallCount = context.gains[0].gain.calls.length;
   const dangerCallCount = context.gains[1].gain.calls.length;
-  director.updateDanger({ mode: 'chase', intensity: 0.479 });
+  const belowThresholdIntensity = 0.3 + 0.07999999999999996;
+  assert.ok((belowThresholdIntensity - 0.3) < 0.08);
+  director.updateDanger({ mode: 'chase', intensity: belowThresholdIntensity });
 
   assert.equal(context.gains[0].gain.calls.length, explorationCallCount);
   assert.equal(context.gains[1].gain.calls.length, dangerCallCount);
   assert.equal(context.sources.length, sourceCount);
 
-  director.updateDanger({ mode: 'chase', intensity: 0.48 });
+  director.updateDanger({ mode: 'chase', intensity: 0.38 });
 
   assert.equal(context.gains[0].gain.calls.length, explorationCallCount);
   assert.equal(context.gains[1].gain.calls.length, dangerCallCount + 2);
-  assert.deepEqual(
-    lastAudioParamCall(context.gains[1].gain, 'linearRampToValueAtTime')?.args,
-    [0.5252631578947369, 2],
+  const dangerRamp = lastAudioParamCall(
+    context.gains[1].gain,
+    'linearRampToValueAtTime',
   );
+  assert.ok(Math.abs(dangerRamp.args[0] - 0.4278947368421053) < 1e-12);
+  assert.equal(dangerRamp.args[1], 2);
   assert.equal(context.sources.length, sourceCount);
   assert.equal(director.getSnapshot().loopGeneration, 1);
 });
@@ -665,6 +670,40 @@ test('music director recovery curve survives safe snapshots and publishes safe a
   assert.equal(context.gains[0].gain.calls.length, explorationCallCount);
   assert.equal(context.gains[1].gain.calls.length, dangerCallCount);
   assert.equal(director.getSnapshot().loopGeneration, 1);
+});
+
+test('music director recovery settles from the audio clock when getSnapshot is the next observation', async () => {
+  const context = new FakeAudioContext();
+  let harness;
+  let reentered = false;
+  const snapshots = [];
+  harness = createDirectorHarness({
+    context,
+    onStateChange(snapshot) {
+      snapshots.push(snapshot);
+      if (snapshot.mode === 'safe' && !reentered) {
+        reentered = true;
+        assert.equal(harness.director.getSnapshot().mode, 'safe');
+      }
+    },
+  });
+  await harness.director.unlock(harness.outputs);
+  harness.director.updateDanger({ mode: 'chase', intensity: 0.5 });
+  context.advanceTime(1);
+  harness.director.updateDanger({ mode: 'recover', intensity: 0.2 });
+  reentered = false;
+  snapshots.length = 0;
+
+  context.advanceTime(3.999);
+  assert.equal(harness.director.getSnapshot().mode, 'recover');
+  assert.equal(snapshots.length, 0);
+  context.advanceTime(0.001);
+
+  assert.equal(harness.director.getSnapshot().mode, 'safe');
+  assert.equal(reentered, true);
+  assert.equal(snapshots.length, 1);
+  assert.equal(snapshots[0].dangerMix, 0);
+  assert.equal(harness.director.getSnapshot().loopGeneration, 1);
 });
 
 test('music director complete mix is terminal across later danger snapshots', async () => {
@@ -723,15 +762,65 @@ test('music director mix applies cached pre-unlock safe and chase snapshots with
       method: 'setValueAtTime',
       args: [0, 5],
     });
-    assert.deepEqual(
-      lastAudioParamCall(context.gains[0].gain, 'linearRampToValueAtTime')?.args,
-      [0.794328, 7],
+    assert.deepEqual(context.gains[0].gain.calls.at(-1), {
+      method: 'setValueAtTime',
+      args: [0.794328, 5.05],
+    });
+    assert.deepEqual(context.gains[1].gain.calls.at(-1), {
+      method: 'setValueAtTime',
+      args: [0.72, 5.05],
+    });
+    assert.equal(
+      lastAudioParamCall(context.gains[0].gain, 'linearRampToValueAtTime'),
+      undefined,
     );
-    assert.deepEqual(
-      lastAudioParamCall(context.gains[1].gain, 'linearRampToValueAtTime')?.args,
-      [0.72, 7],
+    assert.equal(
+      lastAudioParamCall(context.gains[1].gain, 'linearRampToValueAtTime'),
+      undefined,
     );
     assert.equal(context.sources.length, 2);
+    assert.deepEqual(context.sources.map((source) => source.startCalls), [
+      [[5.05]],
+      [[5.05]],
+    ]);
+    assert.equal(director.getSnapshot().loopGeneration, 1);
+  });
+
+  await t.test('threaten', async () => {
+    const context = new FakeAudioContext({ currentTime: 5 });
+    const { director, outputs } = createDirectorHarness({ context });
+    director.updateDanger({ mode: 'threaten', intensity: 0.86 });
+
+    assert.equal(await director.unlock(outputs), true);
+
+    assert.deepEqual(context.gains[0].gain.calls[0], {
+      method: 'setValueAtTime',
+      args: [0, 5],
+    });
+    assert.deepEqual(context.gains[1].gain.calls[0], {
+      method: 'setValueAtTime',
+      args: [0, 5],
+    });
+    assert.deepEqual(context.gains[0].gain.calls.at(-1), {
+      method: 'setValueAtTime',
+      args: [0.707946, 5.05],
+    });
+    assert.deepEqual(context.gains[1].gain.calls.at(-1), {
+      method: 'setValueAtTime',
+      args: [0.875, 5.05],
+    });
+    assert.equal(
+      lastAudioParamCall(context.gains[0].gain, 'linearRampToValueAtTime'),
+      undefined,
+    );
+    assert.equal(
+      lastAudioParamCall(context.gains[1].gain, 'linearRampToValueAtTime'),
+      undefined,
+    );
+    assert.deepEqual(context.sources.map((source) => source.startCalls), [
+      [[5.05]],
+      [[5.05]],
+    ]);
     assert.equal(director.getSnapshot().loopGeneration, 1);
   });
 });
@@ -810,6 +899,87 @@ test('music director complete stinger remains singular during reentrant reveal c
   assert.equal(reentered, true);
   assert.equal(stingerSources(harness.context, 'escape').length, 1);
   assert.equal(harness.director.getSnapshot().activeVoices, 1);
+});
+
+test('music director transient suspension during reveal cleanup prevents escape startup and replay', async () => {
+  let harness;
+  let suspendDuringCleanup = false;
+  let reentered = false;
+  harness = createDirectorHarness({
+    onStateChange(snapshot) {
+      if (
+        suspendDuringCleanup
+        && !reentered
+        && snapshot.mode === 'complete'
+        && snapshot.activeVoices === 0
+      ) {
+        reentered = true;
+        void harness.director.suspendTransientVoices();
+      }
+    },
+  });
+  await harness.director.unlock(harness.outputs);
+  harness.director.handleStoryEvent({
+    type: 'objective-started',
+    objectiveId: 'escape_south_gate',
+  });
+
+  suspendDuringCleanup = true;
+  harness.director.handleStoryEvent({
+    type: 'chapter-completed',
+    objectiveId: 'complete',
+  });
+
+  assert.equal(reentered, true);
+  assert.equal(stingerSources(harness.context, 'escape').length, 0);
+  assert.equal(harness.context.sources.length, 3);
+  assert.equal(harness.context.gains.length, 3);
+  assert.equal(harness.director.getSnapshot().mode, 'complete');
+  assert.equal(harness.director.getSnapshot().activeVoices, 0);
+
+  assert.equal(await harness.director.resume(), true);
+  assert.equal(stingerSources(harness.context, 'escape').length, 0);
+});
+
+test('music director disposal during reveal cleanup aborts escape without a lifecycle warning', async () => {
+  const warnings = [];
+  let harness;
+  let disposeDuringCleanup = false;
+  let reentered = false;
+  harness = createDirectorHarness({
+    logger: { warn: (...args) => warnings.push(args) },
+    onStateChange(snapshot) {
+      if (
+        disposeDuringCleanup
+        && !reentered
+        && snapshot.mode === 'complete'
+        && snapshot.activeVoices === 0
+      ) {
+        reentered = true;
+        harness.director.dispose();
+      }
+    },
+  });
+  await harness.director.unlock(harness.outputs);
+  harness.director.handleStoryEvent({
+    type: 'objective-started',
+    objectiveId: 'escape_south_gate',
+  });
+
+  disposeDuringCleanup = true;
+  harness.director.handleStoryEvent({
+    type: 'chapter-completed',
+    objectiveId: 'complete',
+  });
+
+  assert.equal(reentered, true);
+  assert.equal(stingerSources(harness.context, 'escape').length, 0);
+  assert.equal(harness.context.sources.length, 3);
+  assert.equal(harness.context.gains.length, 3);
+  assert.equal(harness.director.getSnapshot().playback, 'disposed');
+  assert.equal(harness.director.getSnapshot().mode, 'complete');
+  assert.equal(harness.director.getSnapshot().activeVoices, 0);
+  assert.deepEqual(warnings, []);
 });
 
 test('music director stinger queues reveal or escape once until foreground loading succeeds', async (t) => {
