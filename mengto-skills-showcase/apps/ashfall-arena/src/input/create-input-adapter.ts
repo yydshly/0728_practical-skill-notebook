@@ -248,6 +248,12 @@ export function createInputAdapter(
       Number(keys.has("KeyW")) - Number(keys.has("KeyS")),
     );
   };
+  const updateKeyboardMouseGuard = () => {
+    setSourceGuard(
+      "keyboard-mouse",
+      keys.has("KeyK") || guardPointerId !== null,
+    );
+  };
 
   const onKeyDown = (event: KeyboardEvent) => {
     const edges: Partial<Record<string, EdgeIntent>> = {
@@ -265,16 +271,18 @@ export function createInputAdapter(
       event.code === "KeyA" ||
       event.code === "KeyS" ||
       event.code === "KeyD";
+    const guard = event.code === "KeyK";
     const menuNavigation =
       event.code === "Enter" ||
       event.code === "Tab" ||
       event.code === "ArrowUp" ||
       event.code === "ArrowDown";
-    if (!movement && !edge && !menuNavigation) return;
+    if (!movement && !guard && !edge && !menuNavigation) return;
     setMode("keyboard-mouse");
-    if (movement) {
+    if (movement || guard) {
       keys.add(event.code);
-      updateKeyboardMove();
+      if (movement) updateKeyboardMove();
+      if (guard) updateKeyboardMouseGuard();
     }
     if (event.repeat) return;
     if (edge) {
@@ -285,7 +293,11 @@ export function createInputAdapter(
   const onKeyUp = (event: KeyboardEvent) => {
     if (!keys.has(event.code)) return;
     keys.delete(event.code);
-    updateKeyboardMove();
+    if (event.code === "KeyK") {
+      updateKeyboardMouseGuard();
+    } else {
+      updateKeyboardMove();
+    }
   };
   const onCanvasPointerDown = (event: PointerEvent) => {
     if (event.pointerType === "touch") return;
@@ -294,13 +306,13 @@ export function createInputAdapter(
     if (event.button === 0) accumulator.press("attackPressed");
     if (event.button === 2) {
       guardPointerId = event.pointerId;
-      setSourceGuard("keyboard-mouse", true);
+      updateKeyboardMouseGuard();
     }
   };
   const releasePointerGuard = (event: PointerEvent) => {
     if (guardPointerId !== event.pointerId) return;
     guardPointerId = null;
-    setSourceGuard("keyboard-mouse", false);
+    updateKeyboardMouseGuard();
   };
   const preventCanvasContextMenu = (event: MouseEvent) => {
     event.preventDefault();

@@ -45,6 +45,103 @@ test("manual review input cannot bypass an open guide", async ({ page }) => {
   )).rejects.toThrow("guide gate is open");
 });
 
+test("guide gestures stay audio-neutral until the next gameplay gesture", async ({
+  page,
+}) => {
+  await page.goto("/?fixture=fresh&reviewControls=1&guideReview=1");
+
+  expect(
+    (await page.evaluate(() =>
+      window.__ashfallDiagnostics!.snapshot())).audio.contextCreateCount,
+  ).toBe(0);
+
+  await page.getByRole("button", { name: "关闭说明" }).click();
+  expect(
+    (await page.evaluate(() =>
+      window.__ashfallDiagnostics!.snapshot())).audio.contextCreateCount,
+  ).toBe(0);
+
+  await page.getByRole("button", { name: "这是什么？" }).click();
+  expect(
+    (await page.evaluate(() =>
+      window.__ashfallDiagnostics!.snapshot())).audio.contextCreateCount,
+  ).toBe(0);
+
+  await page.getByRole("button", { name: "关闭说明" }).click();
+  expect(
+    (await page.evaluate(() =>
+      window.__ashfallDiagnostics!.snapshot())).audio.contextCreateCount,
+  ).toBe(0);
+
+  await page
+    .locator("[data-game-canvas]")
+    .click({ position: { x: 320, y: 240 } });
+  await expect.poll(() => page.evaluate(() =>
+    window.__ashfallDiagnostics!.snapshot().audio.contextCreateCount
+  )).toBe(1);
+});
+
+test("K and right mouse guard remain held until both sources release", async ({
+  page,
+}) => {
+  await page.goto("/?fixture=fresh&reviewControls=1&guideReview=1");
+  await page.getByRole("button", { name: "关闭说明" }).click();
+  const canvas = page.locator("[data-game-canvas]");
+
+  await page.keyboard.down("KeyK");
+  await expect.poll(() => page.evaluate(() =>
+    window.__ashfallDiagnostics!.snapshot().input.guardHeld
+  )).toBe(true);
+  await canvas.dispatchEvent("pointerdown", {
+    pointerId: 81,
+    pointerType: "mouse",
+    button: 2,
+  });
+  await page.keyboard.up("KeyK");
+  expect(
+    (await page.evaluate(() =>
+      window.__ashfallDiagnostics!.snapshot())).input.guardHeld,
+  ).toBe(true);
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerId: 81,
+        pointerType: "mouse",
+        button: 2,
+      }),
+    ),
+  );
+  expect(
+    (await page.evaluate(() =>
+      window.__ashfallDiagnostics!.snapshot())).input.guardHeld,
+  ).toBe(false);
+
+  await canvas.dispatchEvent("pointerdown", {
+    pointerId: 82,
+    pointerType: "mouse",
+    button: 2,
+  });
+  await page.keyboard.down("KeyK");
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerId: 82,
+        pointerType: "mouse",
+        button: 2,
+      }),
+    ),
+  );
+  expect(
+    (await page.evaluate(() =>
+      window.__ashfallDiagnostics!.snapshot())).input.guardHeld,
+  ).toBe(true);
+  await page.keyboard.up("KeyK");
+  expect(
+    (await page.evaluate(() =>
+      window.__ashfallDiagnostics!.snapshot())).input.guardHeld,
+  ).toBe(false);
+});
+
 test("Start releases only the guide gate and real input moves and attacks", async ({
   page,
 }) => {

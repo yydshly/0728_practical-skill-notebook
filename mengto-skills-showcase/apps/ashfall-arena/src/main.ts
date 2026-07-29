@@ -712,7 +712,14 @@ const audio = createAudioFeedback({
   storage: saveStorage,
   gestureTarget: window,
   visibilityDocument: document,
-  canUnlock: () => !guideGateOpen,
+  canUnlock: (event) =>
+    !guideGateOpen &&
+    !event.composedPath().some(
+      (target) =>
+        target instanceof Element &&
+        (target.matches(".showcase-guide-trigger") ||
+          target.matches(".showcase-guide-dialog")),
+    ),
 });
 const accumulator = new FixedStepAccumulator(1 / 60, 5, 0.25);
 const performanceSampler = reviewControls
