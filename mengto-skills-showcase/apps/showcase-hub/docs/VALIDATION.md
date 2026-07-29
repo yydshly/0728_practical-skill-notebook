@@ -16,16 +16,20 @@
 - 来源总计：209,484 bytes。
 - 目标总计：538,589 bytes，低于 600 KiB 固定预算。
 - 来源与目标因格式和尺寸转换而具有不同 SHA-256。
-- 原始候选提交：`43ef034d06f341f525740fbfd243a6d9aabc0b20`。
-- 既有验收证据提交：`2c03f5a889e35a9abb14c45a2077cb40d8ae59ad`。
+- 历史资产捕获候选：`43ef034d06f341f525740fbfd243a6d9aabc0b20`。
+- 历史资产验收证据提交：`2c03f5a889e35a9abb14c45a2077cb40d8ae59ad`。
+
+这两个 SHA 只追溯截图来源与转换，不代表后续 Hub 功能、组合构建或当前套件
+重新执行了同一轮资产捕获。
 
 ## Phase 2 分层验证
 
 | 层级 | 状态 | 证据 / 边界 |
 | --- | --- | --- |
-| PNG 名称、尺寸、比例、替代文本与总预算 | pass | `tests/previews.test.ts`，2/2；目标总计 538,589 bytes |
-| 1440×900、390×844、320×844、720×900 重排代理 | pass | 开发与生产 Playwright 均通过；320/390 无横向溢出、可见交互目标不小于 44×44，720 可打开说明层 |
-| 图片请求失败与 reduced-motion | pass | 三张预览 404 时显示真实文本节点且保留两种操作；reduced-motion 下卡片过渡为 0s |
-| 生产入口、包体预算、无远程运行时依赖 | pass | `npm run build` 与 `scripts/verify-build.mjs`；JS 5.32 KiB gzip、CSS 2.25 KiB gzip，运行时文本中 loopback 匹配为 0 |
+| PNG 名称、尺寸、比例、替代文本与总预算 | pass | 历史候选 `d9ef199d646e12f235c56a7833c4b04208efba62`；`tests/previews.test.ts` 2/2；目标总计 538,589 bytes |
+| 1440×900、390×844、320×844、720×900 重排代理 | pass | 历史候选 `d9ef199d646e12f235c56a7833c4b04208efba62`；开发与生产 Playwright 均通过；320/390 无横向溢出、可见交互目标不小于 44×44，720 可打开说明层 |
+| 图片请求失败与 reduced-motion | pass | 历史候选 `d9ef199d646e12f235c56a7833c4b04208efba62`；三张预览 404 时显示真实文本节点且保留两种操作；reduced-motion 下卡片过渡为 0s |
+| 普通/组合生产入口、包体和 URL 扫描 | pass | 组合候选 `5a85355221943f3f1f8f59345ace1ab14406383b`；`npm run build:showcase`、独立扫描与普通 `npm run build` 通过。扫描允许三产品中的 XHTML namespace 与 shader 论文注释惰性字面量，除此之外无远程或 loopback 运行时 URL；Hub 本身不含 Three.js。 |
+| 三产品同标签组合往返 | pass | 组合候选 `10d99e1307bce62c279c05c5b6650f65a5f403ab`；`npm run test:showcase-preview` 4/4，单一 Page、精确 hash/焦点及链接扫描通过。这是套件组合旅程，不替代 Hub 自身完整浏览器矩阵。 |
 | 真实浏览器 200% 缩放 | continue | 自动 720px 重排代理不冒充浏览器级缩放 |
 | 实体设备 safe-area | continue | CSS 契约与移动视口自动化不替代实体设备验证 |

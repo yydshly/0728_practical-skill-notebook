@@ -2,7 +2,7 @@
 
 ## 当前结论与验证边界
 
-- 本轮 Task 9 候选基线：`97991ccbc33184aa6b01e0733e5917b5e76f7a34`（`fix: unlock Ashfall audio from focused gameplay keys`）；验证对象是该基线之上的 Ashfall onboarding 状态边界候选。最终提交与本文件同属一个提交，因此不在提交内容中写入不可自指的最终 SHA。
+- Task 9 基线为 `97991ccbc33184aa6b01e0733e5917b5e76f7a34`（`fix: unlock Ashfall audio from focused gameplay keys`），最终门禁/状态候选为 `f2ac76ead8f0d0d2658330fa34134d479eedcfe6`。
 - 下表中明确标为“本轮新鲜”的 Ashfall onboarding、unit、functional、performance、preview、bundle 预算与差异检查来自 2026-07-29 对本轮候选的全新串行重跑。根工作区、Skill 安装器、工作区契约、Skill 只读审计和依赖审计只保留前序历史结果，并明确标注本轮未重跑，供 Task 13 统一终验；不把它们冒充为本轮证据。
 - 当前状态：**发布候选 / 自动验收通过，人工可用性门槛未关闭**。
 - 8–12 分钟首次人工完成门槛：**待人工验证**。没有有效的首次人工完成时长，也没有可计算的中位数。
@@ -17,7 +17,7 @@
 | Node.js | `v22.15.0` |
 | npm | `10.9.2` |
 | Playwright | `1.62.0`，捆绑 Chromium、无头模式 |
-| 候选工作区 | `codex/showcase-hub-onboarding` 分支，Task 9 基线 `97991ccbc33184aa6b01e0733e5917b5e76f7a34` |
+| 候选工作区 | `codex/showcase-hub-onboarding` 分支，Task 9 最终候选 `f2ac76ead8f0d0d2658330fa34134d479eedcfe6` |
 | 自动通关入口 | `/?fixture=fresh&seed=7481&reviewControls=1` |
 | 生产验证入口 | Vite `dist` 本地 preview；默认使用独占严格端口 `4184` |
 
@@ -38,7 +38,7 @@
 | Skill 只读审计 | 前序历史证据，本轮未重跑：批准的 `16/16` 项均存在可读 `SKILL.md` |
 | 依赖审计 | 前序历史证据，本轮未重跑：`npm audit` 为 `0 vulnerabilities` |
 | 差异检查 | 本轮新鲜：`git diff --check` 与 staged diff-check 均通过 |
-| 候选提交 | 本轮代码、测试与本验证记录属于同一个 Task 9 提交；最终 SHA 见 Git 历史与 Task 9 报告 |
+| 候选提交 | `f2ac76ead8f0d0d2658330fa34134d479eedcfe6`；Task 9 范围为 `97991cc…` 基线之后到该提交 |
 
 本轮实际验证命令从套件根目录 `mengto-skills-showcase` 或所示 Ashfall 目录严格串行执行：
 
@@ -72,6 +72,22 @@ Playwright 的服务配置使用 `--strictPort` 且不复用已有服务。普�
 - live pagehide 的实际顺序是设置 disposed、取消 RAF，再依次销毁 input、audio、guide；fallback pagehide 则先销毁其独立 guide，再清理其余拥有的资源。两者的 disposal snapshot 都报告 `disposed=true`、`guideGateOpen=false`、`recoveryFrames=0`，诊断 API 和导览 DOM 均已移除，且都没有调用普通 close 恢复分支。
 - Task 8 的音频 trigger/gameplay 键矩阵由本轮完整功能浏览器套件继续覆盖：导览按钮、Escape 关闭和导航键保持音频中性；关闭后的真实 W/J、画布 Space 与 pointer 游戏手势仍可按既有契约解锁，重复游戏手势不重复创建 AudioContext。
 - 这些字段只存在于运行时 review diagnostics；本轮没有改变 `GameState`、保存 schema、`state.paused` 或 `stepGame()` 语义。
+
+## 当前组合往返的独立证据
+
+组合候选 `10d99e1307bce62c279c05c5b6650f65a5f403ab` 的
+`npm run test:showcase-preview` 为 4/4；其中 Ashfall focused 旅程 1/1。该旅程
+使用普通 `/ashfall-arena/`、空 storage、无 `reviewControls`/`guideReview`，
+并先确认没有 `[data-runtime-fallback]`、不是
+`data-render-mode="information-fallback"`、真实 `[data-game-canvas]` 可见。
+
+公共 DOM 三阶段样本显示：点击返回时与 `pagehide-start` 时 dialog/scroll lock
+仍为真且 runtime 未销毁；`pagehide-after-dispose` 时 dialog/lock 已清理且
+`data-runtime-disposed=true`。样本只经唯一 sessionStorage 测试键桥接，新 Hub
+读取后立即删除。它证明普通 live runtime 的页面生命周期顺序，但不声称直接读取
+私有 `guideGateOpen`。私有 gate 与 `recoveryFrames=0` 仍只由
+`f2ac76e…` 上 `reviewControls=1&guideReview=1` 的既有
+`onboarding-guide.spec.ts` 单独证明。
 
 ## 完整加速审阅旅程
 
@@ -204,14 +220,12 @@ localStorage.removeItem("ashfall-arena:v1");
 localStorage.removeItem("ashfall-arena:audio-settings:v1");
 ```
 
-若需要撤销本轮代码候选，优先按精确提交信息定位后使用可审计、可恢复的 revert：
-
-```powershell
-$task9Commit = git log --format=%H --grep="^test: close Ashfall onboarding state boundaries$" -n 1
-git revert $task9Commit
-```
-
-不要使用 `git reset --hard`。本 Task 9 验证文档与对应产品代码属于同一提交，不是分离的 evidence-only 提交；回滚时应按精确 Task 9 提交整体执行可审计的 revert。
+若需要撤销 Task 9，先审阅完整范围
+`97991ccbc33184aa6b01e0733e5917b5e76f7a34..f2ac76ead8f0d0d2658330fa34134d479eedcfe6`
+中的代码、测试和文档提交，再从范围末端按逆序执行可审计的 `git revert`。不要只
+定位并撤销 `test: close Ashfall onboarding state boundaries`，因为后续正式修复
+同样属于 Task 9；也不要使用 `git reset --hard`。回滚范围必须在执行前由维护者
+核对，避免误撤后续共享工作。
 
 ## 非目标与遗留限制
 

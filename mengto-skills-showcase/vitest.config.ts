@@ -8,6 +8,7 @@ export default defineConfig({
       "apps/*/tests/production/**",
       "packages/*/tests/browser/**",
       "tests/browser/**",
+      "tests/showcase-preview/**",
     ],
   },
 });

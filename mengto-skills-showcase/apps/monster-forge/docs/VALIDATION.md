@@ -2,14 +2,14 @@
 
 ## 2026-07-29 中文导览与返回展厅验证
 
-- 本轮候选基于 `d9ef199d646e12f235c56a7833c4b04208efba62`，最终候选 SHA 以本轮 `feat: onboard Monster Forge visitors` 提交及配套 Task 6 报告为准。
+- 本轮中文导览最终候选为 `af211294d590103bbdd0c4f742c268cffd9825c3`（`feat: onboard Monster Forge visitors`）。
 - 版本 1 中文导览覆盖首访自动打开、开始体验、持久“这是什么？”入口、Escape 关闭后焦点恢复，以及 `localStorage` getter 抛出 `SecurityError` 时的可用降级。
 - “返回能力展厅”不设置 `target`，始终在当前标签返回 `#product-monster-forge`。URL 单元测试覆盖 DEV `4172`、PROD 同域根路径和显式 `VITE_SHOWCASE_HUB_URL="../"`。
 - `?capture=1` 不创建导览入口或 dialog；普通审阅和 `?reviewControls=1&forceWebglFailure=1` 保留导览与返回链接。
 - 可观察小成功点为选择 `Glass Crawler`、勾选“显示骨架”后，目录卡保持 `aria-pressed="true"`、检查器标题与骨架状态同步，且页面仍只有一个实时 canvas。
 - 导览与现有 store/scene 共用原有单一 `pagehide` 销毁路径；controller、订阅和 Three.js 场景均在该 handler 中释放。
 
-本轮新鲜命令证据：
+候选 `af211294d590103bbdd0c4f742c268cffd9825c3` 的新鲜命令证据：
 
 ```powershell
 npm test --workspace @showcase/monster-forge -- showcase-hub-url
@@ -28,10 +28,11 @@ rg -n -i '127\.0\.0\.1|localhost|\[::1\]' apps/monster-forge/dist
 # 无匹配
 ```
 
-## 验证对象与边界
+## 当前组合候选与历史边界
 
-- 当前套件代码候选：`43ef034d06f341f525740fbfd243a6d9aabc0b20`。本轮重新执行了覆盖 Monster Forge 源码的根测试、根构建、工作区契约和 Skill 只读审计，但没有重跑 Monster Forge 专项浏览器矩阵或生产预览。
-- 下文 Monster Forge 产品专项证据仍来自候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9`（`fix: harden showcase release boundaries`），不会被冒充为当前套件候选的重跑结果。
+- 当前组合候选为 `10d99e1307bce62c279c05c5b6650f65a5f403ab`。它的 `npm run test:showcase-preview` 4/4 证明 Monster 首访导览、同一标签返回精确 `#product-monster-forge` 卡片与焦点，并证明组合链接不泄漏开发端口；它不替代 Monster 完整产品矩阵。
+- `43ef034d06f341f525740fbfd243a6d9aabc0b20` 只保留为历史公共根门禁候选；Task 13 修改契约后的新鲜根测试另由套件账本和 Task 13 报告登记。
+- 下文发布硬化产品专项证据仍来自历史候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9`（`fix: harden showcase release boundaries`），不会被冒充为当前组合候选的重跑结果。
 - 本地运行入口：在套件根目录执行 `npm run dev:forge`，默认地址为 `http://127.0.0.1:4173`。
 - 确定性审阅入口：`/?review=ash-warden`；其他 ID 为 `glass-crawler`、`bell-knight`、`mire-hound`。`?capture=1` 仅用于生成目录预览。
 - 本记录不代表已部署：本任务没有发布、托管或外部服务连接。
@@ -96,7 +97,7 @@ git diff --check
 
 该产品专项候选的结果为：Monster Forge 单元测试 `15/15`，开发服务 Playwright `16/16`，生产预览 smoke `1/1`。生产预览正常显示实时 canvas，没有进入 fallback，也没有 console error 或 page error；四张目录 PNG 与当前程序化模型源码的配对校验保持通过。这三项产品专项结果本轮未重跑。
 
-当前套件候选 `43ef034d06f341f525740fbfd243a6d9aabc0b20` 的新鲜公共门禁为：根测试 `37` 个文件、`450/450`，根构建、workspace validate、16 项 Skill 只读审计和 `git diff --check` 通过。它们证明当前源码仍通过公共门禁，但不替代 Monster Forge 的专项浏览器或生产预览重跑。
+历史公共候选 `43ef034d06f341f525740fbfd243a6d9aabc0b20` 的门禁记录为：根测试 `37` 个文件、`450/450`，根构建、workspace validate、16 项 Skill 只读审计和 `git diff --check` 通过。它们只描述该历史候选，不替代 `af211294…` 的导览专项、`b560d636…` 的发布硬化专项，也不冒充当前组合候选的产品全量重跑。
 
 ## 最终审查修复：目录重捕获与三类故障边界
 
@@ -105,7 +106,7 @@ git diff --check
 - `?reviewControls=1&forceModelFailure=1` 是一次性、确定性的模型构建故障夹具。首次真实模型工厂调用抛错并进入 `model-creation-failed` 边界；回退显示同一资产的 PNG、名称、程序化来源、尺寸、动作和中文具体原因。
 - `?reviewControls=1&forceRuntimeFailure=1` 会让已启动场景的首次实例更新抛错并进入独立的 `runtime-failed` 边界。点击“重试 3D 预览”会释放失败场景、重建实时场景并恢复持续增长的帧诊断。
 - 故障状态下切换目录卡会同步更新回退元数据。模型故障与 `?reviewControls=1&forceWebglFailure=1` 的旅程均继续通过；三个强制故障参数在普通 URL 上都不会生效。
-- 产品专项证据候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9` 已包含上述修复，并通过开发浏览器全套与生产预览 smoke；当前套件候选 `43ef034d06f341f525740fbfd243a6d9aabc0b20` 未重跑这两项专项门禁。
+- 历史产品专项证据候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9` 已包含上述修复，并通过开发浏览器全套与生产预览 smoke；当前组合候选 `10d99e1307bce62c279c05c5b6650f65a5f403ab` 只新增组合往返证据，没有把这两项专项门禁重标为当前结果。
 
 ## 已批准的非目标
 

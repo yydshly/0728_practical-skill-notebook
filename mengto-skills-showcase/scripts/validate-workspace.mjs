@@ -7,6 +7,20 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(scriptDirectory, "..");
 const repositoryRoot = resolve(workspaceRoot, "..");
 const fromWorkspace = (path) => resolve(workspaceRoot, path);
+const appFolders = [
+  "showcase-hub",
+  "monster-forge",
+  "ashfall-arena",
+  "mech-atelier",
+];
+const packageFolders = [
+  "content-schema",
+  "game-assets",
+  "input-system",
+  "showcase-guide",
+  "three-runtime",
+  "ui-system",
+];
 
 const toSkillRows = (markdown, pattern) => [...markdown.matchAll(pattern)].map(
   ([, name, sourcePath, products, phases]) => ({
@@ -63,6 +77,64 @@ if (failures.length === 0) {
   const guide = await readFile(fromWorkspace("docs/skill-installation.md"), "utf8");
   const readme = await readFile(fromWorkspace("README.md"), "utf8");
   const agents = await readFile(fromWorkspace("AGENTS.md"), "utf8");
+  const rootManifest = JSON.parse(await readFile(fromWorkspace("package.json"), "utf8"));
+  const apps = await Promise.all(appFolders.map(async (folder) => JSON.parse(
+    await readFile(fromWorkspace(`apps/${folder}/package.json`), "utf8"),
+  )));
+  const packages = await Promise.all(packageFolders.map(async (folder) => JSON.parse(
+    await readFile(fromWorkspace(`packages/${folder}/package.json`), "utf8"),
+  )));
+  const expectedAppNames = [
+    "@showcase/ashfall-arena",
+    "@showcase/hub",
+    "@showcase/mech-atelier",
+    "@showcase/monster-forge",
+  ];
+  const expectedPackageNames = [
+    "@showcase/content-schema",
+    "@showcase/game-assets",
+    "@showcase/input-system",
+    "@showcase/showcase-guide",
+    "@showcase/three-runtime",
+    "@showcase/ui-system",
+  ];
+
+  if (JSON.stringify(rootManifest.workspaces) !== JSON.stringify(["apps/*", "packages/*"])) {
+    failures.push("package.json must expose apps/* and packages/* workspaces");
+  }
+  if (JSON.stringify(apps.map(({ name }) => name).sort()) !== JSON.stringify(expectedAppNames)) {
+    failures.push("workspace must expose the four approved showcase apps");
+  }
+  if (JSON.stringify(packages.map(({ name }) => name).sort()) !== JSON.stringify(expectedPackageNames)) {
+    failures.push("workspace must expose the six approved shared packages");
+  }
+  if (apps.some(({ private: isPrivate }) => isPrivate !== true)
+    || packages.some(({ private: isPrivate }) => isPrivate !== true)) {
+    failures.push("showcase apps and shared packages must remain private workspaces");
+  }
+
+  const sharedGuide = packages.find(({ name }) => name === "@showcase/showcase-guide");
+  if (JSON.stringify(sharedGuide?.exports) !== JSON.stringify({
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css",
+  })) {
+    failures.push("@showcase/showcase-guide must expose its script and stylesheet routes");
+  }
+  for (const app of apps) {
+    if (app.dependencies?.["@showcase/showcase-guide"] !== "*") {
+      failures.push(`${app.name} must route product guidance through @showcase/showcase-guide`);
+    }
+  }
+  for (const [script, command] of Object.entries({
+    dev: "node scripts/dev-showcase.mjs",
+    "dev:hub": "npm run dev --workspace @showcase/hub",
+    "build:showcase": "node scripts/build-showcase.mjs",
+    "test:showcase-preview": "playwright test --config playwright.showcase-preview.config.ts",
+  })) {
+    if (rootManifest.scripts?.[script] !== command) {
+      failures.push(`package.json script ${script} must be ${command}`);
+    }
+  }
   const expectedRows = selection.skills.map(({ name, sourcePath, products, phases }) => ({
     name,
     sourcePath,
@@ -101,14 +173,25 @@ if (failures.length === 0) {
     failures.push("Unapproved web-design skills must not be recorded in selected-skills.json");
   }
 
-  for (const phrase of ["C:\\Users\\yun68\\.codex\\skills", "开发操作规范", "不是运行时依赖", "所有 Codex 项目"]) {
+  for (const phrase of [
+    "C:\\Users\\yun68\\.codex\\skills",
+    "开发操作规范",
+    "不是运行时依赖",
+    "所有 Codex 项目",
+    "Skill 是 Codex 开发与验收时读取的工作说明",
+    "网页运行时不会加载这些 Skill",
+    "本项目代码位于当前 `mengto-skills-showcase` 套件目录",
+    "不属于能力展厅三产品",
+  ]) {
     if (!guide.includes(phrase)) {
       failures.push(`docs/skill-installation.md must explain: ${phrase}`);
     }
   }
 
   for (const heading of [
+    "## 先看效果：一条命令打开三产品能力展厅",
     "## 产品矩阵",
+    "## 两个独立演示",
     "## 本地运行",
     "## Skill 源码与安装目录",
     "## 已安装 Skills",
@@ -124,12 +207,21 @@ if (failures.length === 0) {
     "C:\\Users\\yun68\\.codex\\skills",
     "不会进入最终产品包",
     "不会自动同步",
-    "已有演示",
-    "规划中",
-    "发布候选；自动验收通过，人工可用性门槛未关闭",
+    "三款独立产品",
+    "不是同一款游戏的三个关卡",
+    "Skill 是 Codex 开发与验收时读取的工作说明",
+    "网页运行时不会加载这些 Skill",
+    "普通 Vite/Three.js 网页产品",
+    "不属于能力展厅三产品",
+    "人工可用性门槛未关闭",
+    "未公开部署",
     "apps/ashfall-arena/docs/VALIDATION.md",
   ]) {
     if (!readme.includes(phrase)) failures.push(`README.md must explain: ${phrase}`);
+  }
+  for (const workspace of ["hub", "monster-forge", "ashfall-arena", "mech-atelier"]) {
+    const command = `npm run test:browser --workspace @showcase/${workspace}`;
+    if (!readme.includes(command)) failures.push(`README.md must document: ${command}`);
   }
 
   for (const phrase of [

@@ -2,7 +2,7 @@
 
 ## 2026-07-29 中文导览、移动面板协调与配置小成功点
 
-本节记录从基线 `af211294d590103bbdd0c4f742c268cffd9825c3` 增加 Mech Atelier v1 中文导览后的新鲜证据；下方既有发布记录继续保留，不能替代本节的增量验证。
+本节记录从基线 `af211294d590103bbdd0c4f742c268cffd9825c3` 增加 Mech Atelier v1 中文导览后的新鲜证据；最终候选为 `29c66e5d5936e6e64030da7bdc9693fccd74c38a`。下方既有发布记录继续保留，不能替代本节的增量验证。
 
 - 首访导览说明产品用途、第一步和预计 3–5 分钟体验时长；完成后可由“导览”按钮重新打开，`Escape` 关闭后焦点回到触发按钮。`localStorage` getter 被浏览器拒绝时，导览仍可用。
 - 返回入口在同一标签页打开固定的 `#product-mech-atelier` 锚点。URL 单测覆盖显式环境变量、开发默认、生产默认和 `../` 相对 Hub 基址；生产产物扫描未发现 `127.0.0.1`、`localhost`、`4172` 或 `[::1]`。
@@ -21,10 +21,11 @@
 
 开发矩阵第一次执行时，现有 50 次切换压力用例在 60 秒上限内停在一次 radio `check`，没有断言或资源计数不匹配；同文件独立重跑 6/6、随后完整开发矩阵 52/52 均通过，且未修改超时或核心场景逻辑，因此记录为本机 SwiftShader 并发资源波动。
 
-## 状态与范围
+## 当前组合候选与历史范围
 
-- 当前套件代码候选：`43ef034d06f341f525740fbfd243a6d9aabc0b20`。本轮重新执行了覆盖 Mech Atelier 源码的根测试、根构建和工作区校验，但没有重跑 Mech Atelier 专项浏览器矩阵或生产预览。
-- 下文产品专项证据候选仍为 `b560d636eed004c7b09e88f34ad7c5e17adb44e9`（`fix: harden showcase release boundaries`）。
+- 当前组合候选为 `10d99e1307bce62c279c05c5b6650f65a5f403ab`。其 `npm run test:showcase-preview` 4/4 证明 Mech 普通首访导览、单一 Page、同标签返回精确 `#product-mech-atelier` 卡片与焦点，并证明组合链接没有泄漏开发端口；它不替代 Mech 完整专项矩阵。
+- `43ef034d06f341f525740fbfd243a6d9aabc0b20` 只保留为历史公共根门禁候选；Task 13 修改契约后的新鲜根测试另由套件账本与 Task 13 报告登记。
+- 下文发布硬化产品专项证据候选仍为历史候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9`（`fix: harden showcase release boundaries`）。
 - 当前定位：可本地运行的产品配置演示；界面展示概念性积分价格，但不代表真实定价，也不含库存、订单、支付或任何商业履约承诺。
 - 验证日期：2026-07-29（Asia/Shanghai）。
 - 运行环境：Playwright Chromium 的确定性本地开发/生产预览；性能结论只描述本次自动化环境，不替代真机或真实用户研究。
@@ -33,7 +34,7 @@
 
 以下结果来自产品专项证据候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9`，均以退出码 `0` 完成；本轮没有把这些专项结果冒充为 `43ef034…` 的重跑：
 
-| 命令 | 本轮结果 |
+| 命令 | 历史候选结果 |
 | --- | ---: |
 | `npm test --workspace @showcase/mech-atelier` | 5 个文件，37/37 |
 | `npm test --workspace @showcase/game-assets -- mech-assembly` | 11/11 |
@@ -41,7 +42,7 @@
 | `npm run test:browser --workspace @showcase/mech-atelier` | 45/45（约 3.7m） |
 | `npm run test:preview --workspace @showcase/mech-atelier` | 先从当前源码构建，再以 `dist` 运行同一 45 项矩阵；45/45（约 3.5m） |
 
-当前套件候选 `43ef034d06f341f525740fbfd243a6d9aabc0b20` 的新鲜公共门禁为：根测试 `37` 个文件、`450/450`，根构建、`npm run validate` 和 16 项 Skill 只读审计通过。它们覆盖当前 Mech Atelier 源码，但不替代产品专项浏览器、生产预览、真机或 GPU 完成时间验证。
+历史公共候选 `43ef034d06f341f525740fbfd243a6d9aabc0b20` 的记录为：根测试 `37` 个文件、`450/450`，根构建、`npm run validate` 和 16 项 Skill 只读审计通过。它们只描述该历史候选，不替代 `29c66e5…` 的中文导览矩阵、`b560d636…` 的发布硬化矩阵，也不冒充当前组合候选的产品全量重跑。
 
 生产配置不再依赖调用者预先构建：其 WebServer 命令先执行 `npm run build`，再以严格端口启动 Vite preview。完整 45 项矩阵覆盖构建后的入口、配置、分享、回退、移动布局、海报、诊断、性能控制与持久化失败路径，并在常规路径中检查页面错误、控制台错误和失败资源请求。
 

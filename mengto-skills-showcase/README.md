@@ -1,94 +1,33 @@
 # MengTo Skills Showcase｜可玩产品能力展
 
-这是一个中文优先的产品作品集：保留两个已经可运行的创意交互案例，并规划三个互相补足的 Three.js 产品。它用经批准的 16 个 MengTo Skills 指导 Codex 的开发流程；Skill 不是代码库，也不会自动替我们生成产品。Codex 会先读取适合当前任务的 `SKILL.md`，再实现并验证对应的产品工作。
+## 先看效果：一条命令打开三产品能力展厅
+
+这个目录展示三款独立产品，它们的能力彼此互补：Monster Forge 用于检查 3D 资产，Ashfall Arena 用于体验可玩的动作游戏系统，Mech Atelier 用于配置复杂 3D 商品。它们不是同一款游戏的三个关卡。
+
+```powershell
+npm install
+npm run dev
+```
+
+终端显示“全部可访问”后，打开 `http://127.0.0.1:4172/`。先在展厅看三款产品的作用，再进入任一产品；产品内的“这是什么？”可重新打开中文说明，“返回能力展厅”会回到对应产品卡。
+
+Skill 是 Codex 开发与验收时读取的工作说明，网页运行时不会加载这些 Skill；最终交付是普通 Vite/Three.js 网页产品。换句话说，Skill 影响 Codex 如何设计、实现和检查产品，但访客打开的仍是普通网页。
 
 ## 产品矩阵
 
-| 演示 / 产品 | 定位 | 当前可用状态 | 验证记录 |
+| 展厅产品 | 主要作用 | 适合场景 | 验证记录 |
 | --- | --- | --- | --- |
-| 雾屿灯塔（Isle of Quiet Signals） | 电影感滚动叙事、2.5D 图层与无障碍 | **已有演示，可运行** | [现有验证记录](../isle-of-quiet-signals/docs/VALIDATION.md) |
-| Final Four — Typographic Flags | Canvas 字体排版、指针驱动物理交互 | **已有演示，可运行** | 暂无独立验证记录；以其 README 的构建命令为准 |
-| Monster Forge｜怪物铸造所 | 3D 游戏资产目录、模型审阅、动画与来源追踪 | **已实现，可本地运行** | [验证记录](apps/monster-forge/docs/VALIDATION.md) |
-| Ashfall Arena｜灰烬竞技场 | 完整网页动作游戏切片：战斗、敌人、AI、成长与存档 | **发布候选；自动验收通过，人工可用性门槛未关闭** | [验证记录](apps/ashfall-arena/docs/VALIDATION.md) |
-| Mech Atelier｜机甲定制工坊 | 商业化 3D 产品配置、参数联动、分享与海报导出 | **发布候选；自动验收通过** | [验证记录](apps/mech-atelier/docs/VALIDATION.md) |
+| Monster Forge｜怪物铸造所 | 检查怪物模型、动作、骨架、碰撞体和来源 | 游戏资产库、角色编辑器、数字资产验收 | [验证记录](apps/monster-forge/docs/VALIDATION.md) |
+| Ashfall Arena｜灰烬竞技场 | 体验战斗、敌人 AI、成长、存档和音画反馈 | 游戏原型、互动营销、战斗系统验证 | [验证记录](apps/ashfall-arena/docs/VALIDATION.md) |
+| Mech Atelier｜机甲定制工坊 | 更换部件并观察 3D 外观、参数与分享链接变化 | 汽车选配、工业设备、家具和定制商品 | [验证记录](apps/mech-atelier/docs/VALIDATION.md) |
 
-前两个是仓库中已有演示；Monster Forge 已实现可审阅的程序化怪物目录、实时检查器和可读回退。Ashfall Arena 已形成可从训练、波次、精英一路打到首领并保存进度的发布候选，自动验收已经通过；8–12 分钟首次人工完成门槛仍待真人验证，因此当前不是 Ready。Mech Atelier 已形成可本地运行的 3D 定制流程，自动验收、生产预览、移动端与 WebGL 回退均已验证；它会展示概念信用点价格，但不包含真实定价、库存、订单、支付或履约承诺。
+这三款产品分别展示“资产审阅”“可玩系统”“复杂商品配置”，组合起来说明同一套专业工作说明可以服务不同产品形态。Mech Atelier 中的价格是概念信用点，不代表真实定价，也不包含库存、订单、支付或履约承诺。
 
-## 当前候选与证据边界
+三款产品都是本地可运行、可自动检查的候选，但未公开部署。Ashfall 的自动化不能替代首次真人试玩，8–12 分钟人工可用性门槛未关闭；真实设备、GPU 完成时间和公网缓存也没有从本地测试外推为通过。
 
-- 当前套件代码候选是 `43ef034d06f341f525740fbfd243a6d9aabc0b20`。根测试为 `37` 个文件、`450/450`，根构建与工作区校验通过；Skill 安装器回归 `4/4`，全局安装目录只读审计 `16/16`。
-- Ashfall Arena 在该候选上通过单元测试 `308/308`、普通浏览器矩阵 `41/41`、独立性能矩阵 `5/5` 和生产预览 `1/1`。普通矩阵与性能矩阵由同一命令顺序启动两个新的 Playwright/开发服务进程，性能硬阈值没有放宽。
-- Monster Forge 与 Mech Atelier 的产品专项浏览器、生产预览和性能数字仍来自上一轮明确记录的候选 `b560d636eed004c7b09e88f34ad7c5e17adb44e9`；本轮没有把它们重新归功于 `43ef034…`。当前候选只重新执行了覆盖三款产品源码的根测试、根构建与工作区校验。
-- GPU 完成时间、真实低端设备、Safari/Firefox、线上部署以及真人可用性研究仍未验证。Ashfall 的 8–12 分钟首次真人完成门槛保持开放。
+## 两个独立演示
 
-## 本地运行
-
-### 前置条件
-
-- Node.js 22.12+（使用 `node --version` 确认；底层工具也兼容 Node.js 20.19+）
-- npm
-- 支持 WebGL 的浏览器；没有 WebGL 时，未来三个产品必须提供如实的静态/信息降级状态
-
-首次进入本套件时：
-
-```powershell
-cd mengto-skills-showcase
-npm install
-```
-
-### 当前基础层可执行命令
-
-以下命令已经在当前基础工作区验证成功：
-
-```powershell
-npm run validate
-npm test
-node scripts/check-selected-skills.mjs
-npm run build
-git diff --check
-```
-
-### 当前可运行：Monster Forge｜怪物铸造所
-
-Monster Forge 已完成本地可运行的 3D 资产审阅流程。它包含四张透明目录 PNG、一个可复用的实时 Three.js 检查器、五个确定性动作、三项技术叠加和 WebGL 回退；完整的浏览器、性能与无障碍证据见[验证记录](apps/monster-forge/docs/VALIDATION.md)。在本套件根目录执行：
-
-```powershell
-npm run dev:forge
-npm test --workspace @showcase/monster-forge
-npm run test:browser --workspace @showcase/monster-forge
-npm run build --workspace @showcase/monster-forge
-```
-
-### 当前可运行：Ashfall Arena｜灰烬竞技场
-
-Ashfall Arena 已实现中文优先的等距视角动作游戏切片，包含键鼠、触控和手柄输入，训练、普通波次、精英、升级、首领、音画反馈、断点重试与本地存档。开发用的 Skill 只指导实现过程，不会被打入生产包。运行和自动验证：
-
-```powershell
-npm run dev:arena
-npm test --workspace @showcase/ashfall-arena
-npm run test:browser --workspace @showcase/ashfall-arena
-npm run test:preview --workspace @showcase/ashfall-arena
-```
-
-生产检查会真实构建和预览 `dist`，确认入口资源可加载、页面可交互、每个 JavaScript 分包小于 500 KiB，并限制 JavaScript gzip 合计不超过 190 KiB、CSS gzip 合计不超过 8 KiB。自动通关使用固定种子和真实战斗事件，不能替代最终人工试玩计时与主观手感验收。
-
-完整的自动化、性能、包体、三次环境阻塞的首次代理体验尝试及人工门槛见 [Ashfall Arena 验证记录](apps/ashfall-arena/docs/VALIDATION.md)。其中 `47.482s` 和 `50.809s` 是加速审阅测试墙钟时间，不是游戏时长；当前状态是“发布候选 / 自动验收通过，人工可用性门槛未关闭”。
-
-### 当前可运行：Mech Atelier｜机甲定制工坊
-
-Mech Atelier 提供底盘、头部与环境的真实 3D 装配，兼容性提示、可分享状态、海报导出和 WebGL 静态示意回退。运行与验证：
-
-```powershell
-npm run dev --workspace @showcase/mech-atelier
-npm test --workspace @showcase/mech-atelier
-npm run test:browser --workspace @showcase/mech-atelier
-npm run build --workspace @showcase/mech-atelier
-npm run test:preview --workspace @showcase/mech-atelier
-```
-
-验证边界、性能采样和已覆盖场景见 [Mech Atelier 验证记录](apps/mech-atelier/docs/VALIDATION.md)。
-
-已有演示仍在套件外独立运行：
+雾屿灯塔（Isle of Quiet Signals）与 Final Four — Typographic Flags 是套件外的独立演示，不属于能力展厅三产品，也不是第四、第五款展厅产品。它们继续在各自目录独立运行：
 
 ```powershell
 cd ../isle-of-quiet-signals
@@ -103,6 +42,52 @@ npm run dev
 npm run build
 ```
 
+## 本地运行
+
+### 前置条件
+
+- Node.js 22.12+（使用 `node --version` 确认；底层工具也兼容 Node.js 20.19+）
+- npm
+- 支持 WebGL 的浏览器；没有 WebGL 时，三个产品会保留如实的静态或信息降级状态
+
+### 一条命令打开四个页面
+
+```powershell
+npm install
+npm run dev
+```
+
+统一启动器固定使用以下本地地址，并在任一端口已被占用时明确失败，不会偷偷换端口：
+
+| 页面 | 地址 |
+| --- | --- |
+| 能力展厅 | `http://127.0.0.1:4172/` |
+| Monster Forge | `http://127.0.0.1:4173/` |
+| Ashfall Arena | `http://127.0.0.1:4174/` |
+| Mech Atelier | `http://127.0.0.1:4175/` |
+
+结束体验时在启动终端按 `Ctrl+C`；supervisor 会关闭四棵产品进程树并释放 4172–4175。
+
+### 分别运行与验证
+
+```powershell
+npm run dev:hub
+npm run dev:forge
+npm run dev:arena
+npm run dev:atelier
+
+npm run test:browser --workspace @showcase/hub
+npm run test:browser --workspace @showcase/monster-forge
+npm run test:browser --workspace @showcase/ashfall-arena
+npm run test:browser --workspace @showcase/mech-atelier
+
+npm run build
+npm run build:showcase
+npm run test:showcase-preview
+```
+
+`build:showcase` 会把展厅和三款产品组合到 `dist/showcase/`，使用同一源站和相对链接；这证明本地组合产物可以往返，不等于已经公开部署。
+
 ## Skill 源码与安装目录
 
 本项目刻意维护两份用途不同的内容：
@@ -113,6 +98,8 @@ npm run build
 来源固定为 `https://github.com/MengTo/Skills.git` 的 `main` 分支，当前完整提交 SHA 记录在 [`config/skill-source-lock.json`](config/skill-source-lock.json)。本地来源让本项目可以审查和复现采用的上游内容；全局安装目录让 Codex 在后续对话中发现相应 Skill。
 
 全局安装会影响**所有 Codex 项目**的 Skill 发现，而不是只影响这个目录。它们是开发操作规范，不是运行时依赖：不会被浏览器加载，**不会进入最终产品包**、部署产物或 `node_modules`。产品代码也不得从 `.codex` 或 `skills-source` 导入内容。
+
+本项目代码位于当前 `mengto-skills-showcase` 套件目录；安装 Skill 不会把项目源码写进 `C:\Users\yun68\.codex\skills`，项目也不会修改 Codex 根目录中的 Skill 文件。
 
 安装和只读审计：
 
@@ -183,6 +170,6 @@ npm run build
 git diff --check
 ```
 
-`npm run validate` 检查固定的来源、16 项批准清单、中文 README 的关键承诺和 `AGENTS.md` 路由，不依赖会自然变化的记录时间。`node scripts/check-selected-skills.mjs` 是只读审计：它会逐项显示全局目录是否真的有可读的 `SKILL.md`。Ashfall Arena 已启用独立的浏览器与生产预览测试；其他规划中产品仍保留测试入口。
+`npm run validate` 检查固定的来源、动态读取的批准清单、四应用/六共享包、中文 README 的关键承诺和 `AGENTS.md` 路由，不依赖会自然变化的测试总数或候选 SHA。`node scripts/check-selected-skills.mjs` 是只读审计：它会逐项显示全局目录是否真的有可读的 `SKILL.md`。
 
-产品验证证据写入 `apps/<product>/docs/VALIDATION.md`。Ashfall Arena 已建立候选验证记录，但没有预填人工完成时间或人工结论；取得有效真人样本后才能更新其人工可用性门槛。
+产品验证证据写入 `apps/<product>/docs/VALIDATION.md`，套件级证据写入 `docs/SHOWCASE-VALIDATION.md`。历史候选和本轮命令会分别标注；没有执行的命令、真人理解、真实设备和公开部署不会写成通过。
