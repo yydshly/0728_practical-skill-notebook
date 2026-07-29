@@ -707,19 +707,46 @@ const presentationSeconds = {
 };
 const guideEnabled =
   !reviewControls || query.get("guideReview") === "1";
+const audioUnlockKeyCodes = new Set([
+  "KeyW",
+  "KeyA",
+  "KeyS",
+  "KeyD",
+  "KeyJ",
+  "KeyK",
+  "KeyQ",
+  "KeyE",
+  "Digit1",
+  "Digit2",
+  "Escape",
+]);
 const input = createInputAdapter(canvas, stage);
 const audio = createAudioFeedback({
   storage: saveStorage,
   gestureTarget: window,
   visibilityDocument: document,
-  canUnlock: (event) =>
-    !guideGateOpen &&
-    !event.composedPath().some(
+  canUnlock: (event) => {
+    if (guideGateOpen) return false;
+    const path = event.composedPath();
+    if (
+      path.some(
+        (target) =>
+          target instanceof Element &&
+          target.matches(".showcase-guide-dialog"),
+      )
+    ) {
+      return false;
+    }
+    const fromGuideTrigger = path.some(
       (target) =>
         target instanceof Element &&
-        (target.matches(".showcase-guide-trigger") ||
-          target.matches(".showcase-guide-dialog")),
-    ),
+        target.matches(".showcase-guide-trigger"),
+    );
+    if (event instanceof KeyboardEvent && fromGuideTrigger) {
+      return audioUnlockKeyCodes.has(event.code);
+    }
+    return !fromGuideTrigger;
+  },
 });
 const accumulator = new FixedStepAccumulator(1 / 60, 5, 0.25);
 const performanceSampler = reviewControls

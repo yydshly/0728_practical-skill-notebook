@@ -81,6 +81,82 @@ test("guide gestures stay audio-neutral until the next gameplay gesture", async 
   )).toBe(1);
 });
 
+test("focused gameplay keys unlock audio after Escape closes the guide", async ({
+  page,
+}) => {
+  await page.goto("/?fixture=fresh&reviewControls=1&guideReview=1");
+  const before = await page.evaluate(() =>
+    window.__ashfallDiagnostics!.snapshot());
+
+  await page.keyboard.press("Escape");
+  expect(await page.evaluate(() =>
+    document.activeElement?.matches(".showcase-guide-trigger")
+  )).toBe(true);
+  expect(
+    (await page.evaluate(() =>
+      window.__ashfallDiagnostics!.snapshot())).audio.contextCreateCount,
+  ).toBe(0);
+
+  await page.keyboard.down("KeyW");
+  await expect.poll(() => page.evaluate(() =>
+    window.__ashfallDiagnostics!.snapshot().player.z
+  )).not.toBe(before.player.z);
+  await page.keyboard.up("KeyW");
+  await expect.poll(() => page.evaluate(() =>
+    window.__ashfallDiagnostics!.snapshot().audio.contextCreateCount
+  )).toBe(1);
+
+  await page.keyboard.press("KeyJ");
+  expect(
+    (await page.evaluate(() =>
+      window.__ashfallDiagnostics!.snapshot())).audio.contextCreateCount,
+  ).toBe(1);
+});
+
+test("Space remains an audio unlock gesture away from the guide", async ({
+  page,
+}) => {
+  await page.goto("/?fixture=fresh&reviewControls=1&guideReview=1");
+  await page.keyboard.press("Escape");
+  await page.locator("[data-game-canvas]").focus();
+
+  await page.keyboard.press("Space");
+
+  await expect.poll(() => page.evaluate(() =>
+    window.__ashfallDiagnostics!.snapshot().audio.contextCreateCount
+  )).toBe(1);
+});
+
+test("guide navigation keys on the restored trigger stay audio-neutral", async ({
+  page,
+}) => {
+  await page.goto("/?fixture=fresh&reviewControls=1&guideReview=1");
+  const trigger = page.getByRole("button", { name: "这是什么？" });
+  const dialog = page.locator(".showcase-guide-dialog");
+  const contextCreateCount = () => page.evaluate(() =>
+    window.__ashfallDiagnostics!.snapshot().audio.contextCreateCount);
+
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowDown");
+  expect(await contextCreateCount()).toBe(0);
+
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeVisible();
+  expect(await contextCreateCount()).toBe(0);
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+
+  await page.keyboard.press("Space");
+  expect(await contextCreateCount()).toBe(0);
+  await expect(trigger).toBeFocused();
+
+  await page.keyboard.press("Tab");
+  expect(await contextCreateCount()).toBe(0);
+});
+
 test("K and right mouse guard remain held until both sources release", async ({
   page,
 }) => {
