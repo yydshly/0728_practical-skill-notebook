@@ -78,6 +78,22 @@ try {
   const gameHandle = await page.evaluate(() => Boolean(window.__RURAL_ESCAPE__));
   if (!gameHandle) throw new Error('Expected window.__RURAL_ESCAPE__ to be available');
 
+  const guidanceHud = await page.evaluate(() => ({
+    missionStep: document.querySelector('#mission-step')?.textContent,
+    missionTitle: document.querySelector('#mission-title')?.textContent,
+    missionClue: document.querySelector('#mission-clue')?.textContent,
+    compassHidden: document.querySelector('#objective-compass')?.hidden,
+    markerHidden: document.querySelector('#screen-marker')?.hidden,
+    tutorialText: document.querySelector('#tutorial-hint')?.textContent,
+    mutePressed: document.querySelector('#mute-toggle')?.getAttribute('aria-pressed'),
+  }));
+  if (guidanceHud.missionStep !== '任务 1/4') throw new Error('Expected mission step 1/4');
+  if (guidanceHud.missionTitle !== '调查收音机') throw new Error('Expected radio mission title');
+  if (!guidanceHud.missionClue) throw new Error('Expected mission clue');
+  if (guidanceHud.compassHidden !== false) throw new Error('Expected objective compass');
+  if (guidanceHud.tutorialText !== 'WASD 移动') throw new Error('Expected first tutorial hint');
+  if (guidanceHud.mutePressed !== 'false') throw new Error('Expected sound enabled state');
+
   const normalEvidenceDataset = await page.evaluate(() => {
     const { evidenceState, renderCalls, renderTriangles } = document.querySelector('.game-shell').dataset;
     return { evidenceState, renderCalls, renderTriangles };

@@ -15,12 +15,25 @@
         <h1>雾村：逃离</h1>
       </section>
       <section class="mission-hud" aria-live="polite">
-        <p class="mission-label">当前目标</p>
-        <p id="objective">离开主角家，调查村里的异常。</p>
+        <p id="mission-step" class="mission-label">任务 1/4</p>
+        <p id="mission-title" class="mission-title">调查收音机</p>
+        <p id="mission-clue" class="mission-clue">杂音来自主角家亮着灯的窗边。</p>
+        <p id="objective" class="sr-only">离开主角家，调查村里的异常。</p>
       </section>
+      <section id="objective-compass" class="objective-compass" aria-live="polite">
+        <span class="compass-diamond" aria-hidden="true">◇</span>
+        <span id="compass-label">调查收音机</span>
+        <span id="compass-distance">3m</span>
+      </section>
+      <div id="screen-marker" class="screen-marker" hidden aria-hidden="true">◇</div>
+      <p id="danger-state" class="danger-state" hidden aria-live="assertive"></p>
+      <div class="danger-vignette" aria-hidden="true"></div>
+      <p id="completion-toast" class="completion-toast" hidden aria-live="polite"></p>
       <p id="subtitle" class="subtitle">收音机在杂音里重复着一个陌生的名字。</p>
+      <p id="approach-prompt" class="approach-prompt" hidden></p>
       <p id="interaction" class="interaction" hidden><kbd>E</kbd><span></span></p>
-      <footer class="controls">WASD 移动 · Shift 奔跑 · 鼠标环顾 · C 切换视角</footer>
+      <p id="tutorial-hint" class="tutorial-hint">WASD 移动</p>
+      <button id="mute-toggle" class="mute-toggle" type="button" aria-pressed="false" aria-label="关闭音效">🔊</button>
     </main>
     <script type="module" src="/src/main.js"></script>
   </body>

@@ -28,9 +28,25 @@ import {
   projectScreenMarker,
 } from '../src/guidance.js';
 import { createWorldObjectiveMarker } from '../src/world-marker.js';
+import { createTutorialTracker } from '../src/tutorial.js';
 
 const { computeThirdPersonPose } = cameraMath;
 const { buildVillageGate } = buildings;
+
+test('tutorial tracker reveals each control once in authored order', () => {
+  const changes = [];
+  const tutorial = createTutorialTracker({ onChange: (value) => changes.push(value) });
+  assert.equal(tutorial.current.id, 'move');
+  assert.equal(tutorial.complete('move'), true);
+  assert.equal(tutorial.current.id, 'sprint');
+  assert.equal(tutorial.complete('move'), false);
+  tutorial.complete('sprint');
+  tutorial.complete('look');
+  tutorial.complete('camera');
+  tutorial.complete('interact');
+  assert.equal(tutorial.current, null);
+  assert.equal(changes.at(-1), null);
+});
 
 test('guidance reports distance, relative direction, and staged proximity', () => {
   const far = computeGuidanceSnapshot({

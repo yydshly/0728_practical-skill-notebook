@@ -116,6 +116,89 @@ h1 {
   margin: 0;
 }
 
+.mission-title {
+  font: 700 clamp(1rem, 1.6vw, 1.18rem)/1.4 Georgia, "Noto Serif SC", serif;
+  margin: 0;
+}
+
+.mission-clue {
+  color: rgba(245, 240, 220, .72);
+  font-size: .78rem;
+  line-height: 1.5;
+  margin: .28rem 0 0;
+}
+
+.objective-compass {
+  align-items: center;
+  display: flex;
+  gap: .48rem;
+  left: 50%;
+  position: absolute;
+  top: 1.35rem;
+  transform: translateX(-50%);
+  z-index: 4;
+}
+
+.compass-diamond {
+  display: inline-block;
+  transform: rotate(var(--bearing, 0rad));
+}
+
+.screen-marker {
+  left: 0;
+  position: absolute;
+  top: 0;
+  transform-origin: center;
+  z-index: 4;
+}
+
+.approach-prompt,
+.tutorial-hint,
+.danger-state,
+.completion-toast,
+.mute-toggle {
+  position: absolute;
+  z-index: 4;
+}
+
+.approach-prompt,
+.tutorial-hint,
+.danger-state,
+.completion-toast {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.approach-prompt { bottom: 7.5rem; }
+.tutorial-hint { bottom: 1.35rem; }
+.danger-state { color: #e7a08b; top: 4.25rem; }
+.completion-toast { color: #f3c591; top: 6.5rem; }
+.mute-toggle {
+  background: rgba(13, 17, 15, .52);
+  border: 1px solid rgba(245, 240, 220, .22);
+  bottom: 1rem;
+  color: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+  right: 1rem;
+}
+
+.danger-vignette {
+  background: radial-gradient(circle, transparent 46%, rgba(100, 15, 9, calc(var(--danger-intensity, 0) * .72)) 118%);
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+.sr-only {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
 .subtitle,
 .interaction,
 .controls {
@@ -179,8 +262,19 @@ h1 {
 
   h1 { font-size: clamp(2.25rem, 14vw, 4rem); }
 
+  .objective-compass {
+    max-width: calc(100vw - 2rem);
+    top: 7.2rem;
+    white-space: nowrap;
+  }
+
   .mission-hud {
     max-width: calc(100vw - 2rem);
+  }
+
+  .mute-toggle {
+    bottom: 1rem;
+    right: .75rem;
   }
 
   .subtitle {
@@ -203,6 +297,13 @@ h1 {
   .title-lockup,
   .mission-hud,
   .subtitle {
+    transition: none;
+  }
+
+  .screen-marker,
+  .danger-vignette,
+  .completion-toast {
+    animation: none;
     transition: none;
   }
 }
