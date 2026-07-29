@@ -76,6 +76,6 @@ window.addEventListener("keydown", (event) => {
   node.textContent = String(Number(node.textContent) + 1);
 });
 document.querySelector("[data-auto-result]")!.textContent =
-  controller.isOpen() ? "opened" : blocked ? "blocked" : "settled";
+  controller.retryAutoOpen();
 document.querySelector("[data-close-log]")!.textContent =
   sessionStorage.getItem("guide-close-reasons") ?? "";

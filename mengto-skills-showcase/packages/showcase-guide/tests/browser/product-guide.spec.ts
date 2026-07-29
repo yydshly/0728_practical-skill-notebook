@@ -26,11 +26,17 @@ test("persistent opt-out suppresses auto-open but never manual reopen", async ({
 
 test("blocked automatic open remains pending until retry succeeds", async ({ page }) => {
   await page.goto("/tests/fixture/?blocked=1");
-  await expect(page.getByRole("dialog")).toBeHidden();
+  const dialog = page.getByRole("dialog");
+  const unblock = page.getByRole("button", { name: "解除宿主阻塞" });
+  await expect(dialog).toBeHidden();
   await expect(page.locator("[data-auto-result]")).toHaveText("blocked");
-  await page.getByRole("button", { name: "解除宿主阻塞" }).click();
+  await unblock.click();
   await expect(page.locator("[data-auto-result]")).toHaveText("opened");
-  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(dialog).toBeVisible();
+  await page.getByRole("button", { name: "关闭说明" }).click();
+  await unblock.click();
+  await expect(page.locator("[data-auto-result]")).toHaveText("settled");
+  await expect(dialog).toBeHidden();
 });
 
 test("persistent preferences remain isolated by product and guide version", async ({ page }) => {
