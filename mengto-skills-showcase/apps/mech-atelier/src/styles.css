@@ -178,11 +178,27 @@ input:focus-visible + span {
   background: rgb(232 109 61 / 14%);
 }
 
+.fallback-outline { display: none; position: absolute; inset: 0; }
+[data-fallback-outline="scout"] [data-fallback-outline-visual="scout"],
+[data-fallback-outline="hauler"] [data-fallback-outline-visual="hauler"],
+[data-fallback-outline="oracle"] [data-fallback-outline-visual="oracle"] { display: block; }
+
 .fallback-head { inset: 10% 37% auto; height: 15%; }
 .fallback-core { inset: 28% 25% 35%; }
 .fallback-left { inset: 35% auto auto 7%; width: 20%; height: 28%; transform: skewY(-20deg); }
 .fallback-right { inset: 35% 7% auto auto; width: 20%; height: 28%; transform: skewY(20deg); }
 .fallback-legs { inset: auto 30% 5%; height: 28%; }
+
+.fallback-hauler-cabin { inset: 22% 35% auto; width: 30%; height: 22%; border-radius: 5px 5px 0 0; }
+.fallback-hauler-bed { inset: 43% 17% auto; width: 66%; height: 24%; transform: skewX(-8deg); }
+.fallback-hauler-wheel { inset: auto auto 11% 20%; width: 21%; height: 21%; border-radius: 50%; }
+.fallback-hauler-wheel--right { right: 20%; left: auto; }
+
+.fallback-oracle-crown { inset: 8% 34% auto; width: 32%; height: 18%; clip-path: polygon(0 100%, 16% 0, 35% 58%, 50% 0, 65% 58%, 84% 0, 100% 100%); }
+.fallback-oracle-core { inset: 29% 35%; height: 29%; border-radius: 44% 44% 18% 18%; }
+.fallback-oracle-wing { inset: 35% auto auto 5%; width: 30%; height: 18%; transform: skewY(-26deg); }
+.fallback-oracle-wing--right { right: 5%; left: auto; transform: skewY(26deg); }
+.fallback-oracle-pedestal { inset: auto 28% 8%; height: 14%; clip-path: polygon(16% 0, 84% 0, 100% 100%, 0 100%); }
 
 .fallback-copy {
   position: absolute;
@@ -679,7 +695,7 @@ input:checked + .option-indicator {
 
 .segment-list span {
   display: grid;
-  min-height: 38px;
+  min-height: 44px;
   place-items: center;
   padding: 6px;
   border: 1px solid var(--line);
@@ -723,7 +739,7 @@ input:checked + .option-indicator {
 }
 
 .sharing-actions button {
-  min-height: 42px;
+  min-height: 44px;
   padding: 9px 12px;
   border: 1px solid var(--line-strong);
   background: rgb(255 255 255 / 3%);

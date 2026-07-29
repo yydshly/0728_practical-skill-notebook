@@ -20,11 +20,15 @@ export function renderFallback(
   schematic.setAttribute("role", "status");
   schematic.innerHTML = `
     <div class="fallback-illustration" aria-hidden="true">
-      <i class="fallback-head"></i>
-      <i class="fallback-core"></i>
-      <i class="fallback-left"></i>
-      <i class="fallback-right"></i>
-      <i class="fallback-legs"></i>
+      <div class="fallback-outline" data-fallback-outline-visual="scout">
+        <i class="fallback-head"></i><i class="fallback-core"></i><i class="fallback-left"></i><i class="fallback-right"></i><i class="fallback-legs"></i>
+      </div>
+      <div class="fallback-outline" data-fallback-outline-visual="hauler">
+        <i class="fallback-hauler-cabin"></i><i class="fallback-hauler-bed"></i><i class="fallback-hauler-wheel fallback-hauler-wheel--left"></i><i class="fallback-hauler-wheel fallback-hauler-wheel--right"></i>
+      </div>
+      <div class="fallback-outline" data-fallback-outline-visual="oracle">
+        <i class="fallback-oracle-crown"></i><i class="fallback-oracle-core"></i><i class="fallback-oracle-wing fallback-oracle-wing--left"></i><i class="fallback-oracle-wing fallback-oracle-wing--right"></i><i class="fallback-oracle-pedestal"></i>
+      </div>
     </div>
     <div class="fallback-copy">
       <strong>3D 预览不可用</strong>
@@ -38,6 +42,7 @@ export function renderFallback(
   const update = (next: MechConfiguration): void => {
     const chassis = catalog.chassis.find((candidate) => candidate.id === next.chassisId);
     schematic.dataset.chassis = next.chassisId;
+    schematic.dataset.fallbackOutline = fallbackOutlineFor(next.chassisId);
     label!.textContent = `${chassis?.name ?? next.chassisId} / STATIC SCHEMATIC`;
   };
   update(configuration);
@@ -48,4 +53,10 @@ export function renderFallback(
       schematic.remove();
     },
   };
+}
+
+function fallbackOutlineFor(chassisId: string): "scout" | "hauler" | "oracle" {
+  if (chassisId === "bastion-hauler") return "hauler";
+  if (chassisId === "oracle-frame") return "oracle";
+  return "scout";
 }

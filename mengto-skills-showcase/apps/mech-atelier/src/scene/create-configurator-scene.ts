@@ -66,8 +66,8 @@ export interface ConfiguratorSceneSnapshot {
 export interface ConfiguratorSceneDiagnostics {
   /** Time between browser animation-frame callbacks; scheduler evidence only. */
   readonly rafIntervals: readonly number[];
-  /** CPU duration spent in renderer.render for each callback. */
-  readonly renderDurations: readonly number[];
+  /** CPU time used to submit renderer.render work; not GPU completion or frame time. */
+  readonly renderSubmissionDurations: readonly number[];
   readonly renderer: {
     readonly calls: number;
     readonly triangles: number;
@@ -75,6 +75,9 @@ export interface ConfiguratorSceneDiagnostics {
     readonly textures: number;
   };
   readonly listeners: number;
+  readonly activeAnimationFrames: number;
+  readonly activeResizeObservers: number;
+  readonly ownedResources: number;
   readonly resources: { readonly geometries: number; readonly textures: number };
   readonly quality: "full" | "no-shadows" | "key-light" | "control" | "empty";
   readonly pixelRatio: number;
@@ -83,6 +86,25 @@ export interface ConfiguratorSceneDiagnostics {
 export interface ConfiguratorSceneOptions {
   readonly quality?: "full" | "no-shadows" | "key-light" | "control" | "empty";
   readonly maxPixelRatio?: number;
+  /** Test-only review injection, gated by main before this factory is called. */
+  readonly failureStage?: "after-renderer" | "after-assembly";
+}
+
+export interface SceneCleanupDiagnostics {
+  readonly animationFrames: number;
+  readonly listeners: number;
+  readonly resizeObservers: number;
+  readonly resources: number;
+}
+
+export class ConfiguratorSceneInitializationError extends Error {
+  constructor(
+    cause: unknown,
+    readonly cleanup: SceneCleanupDiagnostics,
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = "ConfiguratorSceneInitializationError";
+  }
 }
 
 export interface HotspotProjection {
@@ -178,6 +200,23 @@ export function createConfiguratorScene(
   initial: MechConfiguration,
   options: ConfiguratorSceneOptions = {},
 ): ConfiguratorSceneController {
+  const initialization = new SceneInitializationTracker(canvas);
+  try {
+    return createLiveConfiguratorScene(canvas, initial, options, initialization);
+  } catch (error) {
+    throw new ConfiguratorSceneInitializationError(
+      error,
+      initialization.dispose(),
+    );
+  }
+}
+
+function createLiveConfiguratorScene(
+  canvas: HTMLCanvasElement,
+  initial: MechConfiguration,
+  options: ConfiguratorSceneOptions,
+  initialization: SceneInitializationTracker,
+): ConfiguratorSceneController {
   const quality = options.quality ?? "full";
   const maxPixelRatio = options.maxPixelRatio ?? 1.5;
   const renderer = new WebGLRenderer({
@@ -186,13 +225,20 @@ export function createConfiguratorScene(
     antialias: true,
     powerPreference: "high-performance",
   });
+  initialization.trackRenderer(renderer);
+  let ownedResources = 1;
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.shadowMap.enabled = quality === "full";
+  throwAtFailureStage(options.failureStage, "after-renderer");
 
   const scene = new Scene();
+  initialization.trackScene(scene);
   const camera = new PerspectiveCamera(35, 1, 0.1, 100);
   const assembly = createMechAssembly(toVisualConfiguration(initial));
+  initialization.trackAssembly(assembly);
+  ownedResources += 1;
+  throwAtFailureStage(options.failureStage, "after-assembly");
   scene.add(assembly.root);
   const reducedMotionQuery = window.matchMedia(
     "(prefers-reduced-motion: reduce)",
@@ -200,11 +246,17 @@ export function createConfiguratorScene(
   const explodedView = createExplodedView(assembly, {
     reducedMotion: reducedMotionQuery.matches,
   });
+  initialization.trackExplodedView(explodedView);
+  ownedResources += 1;
 
   const stage = createStage();
+  initialization.trackStage(stage);
+  ownedResources += 1;
   scene.add(stage.root);
 
   const lights = createLights();
+  initialization.trackLights(lights);
+  ownedResources += 1;
   if (quality === "key-light" || quality === "control") {
     lights.rim.visible = false;
     lights.accent.visible = false;
@@ -225,6 +277,9 @@ export function createConfiguratorScene(
   let fitsBounds = false;
   let disposed = false;
   let raf = 0;
+  let activeAnimationFrames = 0;
+  let activeResizeObservers = 0;
+  let activeListeners = 0;
   let renderWidth = 1;
   let renderHeight = 1;
   let previousFrameTime = performance.now();
@@ -327,6 +382,8 @@ export function createConfiguratorScene(
   }
 
   const observer = new ResizeObserver(resize);
+  initialization.trackResizeObserver(observer);
+  activeResizeObservers += 1;
   observer.observe(canvas.parentElement ?? canvas);
 
   const pointers = new Map<number, Vector2>();
@@ -400,20 +457,46 @@ export function createConfiguratorScene(
     updateCamera();
   };
 
-  canvas.addEventListener("pointerdown", pointerDown);
-  canvas.addEventListener("pointermove", pointerMove);
-  canvas.addEventListener("pointerup", pointerUp);
-  canvas.addEventListener("pointercancel", pointerUp);
-  canvas.addEventListener("wheel", wheel, { passive: false });
+  const listenerReleases: Array<() => void> = [];
+  const addTrackedListener = <T extends EventTarget>(
+    target: T,
+    type: string,
+    listener: (event: Event) => void,
+    listenerOptions?: AddEventListenerOptions | boolean,
+  ): void => {
+    const eventListener = listener as EventListener;
+    target.addEventListener(type, eventListener, listenerOptions);
+    activeListeners += 1;
+    initialization.trackListener(target, type, eventListener, listenerOptions);
+    listenerReleases.push(() => {
+      target.removeEventListener(type, eventListener, listenerOptions);
+      activeListeners = Math.max(0, activeListeners - 1);
+      initialization.releaseListener(target, type, eventListener, listenerOptions);
+    });
+  };
+
+  addTrackedListener(canvas, "pointerdown", pointerDown as (event: Event) => void);
+  addTrackedListener(canvas, "pointermove", pointerMove as (event: Event) => void);
+  addTrackedListener(canvas, "pointerup", pointerUp as (event: Event) => void);
+  addTrackedListener(canvas, "pointercancel", pointerUp as (event: Event) => void);
+  addTrackedListener(canvas, "wheel", wheel as (event: Event) => void, { passive: false });
 
   const reducedMotionChanged = (event: MediaQueryListEvent): void => {
     explodedView.setReducedMotion(event.matches);
     computeFit();
   };
-  reducedMotionQuery.addEventListener("change", reducedMotionChanged);
+  addTrackedListener(reducedMotionQuery, "change", reducedMotionChanged as (event: Event) => void);
+
+  const scheduleFrame = (): void => {
+    raf = requestAnimationFrame(renderFrame);
+    activeAnimationFrames = 1;
+    initialization.trackAnimationFrame(raf);
+  };
 
   function renderFrame(timestamp: number): void {
     if (disposed) return;
+    activeAnimationFrames = 0;
+    initialization.releaseAnimationFrame(raf);
     const frameMilliseconds = Math.min(Math.max(timestamp - previousFrameTime, 0), 100);
     if (frameMilliseconds > 0) {
       rafIntervals.push(frameMilliseconds);
@@ -436,7 +519,7 @@ export function createConfiguratorScene(
     renderDurations.push(renderDuration);
     if (renderDurations.length > 120) renderDurations.shift();
     for (const listener of frameListeners) listener();
-    raf = requestAnimationFrame(renderFrame);
+    scheduleFrame();
   }
 
   applyEnvironment(environment);
@@ -689,20 +772,20 @@ export function createConfiguratorScene(
       const memory = renderer.info.memory;
       return {
         rafIntervals: [...rafIntervals],
-        renderDurations: [...renderDurations],
+        renderSubmissionDurations: [...renderDurations],
         renderer: {
           calls: render.calls,
           triangles: render.triangles,
           geometries: memory.geometries,
           textures: memory.textures,
         },
-        // Five canvas pointer/wheel handlers, one media-query listener, and
-        // the active frame subscriber(s); ResizeObserver is tracked separately
-        // by the browser and does not add a DOM listener.
-        listeners: 6 + frameListeners.size,
+        listeners: activeListeners + frameListeners.size,
+        activeAnimationFrames,
+        activeResizeObservers,
+        ownedResources,
         resources: {
-          geometries: memory.geometries,
-          textures: memory.textures,
+          geometries: disposed ? 0 : memory.geometries,
+          textures: disposed ? 0 : memory.textures,
         },
         quality,
         pixelRatio: renderer.getPixelRatio(),
@@ -712,22 +795,151 @@ export function createConfiguratorScene(
       if (disposed) return;
       disposed = true;
       cancelAnimationFrame(raf);
+      activeAnimationFrames = 0;
+      initialization.releaseAnimationFrame(raf);
       frameListeners.clear();
-      reducedMotionQuery.removeEventListener("change", reducedMotionChanged);
       observer.disconnect();
-      canvas.removeEventListener("pointerdown", pointerDown);
-      canvas.removeEventListener("pointermove", pointerMove);
-      canvas.removeEventListener("pointerup", pointerUp);
-      canvas.removeEventListener("pointercancel", pointerUp);
-      canvas.removeEventListener("wheel", wheel);
+      activeResizeObservers = 0;
+      initialization.releaseResizeObserver(observer);
+      for (const release of listenerReleases.splice(0).reverse()) release();
       explodedView.dispose();
       assembly.dispose();
       stage.dispose();
       lights.root.clear();
       renderer.dispose();
       scene.clear();
+      ownedResources = 0;
     },
   };
+}
+
+class SceneInitializationTracker {
+  private renderer: WebGLRenderer | null = null;
+  private scene: Scene | null = null;
+  private assembly: MechAssembly | null = null;
+  private explodedView: ReturnType<typeof createExplodedView> | null = null;
+  private stage: ReturnType<typeof createStage> | null = null;
+  private lights: ReturnType<typeof createLights> | null = null;
+  private observer: ResizeObserver | null = null;
+  private raf: number | null = null;
+  private readonly listeners: Array<{
+    target: EventTarget;
+    type: string;
+    listener: EventListenerOrEventListenerObject;
+    options: AddEventListenerOptions | boolean | undefined;
+  }> = [];
+  private readonly resources = new Set<string>();
+
+  constructor(private readonly canvas: HTMLCanvasElement) {}
+
+  trackRenderer(renderer: WebGLRenderer): void {
+    this.renderer = renderer;
+    this.resources.add("renderer");
+  }
+
+  trackScene(scene: Scene): void {
+    this.scene = scene;
+    this.resources.add("scene");
+  }
+
+  trackAssembly(assembly: MechAssembly): void {
+    this.assembly = assembly;
+    this.resources.add("assembly");
+  }
+
+  trackExplodedView(explodedView: ReturnType<typeof createExplodedView>): void {
+    this.explodedView = explodedView;
+    this.resources.add("exploded-view");
+  }
+
+  trackStage(stage: ReturnType<typeof createStage>): void {
+    this.stage = stage;
+    this.resources.add("stage");
+  }
+
+  trackLights(lights: ReturnType<typeof createLights>): void {
+    this.lights = lights;
+    this.resources.add("lights");
+  }
+
+  trackResizeObserver(observer: ResizeObserver): void {
+    this.observer = observer;
+  }
+
+  releaseResizeObserver(observer: ResizeObserver): void {
+    if (this.observer === observer) this.observer = null;
+  }
+
+  trackAnimationFrame(raf: number): void {
+    this.raf = raf;
+  }
+
+  releaseAnimationFrame(raf: number): void {
+    if (this.raf === raf) this.raf = null;
+  }
+
+  trackListener(
+    target: EventTarget,
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: AddEventListenerOptions | boolean,
+  ): void {
+    this.listeners.push({ target, type, listener, options });
+  }
+
+  releaseListener(
+    target: EventTarget,
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: AddEventListenerOptions | boolean,
+  ): void {
+    const index = this.listeners.findIndex((entry) =>
+      entry.target === target &&
+      entry.type === type &&
+      entry.listener === listener &&
+      entry.options === options);
+    if (index >= 0) this.listeners.splice(index, 1);
+  }
+
+  dispose(): SceneCleanupDiagnostics {
+    if (this.raf !== null) cancelAnimationFrame(this.raf);
+    this.raf = null;
+    for (const { target, type, listener, options } of this.listeners.splice(0).reverse()) {
+      target.removeEventListener(type, listener, options);
+    }
+    this.observer?.disconnect();
+    this.observer = null;
+    safelyDispose(() => this.explodedView?.dispose());
+    safelyDispose(() => this.assembly?.dispose());
+    safelyDispose(() => this.stage?.dispose());
+    safelyDispose(() => this.lights?.root.clear());
+    safelyDispose(() => this.renderer?.dispose());
+    safelyDispose(() => this.scene?.clear());
+    this.explodedView = null;
+    this.assembly = null;
+    this.stage = null;
+    this.lights = null;
+    this.renderer = null;
+    this.scene = null;
+    this.resources.clear();
+    this.canvas.replaceChildren();
+    return { animationFrames: 0, listeners: 0, resizeObservers: 0, resources: 0 };
+  }
+}
+
+function safelyDispose(action: () => void): void {
+  try {
+    action();
+  } catch {
+    // Continue releasing independent resources after a failed initializer.
+  }
+}
+
+function throwAtFailureStage(
+  configured: ConfiguratorSceneOptions["failureStage"],
+  stage: NonNullable<ConfiguratorSceneOptions["failureStage"]>,
+): void {
+  if (configured === stage) throw new Error(`Review forced scene failure: ${stage}`);
 }
 
 function pointerSpan(pointers: ReadonlyMap<number, Vector2>): number {

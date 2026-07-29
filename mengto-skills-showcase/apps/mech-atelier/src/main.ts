@@ -19,6 +19,7 @@ import {
 } from "./persistence/saved-config";
 import {
   createConfiguratorScene,
+  ConfiguratorSceneInitializationError,
   type ConfiguratorSceneController,
   type ConfiguratorSceneDiagnostics,
   type ConfiguratorSceneSnapshot,
@@ -239,6 +240,9 @@ const hasExplicitConfiguration = hasConfigurationQuery(search);
 const reviewId = search.get("review");
 const knownReview = reviewId !== null && isKnownReview(reviewId);
 const isReviewMode = knownReview || search.get("reviewControls") === "1";
+const reviewFailureStage = isReviewMode
+  ? parseReviewFailureStage(search.get("forceSceneFailure"))
+  : undefined;
 const reviewQuality =
   isReviewMode && search.get("reviewPerformance") === "control"
     ? "control"
@@ -277,13 +281,16 @@ const persistence = createSavedConfigurationController();
 let productScene: ConfiguratorSceneController | null = null;
 let hotspotController: ReturnType<typeof renderHotspots> | null = null;
 let fallbackController: RenderFallbackController | null = null;
-const forceWebglFailure = search.get("forceWebglFailure");
+const forceWebglFailure = isReviewMode ? search.get("forceWebglFailure") : null;
 try {
-  if (forceWebglFailure === "1" || forceWebglFailure === "renderer") {
+  if (forceWebglFailure === "1") {
     throw new Error("Review forced renderer failure");
   }
   productScene = createConfiguratorScene(canvas, configuration, {
     quality: sceneQuality,
+    ...(reviewFailureStage === "after-renderer" || reviewFailureStage === "after-assembly"
+      ? { failureStage: reviewFailureStage }
+      : {}),
     ...(scenePixelRatio === undefined
       ? {}
       : { maxPixelRatio: scenePixelRatio }),
@@ -295,15 +302,44 @@ try {
       productScene,
       focusConfigurationSlot,
     );
+    if (reviewFailureStage === "after-hotspots") {
+      throw new Error("Review forced hotspot initialization failure");
+    }
   } else {
     hotspotContainer.hidden = true;
   }
-} catch {
+} catch (error) {
+  hotspotController?.dispose();
+  hotspotController = null;
+  let cleanup = {
+    animationFrames: 0,
+    listeners: 0,
+    resizeObservers: 0,
+    resources: 0,
+  };
+  if (productScene) {
+    productScene.dispose();
+    const diagnostics = productScene.diagnostics();
+    cleanup = {
+      animationFrames: diagnostics.activeAnimationFrames,
+      listeners: diagnostics.listeners,
+      resizeObservers: diagnostics.activeResizeObservers,
+      resources: diagnostics.ownedResources,
+    };
+    productScene = null;
+  } else if (error instanceof ConfiguratorSceneInitializationError) {
+    cleanup = error.cleanup;
+  }
   canvas.remove();
   hotspotContainer.replaceChildren();
   hotspotContainer.hidden = true;
   fallbackController = renderFallback(productStage, configuration);
   productStage.dataset.renderMode = "fallback";
+  productStage.dataset.sceneCleanupRaf = String(cleanup.animationFrames);
+  productStage.dataset.sceneCleanupListeners = String(cleanup.listeners);
+  productStage.dataset.sceneCleanupResources = String(
+    cleanup.resources + cleanup.resizeObservers,
+  );
   const reason = document.createElement("p");
   reason.id = "fallback-reason";
   reason.className = "fallback-reason";
@@ -759,6 +795,16 @@ function parseReviewPixelRatio(value: string | null): number | undefined {
   if (value === null) return undefined;
   const parsed = Number(value);
   return [1, 0.75, 0.6].includes(parsed) ? parsed : undefined;
+}
+
+function parseReviewFailureStage(
+  value: string | null,
+): "after-renderer" | "after-assembly" | "after-hotspots" | undefined {
+  return value === "after-renderer" ||
+    value === "after-assembly" ||
+    value === "after-hotspots"
+    ? value
+    : undefined;
 }
 
 function cloneConfiguration(
