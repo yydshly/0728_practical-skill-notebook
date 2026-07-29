@@ -11,6 +11,7 @@
 | 03 | [World Cup Letter Flags](./world-cup-letter-flags-demo/) | `world-cup-letter-flags-demo` | 由球员姓名拼成的国旗窗帘，字符沿 Verlet 物理线绳摆动。 |
 | 04 | [Fabrica 模板详情页复刻](./fabrica-template-detail-clone/) | `fabrica-template-detail-clone` | 从线上模板详情页采集视觉、交互与素材证据后，以 React/Vite 本地重建的网页复刻案例。 |
 | 05 | [Fungarium 原版与业务展厅改造](./fungarium-product-showcase/) | `fungarium-product-showcase` | 对照上游标本展厅交互与本仓库的中文业务能力展厅。 |
+| 06 | [《雾村：逃离》](./rural-mutation-escape/) | `rural-mutation-escape` | 第三人称农村变异逃生原型与 AI 辅助游戏开发研究。 |
 
 ## 01 · 雾屿灯塔
 
@@ -51,6 +52,32 @@
 <img src="./docs/demos/05-fungarium-product-showcase.gif" alt="中文业务能力展厅的展品和案例视角演示" width="720">
 
 上游参考：[nesdesignco/fungarium](https://github.com/nesdesignco/fungarium)，固定提交 [`a139bd08fc64cf0be76bd1dae447da6848d89899`](https://github.com/nesdesignco/fungarium/tree/a139bd08fc64cf0be76bd1dae447da6848d89899)。上游作品及其权利归原作者所有，并适用其 MIT 许可；本仓库未复制上游源码或第三方 GLB/PBR 素材。本项目只借鉴其交互展示思路，属于独立探索，不存在官方关联。
+
+## 06 · 《雾村：逃离》
+
+这一项目研究一款农村变异逃生游戏从零到可玩的开发逻辑：用数据定义村庄地图和任务锚点，以程序化 Three.js 构建建筑、道路、拟人角色和变异体，再接入共享碰撞、第一/第三人称镜头、线性故事引导、追逐危险反馈与原创动态音乐。
+
+当前版本是可运行的序章原型：玩家可调查收音机、找到躲藏的邻居、取得手电并抵达南门；失败、检查点、感知 AI 和动态开门仍属于已确认但未落地的核心闭环计划。项目从 `mshumer/Claude-of-Duty` 研究工程方法，但没有复制其 FPS 玩法、源码或商业素材。
+
+- [项目 README：功能、操作、架构与限制](./rural-mutation-escape/README.md)
+- [参考来源与独立实现边界](./rural-mutation-escape/docs/REFERENCES.md)
+
+本地运行：
+
+```powershell
+cd rural-mutation-escape
+npm.cmd install
+npm.cmd run dev
+```
+
+验证：
+
+```powershell
+npm.cmd run test:unit
+npm.cmd run test:audio
+npm.cmd test
+npm.cmd run build
+```
 
 ## 获取项目库代码
 
@@ -133,3 +160,5 @@ node scripts/check-fungarium-fifth-project.mjs
 - [World Cup 项目 README](./world-cup-letter-flags-demo/README.md)
 - [Fabrica 项目 README](./fabrica-template-detail-clone/README.md)
 - [Fabrica 视觉复刻记录](./docs/interactive-refinement/fabrica-visual-refinement.md)
+- [《雾村：逃离》项目 README](./rural-mutation-escape/README.md)
+- [《雾村：逃离》参考来源说明](./rural-mutation-escape/docs/REFERENCES.md)

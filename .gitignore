@@ -1,2 +1,3 @@
 .worktrees/
-artifacts/
+/artifacts/
+/claude-of-duty-research/

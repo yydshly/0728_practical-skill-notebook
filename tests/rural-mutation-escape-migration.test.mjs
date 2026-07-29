@@ -154,3 +154,31 @@ test("project ignore rules retain selected evidence and audio provenance", async
   assert.ok(!lines.includes("artifacts/"), "project artifacts must remain trackable");
   assert.ok(!lines.includes("audio-source/"), "audio provenance must remain trackable");
 });
+
+test("root repository registers the sixth project and narrows ignore scope", async () => {
+  const rootReadme = await read("README.md");
+  assertIncludesAll(rootReadme, [
+    "| 06 | [《雾村：逃离》](./rural-mutation-escape/)",
+    "## 06 · 《雾村：逃离》",
+    "./rural-mutation-escape/README.md",
+    "./rural-mutation-escape/docs/REFERENCES.md",
+    "cd rural-mutation-escape",
+    "npm.cmd install",
+    "npm.cmd run dev",
+  ], "root README");
+  assert.ok(
+    !rootReadme.includes("./claude-of-duty-research/"),
+    "root README must not link the local research clone",
+  );
+  await assertLocalLinksResolve("README.md");
+
+  const lines = (await read(".gitignore"))
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  assert.deepEqual(lines, [
+    ".worktrees/",
+    "/artifacts/",
+    "/claude-of-duty-research/",
+  ]);
+});
