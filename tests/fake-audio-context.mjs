@@ -145,6 +145,7 @@ export class FakeOscillatorNode extends FakeConnectableNode {
   start(...args) {
     this.startCalls.push(args);
     this.context.events.push({ type: 'oscillator-start', oscillator: this, args });
+    return this.context.oscillatorStartPlan?.(this, args);
   }
 
   stop(...args) {
@@ -192,6 +193,7 @@ export class FakeAudioContext {
     createBufferSourcePlan = null,
     createGainPlan = null,
     createOscillatorPlan = null,
+    oscillatorStartPlan = null,
     resumePlan = null,
     suspendPlan = null,
     closePlan = null,
@@ -203,6 +205,7 @@ export class FakeAudioContext {
     this.createBufferSourcePlan = createBufferSourcePlan;
     this.createGainPlan = createGainPlan;
     this.createOscillatorPlan = createOscillatorPlan;
+    this.oscillatorStartPlan = oscillatorStartPlan;
     this.resumePlan = resumePlan;
     this.suspendPlan = suspendPlan;
     this.closePlan = closePlan;

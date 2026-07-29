@@ -130,8 +130,10 @@ export function createAudioFeedback({
   let muted = false;
 
   const listeners = new Set();
+  const pendingPublications = [];
   const oscillatorVoices = new Set();
   const warnedFailures = new Set();
+  let deliveringPublications = false;
 
   function warnOnce(failureClass, error) {
     if (warnedFailures.has(failureClass)) return;
@@ -233,20 +235,34 @@ export function createAudioFeedback({
     const nextSnapshot = composeSnapshot();
     if (snapshotsEqual(currentSnapshot, nextSnapshot)) return currentSnapshot;
     currentSnapshot = freezeSnapshot(nextSnapshot);
-    for (const listener of [...listeners]) {
-      if (!listeners.has(listener)) continue;
-      try {
-        listener(currentSnapshot);
-      } catch {
-        // Subscriber failures cannot interrupt audio state publication.
+    pendingPublications.push({
+      snapshot: currentSnapshot,
+      recipients: [...listeners],
+    });
+    if (deliveringPublications) return currentSnapshot;
+
+    deliveringPublications = true;
+    try {
+      while (pendingPublications.length > 0) {
+        const publication = pendingPublications.shift();
+        for (const listener of publication.recipients) {
+          try {
+            listener(publication.snapshot);
+          } catch {
+            // Subscriber failures cannot interrupt audio state publication.
+          }
+        }
       }
+    } finally {
+      deliveringPublications = false;
     }
     return currentSnapshot;
   }
 
   function onDirectorStateChange(nextSnapshot) {
+    if (disposing || disposed) return;
     directorSnapshot = normalizeDirectorSnapshot(nextSnapshot);
-    if (!disposing) publish();
+    publish();
   }
 
   function ensureDirector() {
@@ -329,11 +345,19 @@ export function createAudioFeedback({
 
   function subscribe(listener) {
     if (typeof listener !== 'function') return () => {};
+    if (listeners.has(listener)) return () => {};
     listeners.add(listener);
-    try {
-      listener(currentSnapshot);
-    } catch {
-      // Subscription remains valid even if its immediate callback fails.
+    if (deliveringPublications) {
+      pendingPublications.push({
+        snapshot: currentSnapshot,
+        recipients: [listener],
+      });
+    } else {
+      try {
+        listener(currentSnapshot);
+      } catch {
+        // Subscription remains valid even if its immediate callback fails.
+      }
     }
     let subscribed = true;
     return () => {

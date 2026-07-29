@@ -1960,6 +1960,46 @@ test('audio feedback publishes only deeply frozen observable snapshot changes', 
   assert.equal(snapshots.length, 2);
 });
 
+test('audio feedback serializes reentrant transitions without missed or duplicate delivery', () => {
+  const audio = createAudioFeedback({ AudioContextCtor: null });
+  const deliveries = [];
+  let nestedTransitionStarted = false;
+  let unsubscribeC = () => {};
+  const unsubscribeA = audio.subscribe((snapshot) => {
+    deliveries.push(['A', snapshot.muted]);
+    if (snapshot.muted && !nestedTransitionStarted) {
+      nestedTransitionStarted = true;
+      audio.setMuted(false);
+      unsubscribeC = audio.subscribe((nestedSnapshot) => {
+        deliveries.push(['C', nestedSnapshot.muted]);
+      });
+    }
+  });
+  const unsubscribeB = audio.subscribe((snapshot) => {
+    deliveries.push(['B', snapshot.muted]);
+  });
+  deliveries.length = 0;
+
+  audio.setMuted(true);
+
+  assert.deepEqual(deliveries, [
+    ['A', true],
+    ['B', true],
+    ['A', false],
+    ['B', false],
+    ['C', false],
+  ]);
+  assert.equal(audio.getSnapshot().muted, false);
+
+  unsubscribeB();
+  unsubscribeB();
+  unsubscribeC();
+  deliveries.length = 0;
+  audio.setMuted(true);
+  assert.deepEqual(deliveries, [['A', true]]);
+  unsubscribeA();
+});
+
 test('audio feedback restores and persists mute state through the master bus', async () => {
   const stored = [];
   const storage = {
@@ -2044,6 +2084,46 @@ test('audio feedback preserves SFX when music loading fails', async () => {
   }
 });
 
+test('audio feedback forwards story and danger while muted or oscillator allocation fails', async () => {
+  const harness = createAudioContextCtor({
+    state: 'running',
+    createOscillatorPlan() {
+      throw new Error('oscillator unavailable');
+    },
+  });
+  const stub = createStubMusicDirectorFactory();
+  const audio = createAudioFeedback({
+    AudioContextCtor: harness.AudioContextCtor,
+    musicAssets: MUSIC_ASSETS,
+    musicDirectorFactory: stub.factory,
+    logger: { warn() {} },
+  });
+  await audio.unlock();
+  const mutedEvent = { type: 'objective-completed', objectiveId: 'leave_home' };
+  const mutedDanger = {
+    mode: 'chase',
+    heartbeatBpm: 100,
+    intensity: 0.5,
+  };
+  audio.setMuted(true);
+  audio.handleStoryEvent(mutedEvent);
+  audio.updateDanger(mutedDanger, 0);
+  assert.equal(harness.instances[0].oscillators.length, 0);
+
+  const failedEvent = { type: 'chapter-completed', objectiveId: 'complete' };
+  const failedDanger = {
+    mode: 'threaten',
+    heartbeatBpm: 120,
+    intensity: 1,
+  };
+  audio.setMuted(false);
+  audio.handleStoryEvent(failedEvent);
+  audio.updateDanger(failedDanger, 1);
+
+  assert.deepEqual(stub.creations[0].calls.story, [mutedEvent, failedEvent]);
+  assert.deepEqual(stub.creations[0].calls.danger, [mutedDanger, failedDanger]);
+});
+
 test('audio feedback caps oscillator voices and cleans natural and forced endings', async () => {
   const harness = createAudioContextCtor({ state: 'running' });
   const audio = createAudioFeedback({ AudioContextCtor: harness.AudioContextCtor });
@@ -2079,10 +2159,8 @@ test('audio feedback caps oscillator voices and cleans natural and forced ending
 test('audio feedback cleans a partially allocated oscillator voice in reverse order', async () => {
   const harness = createAudioContextCtor({
     state: 'running',
-    createGainPlan(context) {
-      if (context.gains.length >= 3) {
-        throw new Error('voice gain allocation denied');
-      }
+    oscillatorStartPlan() {
+      throw new Error('oscillator start denied');
     },
   });
   const audio = createAudioFeedback({
@@ -2097,13 +2175,23 @@ test('audio feedback cleans a partially allocated oscillator voice in reverse or
 
   const context = harness.instances[0];
   assert.equal(context.oscillators.length, 2);
-  assert.deepEqual(
-    context.oscillators.map((oscillator) => [
-      oscillator.stopCalls.length,
-      oscillator.disconnections.length,
-    ]),
-    [[1, 1], [1, 1]],
-  );
+  assert.equal(context.gains.length, 5);
+  const cleanupEvents = context.events.filter(({ type }) => (
+    type === 'disconnect' || type === 'oscillator-stop'
+  ));
+  assert.deepEqual(cleanupEvents.map((event) => {
+    if (event.type === 'oscillator-stop') return 'oscillator-stop';
+    return context.oscillators.includes(event.node)
+      ? 'oscillator-disconnect'
+      : 'gain-disconnect';
+  }), [
+    'gain-disconnect',
+    'oscillator-stop',
+    'oscillator-disconnect',
+    'gain-disconnect',
+    'oscillator-stop',
+    'oscillator-disconnect',
+  ]);
   assert.equal(audio.getSnapshot().activeVoices, 0);
 });
 
@@ -2166,6 +2254,64 @@ test('audio feedback suspends, resumes, and disposes its full graph idempotently
   );
 });
 
+test('audio feedback ignores synchronous and late director callbacks after disposal', async () => {
+  const harness = createAudioContextCtor({ state: 'running' });
+  const stub = createStubMusicDirectorFactory();
+  const audio = createAudioFeedback({
+    AudioContextCtor: harness.AudioContextCtor,
+    musicAssets: MUSIC_ASSETS,
+    musicDirectorFactory(options) {
+      const director = stub.factory(options);
+      const creation = stub.creations.at(-1);
+      director.dispose = () => {
+        creation.calls.dispose += 1;
+        creation.emit({
+          assetState: 'ready',
+          playback: 'playing',
+          mode: 'chase',
+          loopGeneration: 1,
+          startedAt: 2,
+          dangerMix: 0.7,
+          activeVoices: 1,
+        });
+      };
+      return director;
+    },
+  });
+  const snapshots = [];
+  audio.subscribe((snapshot) => snapshots.push(snapshot));
+  await audio.unlock();
+
+  audio.dispose();
+  const terminalSnapshot = audio.getSnapshot();
+  const notificationCount = snapshots.length;
+  stub.creations[0].emit({
+    assetState: 'ready',
+    playback: 'playing',
+    mode: 'threaten',
+    loopGeneration: 1,
+    startedAt: 3,
+    dangerMix: 1,
+    activeVoices: 2,
+  });
+
+  assert.strictEqual(audio.getSnapshot(), terminalSnapshot);
+  assert.equal(snapshots.length, notificationCount);
+  assert.deepEqual(terminalSnapshot, {
+    contextState: 'closed',
+    assetState: 'disposed',
+    musicState: {
+      playback: 'disposed',
+      mode: 'safe',
+      loopGeneration: 0,
+      startedAt: null,
+    },
+    dangerMix: 0,
+    activeVoices: 0,
+    muted: false,
+  });
+});
+
 test('audio feedback retries unlock with the same graph before one real loop generation', async () => {
   let resumeAttempt = 0;
   const harness = createAudioContextCtor({
@@ -2190,6 +2336,25 @@ test('audio feedback retries unlock with the same graph before one real loop gen
   assert.equal(context.sources.length, 2);
   assert.equal(audio.getSnapshot().musicState.loopGeneration, 1);
   assert.equal(context.resumeCalls.length, 2);
+});
+
+test('audio feedback mute changes preserve one real director loop generation', async () => {
+  const harness = createAudioContextCtor({ state: 'running' });
+  const audio = createAudioFeedback({
+    AudioContextCtor: harness.AudioContextCtor,
+    musicAssets: MUSIC_ASSETS,
+    readAsset: createAssetReader().readAsset,
+    logger: { warn() {} },
+  });
+  await audio.unlock();
+  const context = harness.instances[0];
+
+  audio.setMuted(true);
+  audio.setMuted(false);
+
+  assert.equal(context.sources.length, 2);
+  assert.equal(audio.getSnapshot().musicState.loopGeneration, 1);
+  assert.equal(audio.getSnapshot().musicState.playback, 'playing');
 });
 
 test('audio feedback contains rejected public operations and rejected disposal work', async () => {
