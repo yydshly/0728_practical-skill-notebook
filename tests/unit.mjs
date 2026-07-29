@@ -49,7 +49,7 @@ test('guidance reports distance, relative direction, and staged proximity', () =
     cameraYaw: 0,
   });
   assert.equal(approach.proximity, 'approach');
-  assert.equal(formatObjectiveDistance(approach.distance), '灏卞湪闄勮繎');
+  assert.equal(formatObjectiveDistance(approach.distance), '就在附近');
 
   const interact = computeGuidanceSnapshot({
     playerPosition: new THREE.Vector3(8, 0, 0),
@@ -74,6 +74,13 @@ test('screen marker clamps an off-camera target to a safe viewport edge', () => 
   assert.equal(marker.edge, true);
   assert.ok(marker.x >= 48 && marker.x <= 1232);
   assert.ok(marker.y >= 48 && marker.y <= 672);
+});
+
+test('screen marker fails closed when camera or viewport is absent', () => {
+  const target = new THREE.Vector3(20, 0, -1);
+  const camera = new THREE.PerspectiveCamera();
+  assert.equal(projectScreenMarker(target, null, { width: 1280, height: 720 }), null);
+  assert.equal(projectScreenMarker(target, camera, null), null);
 });
 
 test('world objective marker stays decorative and follows guidance visibility', () => {

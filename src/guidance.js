@@ -3,7 +3,7 @@ import * as THREE from 'three';
 const projected = new THREE.Vector3();
 
 export function formatObjectiveDistance(distance) {
-  return distance <= 3 ? '灏卞湪闄勮繎' : `${Math.round(distance)}m`;
+  return distance <= 3 ? '就在附近' : `${Math.round(distance)}m`;
 }
 
 export function computeGuidanceSnapshot({
@@ -46,7 +46,9 @@ export function computeGuidanceSnapshot({
 }
 
 export function projectScreenMarker(targetPosition, camera, viewport, margin = 48) {
-  if (!targetPosition || viewport.width <= 0 || viewport.height <= 0) return null;
+  if (!targetPosition || !camera || !viewport || viewport.width <= 0 || viewport.height <= 0) {
+    return null;
+  }
   projected.copy(targetPosition);
   projected.y += 1.5;
   projected.project(camera);
