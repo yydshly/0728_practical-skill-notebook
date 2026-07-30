@@ -1595,6 +1595,8 @@ try {
     const fixtureState = await page.evaluate(() => {
       const game = window.__RURAL_ESCAPE__;
       const shellElement = document.querySelector('.game-shell');
+      const compassElement = document.querySelector('#objective-compass');
+      const compassStyle = getComputedStyle(compassElement);
       return {
         evidenceState: shellElement.dataset.evidenceState,
         playerPosition: [game.player.position.x, game.player.position.z],
@@ -1604,7 +1606,9 @@ try {
         objectiveText: document.querySelector('#objective').textContent,
         missionStep: document.querySelector('#mission-step').textContent,
         missionTitle: document.querySelector('#mission-title').textContent,
-        compassVisible: !document.querySelector('#objective-compass').hidden,
+        compassVisible: !compassElement.hidden,
+        compassDisplay: compassStyle.display,
+        compassVisibility: compassStyle.visibility,
         markerVisible: !document.querySelector('#screen-marker').hidden,
         dangerMode: shellElement.dataset.danger,
         uiPhase: shellElement.dataset.uiPhase,
@@ -1676,6 +1680,12 @@ try {
     }
     if (evidenceCase.id === 'south-gate' && fixtureState.markerVisible) {
       throw new Error('Expected completed escape guidance to stay suppressed');
+    }
+    if (evidenceCase.id === 'south-gate' && fixtureState.compassDisplay !== 'none') {
+      throw new Error(
+        `Expected completed objective compass to be visually hidden, got `
+        + `display=${fixtureState.compassDisplay} visibility=${fixtureState.compassVisibility}`,
+      );
     }
     if (fixtureState.uiPhase !== 'playing' || fixtureState.titleHidden !== 'true') {
       throw new Error(`Expected ${evidenceCase.id} evidence fixture to dismiss the intro`);

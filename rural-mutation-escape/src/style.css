@@ -139,6 +139,8 @@ h1 {
   z-index: 4;
 }
 
+.objective-compass[hidden] { display: none; }
+
 .compass-diamond {
   display: inline-block;
   transform: rotate(var(--bearing, 0rad));

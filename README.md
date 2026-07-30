@@ -12,6 +12,7 @@
 | 04 | [Fabrica 模板详情页复刻](./fabrica-template-detail-clone/) | `fabrica-template-detail-clone` | 从线上模板详情页采集视觉、交互与素材证据后，以 React/Vite 本地重建的网页复刻案例。 |
 | 05 | [Fungarium 原版与业务展厅改造](./fungarium-product-showcase/) | `fungarium-product-showcase` | 对照上游标本展厅交互与本仓库的中文业务能力展厅。 |
 | 06 | [《雾村：逃离》](./rural-mutation-escape/) | `rural-mutation-escape` | 第三人称农村变异逃生原型与 AI 辅助游戏开发研究。 |
+| 07 | [MengTo Skills 三产品能力展](./mengto-skills-showcase/) | `mengto-skills-showcase` | 用固定、可审计的 MengTo Skills 工作流，完成 3D 资产审阅、等距动作游戏与复杂商品配置三款独立产品，并由统一中文展厅串联体验与验证。 |
 
 ## 01 · 雾屿灯塔
 
@@ -59,6 +60,20 @@
 
 当前版本是可运行的序章原型：玩家可调查收音机、找到躲藏的邻居、取得手电并抵达南门；失败、检查点、感知 AI 和动态开门仍属于已确认但未落地的核心闭环计划。项目从 `mshumer/Claude-of-Duty` 研究工程方法，但没有复制其 FPS 玩法、源码或商业素材。
 
+以下是从当前合并版本重新采集的三个确定性浏览器证据场景，不是一段无剪辑连续通关。
+
+收音机交互与任务引导：
+
+<img src="./docs/demos/06-rural-radio-interaction.png" alt="雾村收音机任务与 E 交互提示" width="720">
+
+追逐与近身威胁；展示距离状态机，不代表攻击或捕获 AI：
+
+<img src="./docs/demos/06-rural-pursuit-danger.png" alt="雾村追逐者和近身威胁反馈" width="720">
+
+静态南门出口触发区的序章完成状态；不展示动态开门、门碰撞或门外结算线：
+
+<img src="./docs/demos/06-rural-south-gate.png" alt="雾村静态南门与第一章完成状态" width="720">
+
 - [项目 README：功能、操作、架构与限制](./rural-mutation-escape/README.md)
 - [参考来源与独立实现边界](./rural-mutation-escape/docs/REFERENCES.md)
 
@@ -78,6 +93,33 @@ npm.cmd run test:audio
 npm.cmd test
 npm.cmd run build
 ```
+
+## 07 · MengTo Skills 三产品能力展
+
+这是一个统一中文 Showcase Hub 加三款独立 Three.js 产品的能力展：Monster Forge 审阅怪物资产，Ashfall Arena 展示可玩的动作游戏系统，Mech Atelier 配置复杂 3D 商品。仓库中有四个可运行应用、三款产品；Hub 是解释和导航入口，不是独立的第四个产品。
+
+<img src="./docs/demos/07-mengto-skills-showcase.gif" alt="MengTo Skills 三产品能力展的四阶段演示" width="720">
+
+- **Monster Forge：** 检查模型、动作、骨架、碰撞体、插槽和来源。
+- **Ashfall Arena：** 体验等距移动、战斗、敌人 AI、成长、存档与音画反馈。
+- **Mech Atelier：** 更换机甲部件，观察兼容性、价格、重量、性能和分享状态。
+
+方法与工作流参考 [MengTo Skills](https://github.com/MengTo/Skills)，本项目实际审查和安装的版本固定为 [`93da48f13fb1b91bdbf4718d0f49df1a469edb45`](https://github.com/MengTo/Skills/tree/93da48f13fb1b91bdbf4718d0f49df1a469edb45)。[Vesperfall](https://vesperfall.mengto.chatgpt.site/) 仅作为关联效果参考。
+
+Vesperfall 仅作为关联效果参考。本项目没有复制或重新托管其源码、模型、贴图、动画或页面素材，也不存在官方关联。
+
+Skill 指导 Codex 如何规划、实现、测试和交付；浏览器运行时不会加载 Skill，最终产物仍是普通的 Vite/Three.js 网页。
+
+```powershell
+cd mengto-skills-showcase
+npm install
+npm run dev
+```
+
+四个本地应用就绪后打开 `http://127.0.0.1:4172/`。组合生产构建使用 `npm run build:showcase`；当前未公开部署，没有线上产品地址。
+
+- [完整项目说明](./mengto-skills-showcase/README.md)
+- [套件验证账本](./mengto-skills-showcase/docs/SHOWCASE-VALIDATION.md)
 
 ## 获取项目库代码
 
