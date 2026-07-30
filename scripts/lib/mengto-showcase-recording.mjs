@@ -170,6 +170,7 @@ function observedChildTermination(child) {
 
 export function createPreviewLifecycle(child, output = () => "") {
   let termination = null;
+  let lastError = null;
   let resolveCompletion;
   const completion = new Promise((resolve) => {
     resolveCompletion = resolve;
@@ -183,11 +184,17 @@ export function createPreviewLifecycle(child, output = () => "") {
   };
 
   child.on("error", (error) => {
-    settle({
-      exitCode: child.exitCode ?? null,
-      signalCode: child.signalCode ?? null,
-      error,
-    });
+    lastError = error;
+    const confirmedTermination = observedChildTermination(child);
+    if (confirmedTermination) {
+      settle({ ...confirmedTermination, error });
+    } else if (child.pid == null) {
+      settle({
+        exitCode: null,
+        signalCode: null,
+        error,
+      });
+    }
   });
   child.once("close", (exitCode, signalCode) => {
     settle({
@@ -209,6 +216,9 @@ export function createPreviewLifecycle(child, output = () => "") {
     get termination() {
       return termination;
     },
+    get lastError() {
+      return lastError;
+    },
   };
 }
 
@@ -218,8 +228,9 @@ function previewTermination(preview) {
 
 function previewExitError(url, preview) {
   const termination = previewTermination(preview);
-  const lifecycleDetails = termination?.error
-    ? termination.error.message
+  const observedError = termination?.error ?? preview.lastError;
+  const lifecycleDetails = observedError
+    ? observedError.message
     : termination?.signalCode
       ? `Preview terminated by signal ${termination.signalCode}.`
       : termination?.exitCode !== null &&

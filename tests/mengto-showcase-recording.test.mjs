@@ -345,6 +345,73 @@ test("cleanup escalates to a bounded forced termination", async () => {
   assert.deepEqual(child.killSignals, ["SIGTERM", "SIGKILL"]);
 });
 
+test("a kill error on a live preview still escalates to SIGKILL", async () => {
+  const child = fakeChild();
+  child.pid = 42_424;
+  let completionSettled = false;
+  let completionSettledBeforeForce = null;
+  child.kill = (signal = "SIGTERM") => {
+    child.killSignals.push(signal);
+    if (signal === "SIGTERM") {
+      queueMicrotask(() => {
+        child.emit("error", new Error("kill EPERM"));
+      });
+    } else {
+      completionSettledBeforeForce = completionSettled;
+      queueMicrotask(() => {
+        child.signalCode = "SIGKILL";
+        child.emit("close", null, "SIGKILL");
+      });
+    }
+    return true;
+  };
+  const preview = createPreviewLifecycle(child, () => "");
+  preview.completion.then(() => {
+    completionSettled = true;
+  });
+
+  const termination = await stopPreview(preview, {
+    graceTimeoutMs: 5,
+    forceTimeoutMs: 50,
+  });
+
+  assert.deepEqual(child.killSignals, ["SIGTERM", "SIGKILL"]);
+  assert.equal(completionSettledBeforeForce, false);
+  assert.equal(termination.signalCode, "SIGKILL");
+  assert.equal(preview.lastError.message, "kill EPERM");
+});
+
+test("a live preview that ignores SIGKILL fails cleanup within bounds", async () => {
+  const child = fakeChild();
+  child.pid = 42_425;
+  let completionSettled = false;
+  child.kill = (signal = "SIGTERM") => {
+    child.killSignals.push(signal);
+    if (signal === "SIGTERM") {
+      queueMicrotask(() => {
+        child.emit("error", new Error("kill EACCES"));
+      });
+    }
+    return true;
+  };
+  const preview = createPreviewLifecycle(child, () => "");
+  preview.completion.then(() => {
+    completionSettled = true;
+  });
+
+  await assert.rejects(
+    () => stopPreview(preview, {
+      graceTimeoutMs: 5,
+      forceTimeoutMs: 5,
+    }),
+    /did not close after forced termination/,
+  );
+  assert.deepEqual(child.killSignals, ["SIGTERM", "SIGKILL"]);
+  assert.equal(completionSettled, false);
+  assert.equal(preview.termination, null);
+  assert.equal(preview.lastError.message, "kill EACCES");
+});
+
 test("Windows npm and a configured FFmpeg executable resolve explicitly", () => {
   assert.deepEqual(commandInvocation("npm", "win32"), { command: "npm.cmd", shell: true });
   assert.deepEqual(commandInvocation("node", "win32"), { command: "node", shell: false });
