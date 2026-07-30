@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#131613" />
+    <title>雾村：逃离</title>
+  </head>
+  <body>
+    <main class="game-shell" data-ui-phase="intro" aria-label="雾村：逃离游戏画面">
+      <canvas id="game" aria-label="游戏场景"></canvas>
+      <div class="cinematic-grain" aria-hidden="true"></div>
+      <section class="title-lockup" aria-live="polite">
+        <p class="eyebrow">CHAPTER 01 · DUSK</p>
+        <h1>雾村：逃离</h1>
+      </section>
+      <section class="mission-hud" aria-live="polite">
+        <p id="mission-step" class="mission-label">任务 1/4</p>
+        <p id="mission-title" class="mission-title">调查收音机</p>
+        <p id="mission-clue" class="mission-clue">杂音来自主角家亮着灯的窗边。</p>
+        <p id="objective" class="sr-only">离开主角家，调查村里的异常。</p>
+      </section>
+      <section id="objective-compass" class="objective-compass">
+        <span class="compass-diamond" aria-hidden="true">◇</span>
+        <span id="compass-label">调查收音机</span>
+        <span id="compass-distance">3m</span>
+      </section>
+      <div id="screen-marker" class="screen-marker" hidden aria-hidden="true">◇</div>
+      <p id="danger-state" class="danger-state" hidden aria-live="assertive"></p>
+      <div class="danger-vignette" aria-hidden="true"></div>
+      <p id="completion-toast" class="completion-toast" hidden aria-live="polite"></p>
+      <p id="subtitle" class="subtitle">收音机在杂音里重复着一个陌生的名字。</p>
+      <p id="approach-prompt" class="approach-prompt" hidden></p>
+      <p id="interaction" class="interaction" hidden><kbd>E</kbd><span></span></p>
+      <p id="tutorial-hint" class="tutorial-hint">WASD 移动</p>
+      <button
+        id="mute-toggle"
+        class="mute-toggle"
+        type="button"
+        data-audio-state="locked"
+        aria-pressed="false"
+        aria-busy="false"
+        aria-label="开启声音"
+        title="开启声音"
+      >🔈</button>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

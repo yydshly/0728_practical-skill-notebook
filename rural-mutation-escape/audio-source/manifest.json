@@ -1,0 +1,337 @@
+{
+  "schemaVersion": 1,
+  "pipelineStage": "encoded",
+  "provenance": {
+    "source": "original procedural composition for rural-mutation-escape",
+    "prohibitedDerivation": "not modeled on a named artist or protected work"
+  },
+  "generator": {
+    "id": "rural-score-core",
+    "version": "1.0.0",
+    "script": "scripts/rural-score-core.mjs"
+  },
+  "encoder": {
+    "ffmpegVersion": "ffmpeg version n6.1.3-20250831 Copyright (c) 2000-2025 the FFmpeg developers",
+    "ffprobeVersion": "ffprobe version n6.1.3-20250831 Copyright (c) 2007-2025 the FFmpeg developers",
+    "normalization": {
+      "mode": "measured-constant-gain",
+      "measurement": "loudnorm JSON, TP=-2, LRA=7",
+      "output": "pcm_s16le, 48000 Hz, stereo, exact declared frames"
+    },
+    "ogg": {
+      "codec": "libvorbis",
+      "quality": 4,
+      "bitExact": true,
+      "serialOffset": 0,
+      "metadata": "stripped",
+      "argv": [
+        "-hide_banner",
+        "-nostdin",
+        "-y",
+        "-loglevel",
+        "error",
+        "-i",
+        "{input}",
+        "-map",
+        "0:a:0",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        "-c:a",
+        "libvorbis",
+        "-q:a",
+        "4",
+        "-fflags",
+        "+bitexact",
+        "-flags:a",
+        "+bitexact",
+        "-map_metadata",
+        "-1",
+        "-serial_offset",
+        "0",
+        "{output}"
+      ]
+    },
+    "mp3": {
+      "codec": "libmp3lame",
+      "bitrate": "96k",
+      "bitExact": true,
+      "writeXing": true,
+      "id3v1": false,
+      "id3v2": false,
+      "metadata": "stripped",
+      "argv": [
+        "-hide_banner",
+        "-nostdin",
+        "-y",
+        "-loglevel",
+        "error",
+        "-i",
+        "{input}",
+        "-map",
+        "0:a:0",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        "96k",
+        "-fflags",
+        "+bitexact",
+        "-flags:a",
+        "+bitexact",
+        "-map_metadata",
+        "-1",
+        "-write_xing",
+        "1",
+        "-id3v2_version",
+        "0",
+        "-write_id3v1",
+        "0",
+        "{output}"
+      ]
+    }
+  },
+  "format": {
+    "sampleRate": 48000,
+    "channels": 2,
+    "bitDepth": 16,
+    "bpm": 60
+  },
+  "assets": [
+    {
+      "id": "rural-dusk-bed",
+      "role": "exploration",
+      "kind": "loop",
+      "seed": 1296651092,
+      "durationSeconds": 48,
+      "sampleFrames": 2304000,
+      "targetLufs": -22,
+      "loopStart": 0,
+      "loopEnd": 48,
+      "sourcePcmSha256": "dd76cb028116c66efa905c9d7ddd5c29de556d59598b090c2660945380fe1347",
+      "analysis": {
+        "peak": 0.18823242,
+        "dcOffset": -0.00000732,
+        "rms": 0.06948861,
+        "seamDelta": 0.01016235,
+        "approximateLufs": -23.853
+      },
+      "files": {
+        "wav": {
+          "path": "audio-source/masters/rural-dusk-bed.wav",
+          "bytes": 9216044,
+          "sha256": "ae5ca6f2a371610835d957a72a46589b58d124e202ece00084b5d07599c69897",
+          "sampleRate": 48000,
+          "channels": 2,
+          "sampleFrames": 2304000,
+          "durationSeconds": 48,
+          "normalizationGainDb": 0.65,
+          "integratedLufs": -22,
+          "truePeakDbtp": -13.8,
+          "seamDelta": 0.01095581
+        },
+        "ogg": {
+          "path": "src/assets/audio/rural-dusk-bed.ogg",
+          "bytes": 164352,
+          "sha256": "22170e3660eae312b1a9e738d229b8cec054056a0ccdab2076904f39e4fb411b",
+          "sampleRate": 48000,
+          "channels": 2,
+          "durationSeconds": 48,
+          "decodedSampleFrames": 2304000,
+          "integratedLufs": -21.97,
+          "truePeakDbtp": -13.87
+        },
+        "mp3": {
+          "path": "src/assets/audio/rural-dusk-bed.mp3",
+          "bytes": 576576,
+          "sha256": "f696ee61914892ef653b9abade5c9bbf25dd7c4b0f9ce152d8b4d3d7c1d03428",
+          "sampleRate": 48000,
+          "channels": 2,
+          "durationSeconds": 48.024,
+          "decodedSampleFrames": 2304000,
+          "integratedLufs": -22.45,
+          "truePeakDbtp": -14.4
+        }
+      }
+    },
+    {
+      "id": "mutation-danger-layer",
+      "role": "danger",
+      "kind": "loop",
+      "seed": 1297437761,
+      "durationSeconds": 48,
+      "sampleFrames": 2304000,
+      "targetLufs": -25,
+      "loopStart": 0,
+      "loopEnd": 48,
+      "sourcePcmSha256": "efbe1fd1bca16cc9d48680ac2e90173892cfad34c169eeaea503b64c6e370d59",
+      "analysis": {
+        "peak": 0.24200439,
+        "dcOffset": 0.00008978,
+        "rms": 0.06929898,
+        "seamDelta": 0,
+        "approximateLufs": -23.876
+      },
+      "files": {
+        "wav": {
+          "path": "audio-source/masters/mutation-danger-layer.wav",
+          "bytes": 9216044,
+          "sha256": "65dab87516255b925110d23f9b3f206d6e4d8f39c26a3dc2ff803fe24f352e13",
+          "sampleRate": 48000,
+          "channels": 2,
+          "sampleFrames": 2304000,
+          "durationSeconds": 48,
+          "normalizationGainDb": 1.15,
+          "integratedLufs": -25,
+          "truePeakDbtp": -11.17,
+          "seamDelta": 0
+        },
+        "ogg": {
+          "path": "src/assets/audio/mutation-danger-layer.ogg",
+          "bytes": 233266,
+          "sha256": "d4b6bd36f91778cded163c916ebd9d731d72c35140ceb9a65a4a817d73a4b8b4",
+          "sampleRate": 48000,
+          "channels": 2,
+          "durationSeconds": 48,
+          "decodedSampleFrames": 2304000,
+          "integratedLufs": -24.98,
+          "truePeakDbtp": -11.16
+        },
+        "mp3": {
+          "path": "src/assets/audio/mutation-danger-layer.mp3",
+          "bytes": 576576,
+          "sha256": "9481b40cd6484d10889666e673394ec537d44c9fd440d874784fb3a01f0ae91e",
+          "sampleRate": 48000,
+          "channels": 2,
+          "durationSeconds": 48.024,
+          "decodedSampleFrames": 2304000,
+          "integratedLufs": -25.48,
+          "truePeakDbtp": -11.62
+        }
+      }
+    },
+    {
+      "id": "mutation-reveal-stinger",
+      "role": "reveal",
+      "kind": "stinger",
+      "seed": 1380275788,
+      "durationSeconds": 3,
+      "sampleFrames": 144000,
+      "targetLufs": -18,
+      "sourcePcmSha256": "3f3828ef7a8d78af94a4f364049330e6da8758626d73d6b9dcccf57ce0f536aa",
+      "analysis": {
+        "peak": 0.25076294,
+        "dcOffset": 0.00018581,
+        "rms": 0.04410216,
+        "seamDelta": 0.02087402,
+        "approximateLufs": -27.802
+      },
+      "files": {
+        "wav": {
+          "path": "audio-source/masters/mutation-reveal-stinger.wav",
+          "bytes": 576044,
+          "sha256": "944baf9a76e749117951c6e67cf3233ef51eac222a252991e8d57a41c526d095",
+          "sampleRate": 48000,
+          "channels": 2,
+          "sampleFrames": 144000,
+          "durationSeconds": 3,
+          "normalizationGainDb": 7.44,
+          "integratedLufs": -18.01,
+          "truePeakDbtp": -4.34,
+          "seamDelta": 0.04916382
+        },
+        "ogg": {
+          "path": "src/assets/audio/mutation-reveal-stinger.ogg",
+          "bytes": 41847,
+          "sha256": "37231d9eef3c2719ef35019515f1adad7a2a912dd2657bd593815d07d00ac3e3",
+          "sampleRate": 48000,
+          "channels": 2,
+          "durationSeconds": 3,
+          "decodedSampleFrames": 144000,
+          "integratedLufs": -18.04,
+          "truePeakDbtp": -4.39
+        },
+        "mp3": {
+          "path": "src/assets/audio/mutation-reveal-stinger.mp3",
+          "bytes": 36576,
+          "sha256": "30c12ca453bd9904063d07876845657b644bdd20e94be032ca828bf780d50c56",
+          "sampleRate": 48000,
+          "channels": 2,
+          "durationSeconds": 3.024,
+          "decodedSampleFrames": 144000,
+          "integratedLufs": -18.52,
+          "truePeakDbtp": -5.18
+        }
+      }
+    },
+    {
+      "id": "south-gate-escape-stinger",
+      "role": "escape",
+      "kind": "stinger",
+      "seed": 1195463749,
+      "durationSeconds": 6,
+      "sampleFrames": 288000,
+      "targetLufs": -18,
+      "sourcePcmSha256": "c1fd3336b1d28e5009d437d6149f1164e16d7c79f35e6b9f76fb785f6a44a09a",
+      "analysis": {
+        "peak": 0.15499878,
+        "dcOffset": -0.000009,
+        "rms": 0.04033908,
+        "seamDelta": 0,
+        "approximateLufs": -28.576
+      },
+      "files": {
+        "wav": {
+          "path": "audio-source/masters/south-gate-escape-stinger.wav",
+          "bytes": 1152044,
+          "sha256": "ef77d4f45548020dc4de6b81c43099ce292c02d4e2aecb176b679df8f36e29a8",
+          "sampleRate": 48000,
+          "channels": 2,
+          "sampleFrames": 288000,
+          "durationSeconds": 6,
+          "normalizationGainDb": 8.14,
+          "integratedLufs": -18,
+          "truePeakDbtp": -8.05,
+          "seamDelta": 0
+        },
+        "ogg": {
+          "path": "src/assets/audio/south-gate-escape-stinger.ogg",
+          "bytes": 39394,
+          "sha256": "7b705ed2903bb2bb1d7863e016855a08f9eb6cff040f25904e89b9be0954a60a",
+          "sampleRate": 48000,
+          "channels": 2,
+          "durationSeconds": 6,
+          "decodedSampleFrames": 288000,
+          "integratedLufs": -17.96,
+          "truePeakDbtp": -7.99
+        },
+        "mp3": {
+          "path": "src/assets/audio/south-gate-escape-stinger.mp3",
+          "bytes": 72576,
+          "sha256": "9022c2dce300ccecd025a1d999ec124a95ee8e0d4e5b1e4cd1ecd51a5bea8561",
+          "sampleRate": 48000,
+          "channels": 2,
+          "durationSeconds": 6.024,
+          "decodedSampleFrames": 288000,
+          "integratedLufs": -18.45,
+          "truePeakDbtp": -8.51
+        }
+      }
+    }
+  ],
+  "decodedBytesByCodec": {
+    "ogg": 40320000,
+    "mp3": 40320000
+  },
+  "runtimeMixAnalysis": {
+    "definition": "phase-independent sum of danger 1.0, exploration 0.707946, louder stinger, eight 0.08 oscillator peaks, then master 0.28",
+    "upperBoundDbfsByCodec": {
+      "ogg": -6.637262,
+      "mp3": -7.039141
+    }
+  }
+}
