@@ -12,8 +12,10 @@ import {
   assertGifFile,
   commandInvocation,
   createGifCommands,
+  recordMengToShowcaseDemo,
   resolveChromium,
   resolveFfmpegCommand,
+  waitForServer,
 } from "../scripts/lib/mengto-showcase-recording.mjs";
 
 function gifHeader(width = GIF_WIDTH, height = 480) {
@@ -33,6 +35,107 @@ test("recording manifest fixes one 15-second four-stage GIF", () => {
   assert.equal(60 / FRAME_RATE, 15);
   assert.equal(GIF_WIDTH, 720);
   assert.equal(MAX_GIF_BYTES, 5 * 1024 * 1024);
+});
+
+test("capture paths use only the same-origin composite preview", () => {
+  for (const stage of CAPTURE_STAGES) {
+    assert.match(stage.path, /^\//);
+    assert.doesNotMatch(stage.path, /417[2-5]|localhost|vesperfall/i);
+  }
+  assert.equal(
+    CAPTURE_STAGES.find(({ id }) => id === "monster-forge")?.path,
+    "/monster-forge/?review=ash-warden",
+  );
+  assert.match(
+    CAPTURE_STAGES.find(({ id }) => id === "ashfall-arena")?.path ?? "",
+    /fixture=fresh.*safeTraining=1.*capture=1/,
+  );
+});
+
+test("preview readiness cannot be borrowed from an old service", async () => {
+  let exitCode = null;
+  const preview = {
+    child: {
+      get exitCode() {
+        return exitCode;
+      },
+    },
+    output: () => "Port 5277 is already in use",
+  };
+  await assert.rejects(
+    () => waitForServer("http://127.0.0.1:5277/", preview, {
+      fetchImpl: async () => ({
+        ok: true,
+        text: async () =>
+          '<meta name="showcase-app" content="showcase-hub">',
+      }),
+      sleep: async () => {
+        exitCode = 1;
+      },
+    }),
+    /Port 5277 is already in use/,
+  );
+});
+
+test("an old Hub cannot pass while the new child is still starting", async () => {
+  let exitCode = null;
+  let sleeps = 0;
+  const preview = {
+    child: {
+      get exitCode() {
+        return exitCode;
+      },
+    },
+    output: () => "loading Vite config",
+  };
+  await assert.rejects(
+    () => waitForServer("http://127.0.0.1:5277/", preview, {
+      fetchImpl: async () => ({
+        ok: true,
+        text: async () =>
+          '<meta name="showcase-app" content="showcase-hub">',
+      }),
+      sleep: async () => {
+        sleeps += 1;
+        if (sleeps === 3) {
+          exitCode = 1;
+        }
+      },
+    }),
+    /Vite exited before/,
+  );
+  assert.equal(sleeps, 3);
+});
+
+test("readiness needs this child's Local URL and the Hub marker", async () => {
+  const preview = {
+    child: { exitCode: null },
+    output: () => "➜  Local: http://127.0.0.1:5277/",
+  };
+  await waitForServer("http://127.0.0.1:5277/", preview, {
+    fetchImpl: async () => ({
+      ok: true,
+      text: async () =>
+        '<meta name="showcase-app" content="showcase-hub">',
+    }),
+    sleep: async () => undefined,
+  });
+});
+
+test("readiness accepts Vite's self-closing Hub marker", async () => {
+  const preview = {
+    child: { exitCode: null },
+    output: () =>
+      "\u001B[32m➜\u001B[39m  Local: http://127.0.0.1:\u001B[1m5277\u001B[22m/",
+  };
+  await waitForServer("http://127.0.0.1:5277/", preview, {
+    fetchImpl: async () => ({
+      ok: true,
+      text: async () =>
+        '<meta name="showcase-app" content="showcase-hub" />',
+    }),
+    sleep: async () => undefined,
+  });
 });
 
 test("Windows npm and a configured FFmpeg executable resolve explicitly", () => {
