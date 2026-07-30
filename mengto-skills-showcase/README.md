@@ -1,61 +1,44 @@
-# MengTo Skills Showcase｜可玩产品能力展
+# MengTo Skills 三产品能力展
 
-## 先看效果：一条命令打开三产品能力展厅
+这是一个由统一中文 Showcase Hub 串联的 Three.js 产品组合：四个可运行应用，只有三款展示产品。Monster Forge 检查 3D 资产，Ashfall Arena 展示可玩的动作游戏系统，Mech Atelier 配置复杂 3D 商品；Hub 负责解释、导航和组合验证，不是独立的第四个产品。
 
-这个目录展示三款独立产品，它们的能力彼此互补：Monster Forge 用于检查 3D 资产，Ashfall Arena 用于体验可玩的动作游戏系统，Mech Atelier 用于配置复杂 3D 商品。它们不是同一款游戏的三个关卡。
+## 先看当前效果
 
-```powershell
-npm install
-npm run dev
-```
+<img src="../docs/demos/07-mengto-skills-showcase.gif" alt="MengTo Skills 三产品能力展：展厅、怪物资产审阅、动作游戏与机甲配置演示" width="720">
 
-终端显示“全部可访问”后，打开 `http://127.0.0.1:4172/`。先在展厅看三款产品的作用，再进入任一产品；产品内的“这是什么？”可重新打开中文说明，“返回能力展厅”会回到对应产品卡。
+GIF 来自本仓库 `dist/showcase/` 的本地组合生产构建，按 Hub → Monster Forge → Ashfall Arena → Mech Atelier 展示真实产品状态；它不包含 Vesperfall 画面。
 
-Skill 是 Codex 开发与验收时读取的工作说明，网页运行时不会加载这些 Skill；最终交付是普通 Vite/Three.js 网页产品。换句话说，Skill 影响 Codex 如何设计、实现和检查产品，但访客打开的仍是普通网页。
+## 来源、参考与独立实现
 
-## 产品矩阵
+- 方法与工作流来源：[MengTo Skills](https://github.com/MengTo/Skills)
+- 本项目实际审查和安装的固定版本：[MengTo Skills `93da48f13fb1b91bdbf4718d0f49df1a469edb45`](https://github.com/MengTo/Skills/tree/93da48f13fb1b91bdbf4718d0f49df1a469edb45)
+- 关联效果参考：[Vesperfall](https://vesperfall.mengto.chatgpt.site/)
 
-| 展厅产品 | 主要作用 | 适合场景 | 验证记录 |
-| --- | --- | --- | --- |
-| Monster Forge｜怪物铸造所 | 检查怪物模型、动作、骨架、碰撞体和来源 | 游戏资产库、角色编辑器、数字资产验收 | [验证记录](apps/monster-forge/docs/VALIDATION.md) |
-| Ashfall Arena｜灰烬竞技场 | 体验战斗、敌人 AI、成长、存档和音画反馈 | 游戏原型、互动营销、战斗系统验证 | [验证记录](apps/ashfall-arena/docs/VALIDATION.md) |
-| Mech Atelier｜机甲定制工坊 | 更换部件并观察 3D 外观、参数与分享链接变化 | 汽车选配、工业设备、家具和定制商品 | [验证记录](apps/mech-atelier/docs/VALIDATION.md) |
+Vesperfall 仅作为关联效果参考。本项目没有复制或重新托管其源码、模型、贴图、动画或页面素材，也不存在官方关联。
 
-这三款产品分别展示“资产审阅”“可玩系统”“复杂商品配置”，组合起来说明同一套专业工作说明可以服务不同产品形态。Mech Atelier 中的价格是概念信用点，不代表真实定价，也不包含库存、订单、支付或履约承诺。
+Skill 指导 Codex 如何规划、实现、测试和交付；浏览器运行时不会加载 Skill，最终产物仍是普通的 Vite/Three.js 网页。
 
-三款产品都是本地可运行、可自动检查的候选，但未公开部署。Ashfall 的自动化不能替代首次真人试玩，8–12 分钟人工可用性门槛未关闭；真实设备、GPU 完成时间和公网缓存也没有从本地测试外推为通过。
+## 四个应用、三款产品
 
-## 两个独立演示
+| 应用 | 产品角色 | 主要作用 | 适合场景 | 验证记录 |
+| --- | --- | --- | --- | --- |
+| Showcase Hub｜产品能力展厅 | 统一中文入口，不是独立的第四个产品 | 解释三产品关系、导航、中文说明和同源组合 | 产品组合介绍、内部展示、验收入口 | [套件账本](docs/SHOWCASE-VALIDATION.md) |
+| Monster Forge｜怪物锻造所 | 资产审阅产品 | 检查怪物模型、动作、骨架、碰撞体、插槽和来源 | 游戏资产库、角色编辑器、数字资产验收 | [验证记录](apps/monster-forge/docs/VALIDATION.md) |
+| Ashfall Arena｜灰烬竞技场 | 可玩动作游戏 | 体验战斗、敌人 AI、成长、存档和音画反馈 | 游戏原型、互动营销、战斗系统验证 | [验证记录](apps/ashfall-arena/docs/VALIDATION.md) |
+| Mech Atelier｜机甲定制工坊 | 复杂商品配置器 | 更换部件并观察 3D 外观、兼容性、参数和分享状态 | 汽车选配、工业设备、家具和定制商品 | [验证记录](apps/mech-atelier/docs/VALIDATION.md) |
 
-雾屿灯塔（Isle of Quiet Signals）与 Final Four — Typographic Flags 是套件外的独立演示，不属于能力展厅三产品，也不是第四、第五款展厅产品。它们继续在各自目录独立运行：
+三款产品分别展示“资产审阅”“可玩系统”“复杂商品配置”。它们不是同一款游戏的三个关卡；Hub 让这三种能力以统一入口、导航与组合验证被清楚理解。
 
-```powershell
-cd ../isle-of-quiet-signals
-npm install
-npm run dev
-npm test
-npm run build
+## 一条命令本地运行
 
-cd ../world-cup-letter-flags-demo
-npm install
-npm run dev
-npm run build
-```
-
-## 本地运行
-
-### 前置条件
-
-- Node.js 22.12+（使用 `node --version` 确认；底层工具也兼容 Node.js 20.19+）
-- npm
-- 支持 WebGL 的浏览器；没有 WebGL 时，三个产品会保留如实的静态或信息降级状态
-
-### 一条命令打开四个页面
+前置条件：Node.js 22.12+、npm，以及支持 WebGL 的浏览器；底层工具也兼容 Node.js 20.19+。没有 WebGL 时，三款产品会保留如实的静态或信息降级状态。
 
 ```powershell
 npm install
 npm run dev
 ```
+
+终端显示“全部可访问”后打开 `http://127.0.0.1:4172/`。结束体验时在启动终端按 `Ctrl+C`，supervisor 会关闭 4172–4175 的四棵应用进程。
 
 统一启动器固定使用以下本地地址，并在任一端口已被占用时明确失败，不会偷偷换端口：
 
@@ -66,29 +49,18 @@ npm run dev
 | Ashfall Arena | `http://127.0.0.1:4174/` |
 | Mech Atelier | `http://127.0.0.1:4175/` |
 
-结束体验时在启动终端按 `Ctrl+C`；supervisor 会关闭四棵产品进程树并释放 4172–4175。
+## 项目如何实现
 
-### 分别运行与验证
+1. **固定并审计来源：** 把 MengTo Skills 只读来源固定到完整提交，并把批准的 16 项 Skill 写入清单。
+2. **冻结规格与路由：** 先确定三款产品的不同目标，再由 `AGENTS.md` 按目录选择最窄的 Skill。
+3. **建立共享契约：** 先完成类型、资产、输入、Three.js 生命周期、UI 与产品引导包，产品不互相导入私有状态。
+4. **依次实现产品：** Monster 先验证资产管线，Ashfall 再建立完整动作循环，Mech 最后验证复杂商品配置。
+5. **增加统一展厅：** Hub 用中文解释三款产品，产品内说明和同标签返回把四个应用串成一个组合体验。
+6. **分层验收：** Vitest 检查确定性逻辑，Playwright 检查真实旅程，`build:showcase` 生成同源组合产物，发布前账本诚实保留外部验证边界。
 
-```powershell
-npm run dev:hub
-npm run dev:forge
-npm run dev:arena
-npm run dev:atelier
+六个共享包分别承载内容契约、游戏资产、输入、产品引导、Three.js 运行时和 UI：`@showcase/content-schema`、`@showcase/game-assets`、`@showcase/input-system`、`@showcase/showcase-guide`、`@showcase/three-runtime`、`@showcase/ui-system`。它们保持产品无关，四个应用通过公开契约协作。
 
-npm run test:browser --workspace @showcase/hub
-npm run test:browser --workspace @showcase/monster-forge
-npm run test:browser --workspace @showcase/ashfall-arena
-npm run test:browser --workspace @showcase/mech-atelier
-
-npm run build
-npm run build:showcase
-npm run test:showcase-preview
-```
-
-`build:showcase` 会把展厅和三款产品组合到 `dist/showcase/`，使用同一源站和相对链接；这证明本地组合产物可以往返，不等于已经公开部署。
-
-## Skill 源码与安装目录
+## Skill 安装目录与全局影响
 
 本项目刻意维护两份用途不同的内容：
 
@@ -110,7 +82,7 @@ node scripts/check-selected-skills.mjs
 
 详细的来源、安装保护和审计输出说明见 [Skill 安装与影响说明](docs/skill-installation.md)。
 
-## 已安装 Skills
+## 16 项 Skill 与产品/阶段映射
 
 以下清单是本项目批准安装的全部 16 项。技术标识符保持英文，以便和真实目录、命令与上游文件一致；中文列解释它们为何会被使用。
 
@@ -133,9 +105,9 @@ node scripts/check-selected-skills.mjs
 | `test-playable-web-games` | `agent-skills/game-development/test-playable-web-games` | `monster-forge, ashfall-arena, mech-atelier` | `validation` |
 | `ship-web-games` | `agent-skills/game-development/ship-web-games` | `monster-forge, ashfall-arena, mech-atelier` | `release` |
 
-`monster-forge`、`ashfall-arena` 和 `mech-atelier` 是目录/清单 ID；中文产品名分别是怪物铸造所、灰烬竞技场和机甲定制工坊。`foundation`、`assets`、`combat`、`feedback`、`mobile`、`performance`、`validation`、`release` 是开发阶段 ID，中文含义见下一节。
+`monster-forge`、`ashfall-arena` 和 `mech-atelier` 是目录/清单 ID；中文产品名分别是怪物锻造所、灰烬竞技场和机甲定制工坊。`foundation`、`assets`、`combat`、`feedback`、`mobile`、`performance`、`validation`、`release` 是开发阶段 ID。
 
-## Skill 对项目的影响
+### Skill 如何在开发中指导产品
 
 | 开发阶段 | 使用方式与产品效果 |
 | --- | --- |
@@ -148,17 +120,27 @@ node scripts/check-selected-skills.mjs
 
 准确的目录到 Skill 路由规则在 [AGENTS.md](AGENTS.md)。它要求先读取最窄范围的 `SKILL.md`，再改代码。
 
-## 更新与卸载
+## 测试、构建与验证
 
-本地来源和全局安装副本**不会自动同步**：更新 `skills-source/MengTo-Skills` 不会更新 `C:\Users\yun68\.codex\skills`，反过来也一样。任何更新都要先审查，再由明确批准的单项操作替换。
+### 分别运行、浏览器测试和组合构建
 
-更新摘要：确认上游提交 → 更新本地只读来源 → 将完整 SHA 写入 `config/skill-source-lock.json` → 审阅变更 → 备份并逐项替换全局副本 → 在新的 Codex 对话中做只读审计。
+```powershell
+npm run dev:hub
+npm run dev:forge
+npm run dev:arena
+npm run dev:atelier
 
-可恢复卸载摘要：只定位一个准确的 `C:\Users\yun68\.codex\skills\<skill-name>` 目录 → 移到 `.codex\skills` 以外的备份位置 → 在新的 Codex 对话验证其余 Skill 仍可发现 → 得到明确批准后才删除备份。不要删除整个 `.codex\skills` 目录。
+npm run test:browser --workspace @showcase/hub
+npm run test:browser --workspace @showcase/monster-forge
+npm run test:browser --workspace @showcase/ashfall-arena
+npm run test:browser --workspace @showcase/mech-atelier
 
-完整的安全边界和恢复步骤见 [Skill 安装与影响说明](docs/skill-installation.md)。
+npm run build
+npm run build:showcase
+npm run test:showcase-preview
+```
 
-## 验证
+`build:showcase` 会把展厅和三款产品组合到 `dist/showcase/`，使用同一源站和相对链接；这证明本地组合产物可以往返，不等于已经公开部署。
 
 每次文档或工作区契约变动后，从 `mengto-skills-showcase` 运行：
 
@@ -170,6 +152,32 @@ npm run build
 git diff --check
 ```
 
-`npm run validate` 检查固定的来源、动态读取的批准清单、四应用/六共享包、中文 README 的关键承诺和 `AGENTS.md` 路由，不依赖会自然变化的测试总数或候选 SHA。`node scripts/check-selected-skills.mjs` 是只读审计：它会逐项显示全局目录是否真的有可读的 `SKILL.md`。
+`npm run validate` 检查固定的来源、动态读取的批准清单、四个应用/六个共享包、中文 README 的关键承诺和 `AGENTS.md` 路由，不依赖会自然变化的测试总数或候选 SHA。`node scripts/check-selected-skills.mjs` 是只读审计：它会逐项显示全局目录是否真的有可读的 `SKILL.md`。
 
-产品验证证据写入 `apps/<product>/docs/VALIDATION.md`，套件级证据写入 `docs/SHOWCASE-VALIDATION.md`。历史候选和本轮命令会分别标注；没有执行的命令、真人理解、真实设备和公开部署不会写成通过。
+### 重录综合 GIF 与归档检查
+
+以下命令从仓库根目录执行。重录脚本会自行构建 `dist/showcase/`、启动受控本地预览、使用项目现有 Playwright Chromium 捕获四阶段画面，并在完成后关闭进程和删除临时帧：
+
+```powershell
+node scripts/record-mengto-showcase-demo.mjs
+node scripts/check-mengto-seventh-project.mjs
+```
+
+重录需要 FFmpeg：默认从 PATH 查找 `ffmpeg`；如果不在 PATH，可把可执行文件绝对路径写入当前终端的 `MENGTO_SHOWCASE_FFMPEG` 环境变量。检查命令本身不会部署网站，也不会访问或录制 Vesperfall。
+
+## 当前归档状态与验证边界
+
+- 当前未公开部署；`dist/showcase/` 是可托管的本地组合生产构建，但不是线上地址。
+- 产品验证证据写入 `apps/<product>/docs/VALIDATION.md`，套件级证据写入 `docs/SHOWCASE-VALIDATION.md`。历史候选和本轮命令会分别标注；没有执行的命令不会写成通过。
+- 30 秒首次理解、Ashfall 8–12 分钟首次挑战、实体 safe-area、实体 GPU、真实浏览器 200% 缩放和公网部署继续为 `defer`。
+- Mech 的信用点不代表真实定价，不包含库存、订单、支付或履约。
+
+## Skill 更新与安全卸载
+
+本地来源和全局安装副本**不会自动同步**：更新 `skills-source/MengTo-Skills` 不会更新 `C:\Users\yun68\.codex\skills`，反过来也一样。任何更新都要先审查，再由明确批准的单项操作替换。
+
+更新摘要：确认上游提交 → 更新本地只读来源 → 将完整 SHA 写入 `config/skill-source-lock.json` → 审阅变更 → 备份并逐项替换全局副本 → 在新的 Codex 对话中做只读审计。
+
+可恢复卸载摘要：只定位一个准确的 `C:\Users\yun68\.codex\skills\<skill-name>` 目录 → 移到 `.codex\skills` 以外的备份位置 → 在新的 Codex 对话验证其余 Skill 仍可发现 → 得到明确批准后才删除备份。不要删除整个 `.codex\skills` 目录。
+
+完整的安全边界和恢复步骤见 [Skill 安装与影响说明](docs/skill-installation.md)。

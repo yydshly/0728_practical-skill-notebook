@@ -188,34 +188,44 @@ if (failures.length === 0) {
     }
   }
 
-  for (const heading of [
-    "## 先看效果：一条命令打开三产品能力展厅",
-    "## 产品矩阵",
-    "## 两个独立演示",
-    "## 本地运行",
-    "## Skill 源码与安装目录",
-    "## 已安装 Skills",
-    "## Skill 对项目的影响",
-    "## 更新与卸载",
-    "## 验证",
-  ]) {
-    if (!readme.includes(heading)) failures.push(`README.md must contain ${heading}`);
+  const orderedHeadings = [
+    "## 先看当前效果",
+    "## 来源、参考与独立实现",
+    "## 四个应用、三款产品",
+    "## 一条命令本地运行",
+    "## 项目如何实现",
+    "## Skill 安装目录与全局影响",
+    "## 16 项 Skill 与产品/阶段映射",
+    "## 测试、构建与验证",
+    "## 当前归档状态与验证边界",
+    "## Skill 更新与安全卸载",
+  ];
+  const headingPositions = orderedHeadings.map((heading) =>
+    readme.indexOf(heading));
+  if (
+    headingPositions.some((position) => position < 0)
+    || headingPositions.some((position, index) =>
+      index > 0 && position <= headingPositions[index - 1])
+  ) {
+    failures.push("README.md archive headings must exist in the required order");
   }
 
   for (const phrase of [
-    "skills-source/MengTo-Skills",
+    '<img src="../docs/demos/07-mengto-skills-showcase.gif"',
+    "https://github.com/MengTo/Skills",
+    "https://github.com/MengTo/Skills/tree/93da48f13fb1b91bdbf4718d0f49df1a469edb45",
+    "https://vesperfall.mengto.chatgpt.site/",
+    "四个可运行应用",
+    "只有三款展示产品",
+    "当前未公开部署",
     "C:\\Users\\yun68\\.codex\\skills",
     "不会进入最终产品包",
     "不会自动同步",
-    "三款独立产品",
-    "不是同一款游戏的三个关卡",
-    "Skill 是 Codex 开发与验收时读取的工作说明",
-    "网页运行时不会加载这些 Skill",
-    "普通 Vite/Three.js 网页产品",
-    "不属于能力展厅三产品",
-    "人工可用性门槛未关闭",
-    "未公开部署",
-    "apps/ashfall-arena/docs/VALIDATION.md",
+    "node scripts/record-mengto-showcase-demo.mjs",
+    "node scripts/check-mengto-seventh-project.mjs",
+    "MENGTO_SHOWCASE_FFMPEG",
+    "[验证记录](apps/ashfall-arena/docs/VALIDATION.md)",
+    "Node.js 22.12+",
   ]) {
     if (!readme.includes(phrase)) failures.push(`README.md must explain: ${phrase}`);
   }
