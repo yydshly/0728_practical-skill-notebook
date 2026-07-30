@@ -26,11 +26,20 @@ function git(rootDir, ...args) {
   execFileSync("git", args, { cwd: rootDir, stdio: "pipe", windowsHide: true });
 }
 
-function gifHeader() {
-  const bytes = Buffer.alloc(16);
-  bytes.write("GIF89a", 0, "ascii");
-  bytes.writeUInt16LE(720, 6);
-  return bytes;
+function archiveGif() {
+  const oneFrame = Buffer.from(
+    "R0lGODlh0ALgAYAAAAAAAP///yH/C05FVFNDQVBFMi4wAwEAAAAh+QQAGQAAACwAAAAAAQABAAACAkQBADs=",
+    "base64",
+  );
+  const gceOffset = oneFrame.indexOf(Buffer.from([0x21, 0xf9, 0x04]));
+  const trailerOffset = oneFrame.lastIndexOf(0x3b);
+  const prefix = oneFrame.subarray(0, gceOffset);
+  const frame = oneFrame.subarray(gceOffset, trailerOffset);
+  return Buffer.concat([
+    prefix,
+    ...Array.from({ length: 60 }, () => frame),
+    Buffer.from([0x3b]),
+  ]);
 }
 
 async function createRepository() {
@@ -39,7 +48,7 @@ async function createRepository() {
   await mkdir(path.join(rootDir, "docs", "demos"), { recursive: true });
   await writeFile(path.join(rootDir, "README.md"), validRootReadme());
   await writeFile(path.join(rootDir, "mengto-skills-showcase", "README.md"), validShowcaseReadme());
-  await writeFile(path.join(rootDir, "docs", "demos", "07-mengto-skills-showcase.gif"), gifHeader());
+  await writeFile(path.join(rootDir, "docs", "demos", "07-mengto-skills-showcase.gif"), archiveGif());
   git(rootDir, "init");
   git(rootDir, "config", "user.name", "Task 2 Test");
   git(rootDir, "config", "user.email", "task-2-test@example.invalid");
@@ -97,7 +106,16 @@ test("repository archive check succeeds for one shared tracked GIF", async () =>
   try {
     assert.deepEqual(await checkSeventhProject({ rootDir }), {
       failures: [],
-      artifact: { signature: "GIF89a", width: 720, size: 16 },
+      artifact: {
+        signature: "GIF89a",
+        width: 720,
+        height: 480,
+        frameRate: 4,
+        frames: 60,
+        durationSeconds: 15,
+        loopCount: 0,
+        size: archiveGif().length,
+      },
     });
   } finally {
     await rm(rootDir, { recursive: true, force: true });

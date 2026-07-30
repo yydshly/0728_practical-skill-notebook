@@ -16,7 +16,12 @@ export const SHOWCASE_GIF = "docs/demos/07-mengto-skills-showcase.gif";
 export const MAX_GIF_BYTES = 5 * 1024 * 1024;
 export const FRAME_RATE = 4;
 export const GIF_WIDTH = 720;
+export const GIF_HEIGHT = 480;
 export const PREVIEW_PORT = 5277;
+const GIF_FRAME_COUNT = 60;
+const GIF_FRAME_DELAY_CENTISECONDS = 100 / FRAME_RATE;
+const GIF_DURATION_CENTISECONDS =
+  GIF_FRAME_COUNT * GIF_FRAME_DELAY_CENTISECONDS;
 
 export const CAPTURE_STAGES = Object.freeze([
   Object.freeze({ id: "showcase-hub", frames: 12, path: "/" }),
@@ -93,36 +98,526 @@ export function createGifCommands({
   ];
 }
 
+class GifReader {
+  constructor(bytes, filePath) {
+    this.bytes = bytes;
+    this.filePath = filePath;
+    this.offset = 0;
+  }
+
+  fail(message, offset = this.offset) {
+    throw new Error(
+      `GIF ${message} at byte ${offset}: ${this.filePath}`,
+    );
+  }
+
+  take(length, context) {
+    const start = this.offset;
+    if (
+      !Number.isInteger(length) ||
+      length < 0 ||
+      start + length > this.bytes.length
+    ) {
+      this.fail(`${context} is truncated`, start);
+    }
+    this.offset += length;
+    return this.bytes.subarray(start, this.offset);
+  }
+
+  byte(context) {
+    return this.take(1, context)[0];
+  }
+
+  uint16(context) {
+    return this.take(2, context).readUInt16LE(0);
+  }
+}
+
+function readGifSubBlocks(reader, context) {
+  const blocks = [];
+  let totalLength = 0;
+  while (true) {
+    const length = reader.byte(`${context} sub-block length`);
+    if (length === 0) {
+      break;
+    }
+    const block = reader.take(length, `${context} sub-block`);
+    blocks.push(block);
+    totalLength += length;
+  }
+  return {
+    blocks,
+    data: Buffer.concat(blocks, totalLength),
+  };
+}
+
+function gifColorTableSize(packedFields) {
+  return 1 << ((packedFields & 0x07) + 1);
+}
+
+function validateGifLzw({
+  data,
+  minCodeSize,
+  expectedPixels,
+  paletteSize,
+  frame,
+  filePath,
+}) {
+  const fail = (message) => {
+    throw new Error(
+      `GIF LZW frame ${frame} ${message}: ${filePath}`,
+    );
+  };
+  if (minCodeSize < 2 || minCodeSize > 8) {
+    fail(`minimum code size must be between 2 and 8, received ${minCodeSize}`);
+  }
+
+  const clearCode = 1 << minCodeSize;
+  const endCode = clearCode + 1;
+  const firstDictionaryCode = endCode + 1;
+  const prefix = new Int16Array(4096);
+  const suffix = new Uint8Array(4096);
+  const stack = new Uint8Array(4097);
+  let nextCode = firstDictionaryCode;
+  let codeSize = minCodeSize + 1;
+  let previousCode = -1;
+  let bitOffset = 0;
+  let decodedPixels = 0;
+  let sawEndCode = false;
+
+  const reset = () => {
+    nextCode = firstDictionaryCode;
+    codeSize = minCodeSize + 1;
+    previousCode = -1;
+  };
+
+  const readCode = () => {
+    if (bitOffset + codeSize > data.length * 8) {
+      return null;
+    }
+    let code = 0;
+    for (let bit = 0; bit < codeSize; bit += 1) {
+      code |=
+        ((data[bitOffset >> 3] >> (bitOffset & 0x07)) & 0x01) << bit;
+      bitOffset += 1;
+    }
+    return code;
+  };
+
+  const expand = (code) => {
+    let depth = 0;
+    let current = code;
+    while (current >= clearCode) {
+      if (
+        current < firstDictionaryCode ||
+        current >= nextCode ||
+        depth >= 4096
+      ) {
+        fail(`contains an invalid dictionary code ${current}`);
+      }
+      stack[depth] = suffix[current];
+      depth += 1;
+      current = prefix[current];
+    }
+    stack[depth] = current;
+    return depth + 1;
+  };
+
+  const emit = (paletteIndex) => {
+    if (paletteIndex >= paletteSize) {
+      fail(
+        `emits palette index ${paletteIndex}, but the active table has ${paletteSize} entries`,
+      );
+    }
+    decodedPixels += 1;
+    if (decodedPixels > expectedPixels) {
+      fail(`decodes more than ${expectedPixels} pixels`);
+    }
+  };
+
+  while (true) {
+    const code = readCode();
+    if (code === null) {
+      break;
+    }
+    if (code === clearCode) {
+      reset();
+      continue;
+    }
+    if (code === endCode) {
+      sawEndCode = true;
+      break;
+    }
+
+    let depth;
+    let firstCharacter;
+    const specialCode = code === nextCode && previousCode >= 0;
+    if (code < nextCode) {
+      depth = expand(code);
+      firstCharacter = stack[depth - 1];
+    } else if (specialCode) {
+      depth = expand(previousCode);
+      firstCharacter = stack[depth - 1];
+    } else {
+      fail(`contains invalid code ${code} before dictionary entry ${nextCode}`);
+    }
+
+    for (let index = depth - 1; index >= 0; index -= 1) {
+      emit(stack[index]);
+    }
+    if (specialCode) {
+      emit(firstCharacter);
+    }
+
+    if (previousCode >= 0 && nextCode < 4096) {
+      prefix[nextCode] = previousCode;
+      suffix[nextCode] = firstCharacter;
+      nextCode += 1;
+      if (nextCode === 1 << codeSize && codeSize < 12) {
+        codeSize += 1;
+      }
+    }
+    previousCode = code;
+  }
+
+  if (!sawEndCode) {
+    fail("is missing an end code");
+  }
+  const remainingBits = data.length * 8 - bitOffset;
+  if (remainingBits < 1 || remainingBits > 8) {
+    fail(
+      `must have between 1 and 8 padding bits after the end code, received ${remainingBits}`,
+    );
+  }
+  for (let paddingBit = bitOffset; paddingBit < data.length * 8; paddingBit += 1) {
+    if (
+      ((data[paddingBit >> 3] >> (paddingBit & 0x07)) & 0x01) !== 0
+    ) {
+      fail("contains non-zero padding after the end code");
+    }
+  }
+  if (decodedPixels !== expectedPixels) {
+    fail(
+      `decoded ${decodedPixels} pixels, expected ${expectedPixels}`,
+    );
+  }
+}
+
+function inspectGif(bytes, filePath) {
+  const reader = new GifReader(bytes, filePath);
+  const signature = reader.take(6, "header").toString("ascii");
+  if (!["GIF87a", "GIF89a"].includes(signature)) {
+    throw new Error(`Invalid GIF signature: ${filePath}`);
+  }
+
+  const width = reader.uint16("logical screen width");
+  const height = reader.uint16("logical screen height");
+  const logicalPackedFields = reader.byte(
+    "logical screen packed fields",
+  );
+  const backgroundIndex = reader.byte("background color index");
+  reader.byte("pixel aspect ratio");
+  const hasGlobalColorTable = (logicalPackedFields & 0x80) !== 0;
+  const globalColorTableSize = hasGlobalColorTable
+    ? gifColorTableSize(logicalPackedFields)
+    : 0;
+  if (hasGlobalColorTable) {
+    reader.take(
+      globalColorTableSize * 3,
+      "global color table",
+    );
+    if (backgroundIndex >= globalColorTableSize) {
+      reader.fail(
+        `background index ${backgroundIndex} is outside the global color table`,
+      );
+    }
+  }
+
+  let frames = 0;
+  let totalDelayCentiseconds = 0;
+  let loopCount = null;
+  let pendingGraphicControl = null;
+  let sawImage = false;
+  let sawTrailer = false;
+
+  while (reader.offset < bytes.length) {
+    const blockOffset = reader.offset;
+    const introducer = reader.byte("block introducer");
+    if (introducer === 0x3b) {
+      if (pendingGraphicControl) {
+        reader.fail(
+          "Graphics Control Extension has no following image",
+          blockOffset,
+        );
+      }
+      if (reader.offset !== bytes.length) {
+        reader.fail("has bytes after the trailer", reader.offset);
+      }
+      sawTrailer = true;
+      break;
+    }
+
+    if (introducer === 0x21) {
+      const label = reader.byte("extension label");
+      if (label === 0xf9) {
+        if (pendingGraphicControl) {
+          reader.fail(
+            "has multiple Graphics Control Extensions before one image",
+            blockOffset,
+          );
+        }
+        const blockSize = reader.byte(
+          "Graphics Control Extension block size",
+        );
+        if (blockSize !== 4) {
+          reader.fail(
+            `Graphics Control Extension block size must be 4, received ${blockSize}`,
+            blockOffset,
+          );
+        }
+        const control = reader.take(
+          4,
+          "Graphics Control Extension",
+        );
+        if (reader.byte("Graphics Control Extension terminator") !== 0) {
+          reader.fail(
+            "Graphics Control Extension terminator must be zero",
+            blockOffset,
+          );
+        }
+        if ((control[0] & 0xe0) !== 0) {
+          reader.fail(
+            "Graphics Control Extension reserved bits must be zero",
+            blockOffset,
+          );
+        }
+        if ((control[0] & 0x02) !== 0) {
+          reader.fail(
+            "Graphics Control Extension cannot wait for user input",
+            blockOffset,
+          );
+        }
+        pendingGraphicControl = {
+          delayCentiseconds: control.readUInt16LE(1),
+          transparent: (control[0] & 0x01) !== 0,
+          transparentIndex: control[3],
+        };
+        continue;
+      }
+
+      if (label === 0xff) {
+        const blockSize = reader.byte("Application Extension block size");
+        if (blockSize !== 11) {
+          reader.fail(
+            `Application Extension block size must be 11, received ${blockSize}`,
+            blockOffset,
+          );
+        }
+        const identifier = reader
+          .take(11, "Application Extension identifier")
+          .toString("ascii");
+        const applicationData = readGifSubBlocks(
+          reader,
+          "Application Extension data",
+        );
+        if (
+          identifier === "NETSCAPE2.0" ||
+          identifier === "ANIMEXTS1.0"
+        ) {
+          if (sawImage) {
+            reader.fail(
+              "loop extension must precede all images",
+              blockOffset,
+            );
+          }
+          if (loopCount !== null) {
+            reader.fail("has multiple loop extensions", blockOffset);
+          }
+          if (
+            applicationData.blocks.length !== 1 ||
+            applicationData.blocks[0].length !== 3 ||
+            applicationData.blocks[0][0] !== 1
+          ) {
+            reader.fail("loop extension data is malformed", blockOffset);
+          }
+          loopCount = applicationData.blocks[0].readUInt16LE(1);
+        }
+        continue;
+      }
+
+      if (label === 0xfe) {
+        readGifSubBlocks(reader, "Comment Extension data");
+        continue;
+      }
+
+      if (label === 0x01) {
+        const blockSize = reader.byte("Plain Text Extension block size");
+        if (blockSize !== 12) {
+          reader.fail(
+            `Plain Text Extension block size must be 12, received ${blockSize}`,
+            blockOffset,
+          );
+        }
+        reader.take(12, "Plain Text Extension header");
+        readGifSubBlocks(reader, "Plain Text Extension data");
+        reader.fail(
+          "Plain Text Extension is unsupported in the archive manifest",
+          blockOffset,
+        );
+      }
+
+      readGifSubBlocks(reader, "unknown Extension data");
+      reader.fail(
+        `uses unsupported extension label 0x${label.toString(16)}`,
+        blockOffset,
+      );
+    }
+
+    if (introducer !== 0x2c) {
+      reader.fail(
+        `has unsupported block introducer 0x${introducer.toString(16)}`,
+        blockOffset,
+      );
+    }
+    if (!pendingGraphicControl) {
+      reader.fail(
+        `image ${frames + 1} is missing a Graphics Control Extension`,
+        blockOffset,
+      );
+    }
+
+    const left = reader.uint16("image left position");
+    const top = reader.uint16("image top position");
+    const imageWidth = reader.uint16("image width");
+    const imageHeight = reader.uint16("image height");
+    const imagePackedFields = reader.byte("image packed fields");
+    if (
+      imageWidth === 0 ||
+      imageHeight === 0 ||
+      left + imageWidth > width ||
+      top + imageHeight > height
+    ) {
+      reader.fail(
+        `image ${frames + 1} lies outside the logical screen`,
+        blockOffset,
+      );
+    }
+    const hasLocalColorTable = (imagePackedFields & 0x80) !== 0;
+    const localColorTableSize = hasLocalColorTable
+      ? gifColorTableSize(imagePackedFields)
+      : 0;
+    if (hasLocalColorTable) {
+      reader.take(
+        localColorTableSize * 3,
+        `image ${frames + 1} local color table`,
+      );
+    }
+    const activeColorTableSize =
+      localColorTableSize || globalColorTableSize;
+    if (activeColorTableSize === 0) {
+      reader.fail(
+        `image ${frames + 1} has no active color table`,
+        blockOffset,
+      );
+    }
+    if (
+      pendingGraphicControl.transparent &&
+      pendingGraphicControl.transparentIndex >= activeColorTableSize
+    ) {
+      reader.fail(
+        `image ${frames + 1} transparency index is outside the active color table`,
+        blockOffset,
+      );
+    }
+
+    const minCodeSize = reader.byte(
+      `image ${frames + 1} LZW minimum code size`,
+    );
+    const imageData = readGifSubBlocks(
+      reader,
+      `image ${frames + 1} data`,
+    );
+    validateGifLzw({
+      data: imageData.data,
+      minCodeSize,
+      expectedPixels: imageWidth * imageHeight,
+      paletteSize: activeColorTableSize,
+      frame: frames + 1,
+      filePath,
+    });
+    frames += 1;
+    sawImage = true;
+    totalDelayCentiseconds +=
+      pendingGraphicControl.delayCentiseconds;
+    if (
+      pendingGraphicControl.delayCentiseconds !==
+      GIF_FRAME_DELAY_CENTISECONDS
+    ) {
+      throw new Error(
+        `GIF frame ${frames} delay must be ${GIF_FRAME_DELAY_CENTISECONDS} centiseconds, received ${pendingGraphicControl.delayCentiseconds}: ${filePath}`,
+      );
+    }
+    pendingGraphicControl = null;
+  }
+
+  if (!sawTrailer) {
+    reader.fail("trailer is missing or truncated");
+  }
+  if (width !== GIF_WIDTH || height !== GIF_HEIGHT) {
+    throw new Error(
+      `GIF logical screen must be ${GIF_WIDTH}x${GIF_HEIGHT}, received ${width}x${height}: ${filePath}`,
+    );
+  }
+  if (frames !== GIF_FRAME_COUNT) {
+    throw new Error(
+      `GIF must contain exactly ${GIF_FRAME_COUNT} frames, received ${frames}: ${filePath}`,
+    );
+  }
+  if (totalDelayCentiseconds !== GIF_DURATION_CENTISECONDS) {
+    throw new Error(
+      `GIF duration must be ${GIF_DURATION_CENTISECONDS} centiseconds, received ${totalDelayCentiseconds}: ${filePath}`,
+    );
+  }
+  if (loopCount !== 0) {
+    const received =
+      loopCount === null ? "no explicit loop extension" : loopCount;
+    throw new Error(
+      `GIF loop count must be 0 for infinite looping, received ${received}: ${filePath}`,
+    );
+  }
+  return {
+    signature,
+    width,
+    height,
+    frameRate: FRAME_RATE,
+    frames,
+    durationSeconds: totalDelayCentiseconds / 100,
+    loopCount,
+  };
+}
+
 export async function assertGifFile(
   filePath,
   {
     maxBytes = MAX_GIF_BYTES,
-    expectedWidth = GIF_WIDTH,
   } = {},
 ) {
-  const [metadata, bytes] = await Promise.all([
-    stat(filePath),
-    readFile(filePath),
-  ]);
-  const signature = bytes.subarray(0, 6).toString("ascii");
-  if (!["GIF87a", "GIF89a"].includes(signature)) {
-    throw new Error(`Invalid GIF signature: ${filePath}`);
-  }
-  if (bytes.length < 10) {
-    throw new Error(`GIF header is truncated: ${filePath}`);
-  }
-  const width = bytes.readUInt16LE(6);
-  if (width !== expectedWidth) {
-    throw new Error(
-      `GIF width must be ${expectedWidth}, received ${width}.`,
-    );
-  }
+  const metadata = await stat(filePath);
   if (metadata.size === 0 || metadata.size > maxBytes) {
     throw new Error(
       `GIF must be non-empty and no larger than 5 MiB: ${filePath}`,
     );
   }
-  return { signature, width, size: metadata.size };
+  const bytes = await readFile(filePath);
+  if (bytes.length === 0 || bytes.length > maxBytes) {
+    throw new Error(
+      `GIF must be non-empty and no larger than 5 MiB: ${filePath}`,
+    );
+  }
+  return {
+    ...inspectGif(bytes, filePath),
+    size: bytes.length,
+  };
 }
 
 export async function publishGifCandidate(candidatePath, outputPath) {
@@ -490,6 +985,51 @@ export async function stopPreview(
   throw new Error("Preview did not close after forced termination.");
 }
 
+export async function settleRecordingAttempt({
+  result,
+  recordingError = null,
+  browser,
+  preview,
+  temporaryRoot,
+  closeBrowser = async (target) => target.close(),
+  stopPreviewImpl = stopPreview,
+  removeTemporaryRoot = async (root) =>
+    rm(root, { recursive: true, force: true }),
+}) {
+  const errors = recordingError ? [recordingError] : [];
+  if (browser) {
+    try {
+      await closeBrowser(browser);
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (preview) {
+    try {
+      await stopPreviewImpl(preview);
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  try {
+    await removeTemporaryRoot(temporaryRoot);
+  } catch (error) {
+    errors.push(error);
+  }
+
+  if (errors.length === 1) {
+    throw errors[0];
+  }
+  if (errors.length > 1) {
+    throw new AggregateError(
+      errors,
+      "MengTo showcase recording and cleanup failed.",
+      { cause: recordingError ?? errors[0] },
+    );
+  }
+  return result;
+}
+
 async function captureStage({
   page,
   stage,
@@ -637,6 +1177,8 @@ export async function recordMengToShowcaseDemo({
   const baseUrl = `http://127.0.0.1:${port}/`;
   let browser = null;
   let preview = null;
+  let result;
+  let recordingError = null;
 
   try {
     await runCommand("npm", ["run", "build:showcase"], {
@@ -689,25 +1231,18 @@ export async function recordMengToShowcaseDemo({
     await runCommand(ffmpeg, paletteArgs, { cwd: rootDir });
     await runCommand(ffmpeg, gifArgs, { cwd: rootDir });
     const artifact = await publishGifCandidate(candidatePath, outputPath);
-    return {
+    result = {
       output: SHOWCASE_GIF,
       ...artifact,
     };
-  } finally {
-    if (browser) {
-      await browser.close().catch(() => undefined);
-    }
-    let previewCleanupError = null;
-    if (preview) {
-      try {
-        await stopPreview(preview);
-      } catch (error) {
-        previewCleanupError = error;
-      }
-    }
-    await rm(temporaryRoot, { recursive: true, force: true });
-    if (previewCleanupError) {
-      throw previewCleanupError;
-    }
+  } catch (error) {
+    recordingError = error;
   }
+  return settleRecordingAttempt({
+    result,
+    recordingError,
+    browser,
+    preview,
+    temporaryRoot,
+  });
 }

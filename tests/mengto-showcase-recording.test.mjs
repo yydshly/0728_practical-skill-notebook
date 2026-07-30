@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import * as recordingModule from "../scripts/lib/mengto-showcase-recording.mjs";
 import {
   CAPTURE_STAGES,
   FRAME_RATE,
@@ -22,12 +23,107 @@ import {
   waitForServer,
 } from "../scripts/lib/mengto-showcase-recording.mjs";
 
-function gifHeader(width = GIF_WIDTH, height = 480) {
+const oneFrameLoopingGif = Buffer.from(
+  "R0lGODlh0ALgAYAAAAAAAP///yH/C05FVFNDQVBFMi4wAwEAAAAh+QQAGQAAACwAAAAAAQABAAACAkQBADs=",
+  "base64",
+);
+
+function gifHeaderStub(width = GIF_WIDTH, height = 480) {
   const bytes = Buffer.alloc(16);
   bytes.write("GIF89a", 0, "ascii");
   bytes.writeUInt16LE(width, 6);
   bytes.writeUInt16LE(height, 8);
   return bytes;
+}
+
+function archiveGif({
+  frames = 60,
+  delayCentiseconds = 25,
+  loopCount = 0,
+  width = GIF_WIDTH,
+  height = 480,
+  invalidLzw = false,
+  paddingBytes = null,
+} = {}) {
+  const gceMarker = Buffer.from([0x21, 0xf9, 0x04]);
+  const gceOffset = oneFrameLoopingGif.indexOf(gceMarker);
+  const trailerOffset = oneFrameLoopingGif.lastIndexOf(0x3b);
+  const prefix = Buffer.from(oneFrameLoopingGif.subarray(0, gceOffset));
+  let frame = Buffer.from(
+    oneFrameLoopingGif.subarray(gceOffset, trailerOffset),
+  );
+  prefix.writeUInt16LE(width, 6);
+  prefix.writeUInt16LE(height, 8);
+  const loopDataOffset = prefix.indexOf(
+    Buffer.from([0x03, 0x01, 0x00, 0x00, 0x00]),
+  );
+  prefix.writeUInt16LE(loopCount, loopDataOffset + 2);
+  frame.writeUInt16LE(delayCentiseconds, 4);
+  if (invalidLzw) {
+    const imageDataOffset = frame.indexOf(
+      Buffer.from([0x02, 0x02, 0x44, 0x01, 0x00]),
+    );
+    frame[imageDataOffset + 2] = 0x7c;
+  }
+  if (paddingBytes) {
+    const imageData = Buffer.from([0x02, 0x02, 0x44, 0x01, 0x00]);
+    const imageDataOffset = frame.indexOf(imageData);
+    frame.writeUInt16LE(3, 13);
+    frame = Buffer.concat([
+      frame.subarray(0, imageDataOffset),
+      Buffer.from([
+        0x02,
+        0x03 + paddingBytes.length,
+        0x04,
+        0x41,
+        0xb0,
+        ...paddingBytes,
+        0x00,
+      ]),
+      frame.subarray(imageDataOffset + imageData.length),
+    ]);
+  }
+  return Buffer.concat([
+    prefix,
+    ...Array.from({ length: frames }, () => frame),
+    Buffer.from([0x3b]),
+  ]);
+}
+
+async function settlementAttempt({
+  result = { output: SHOWCASE_GIF },
+  recordingError = null,
+  browserError = null,
+  previewError = null,
+  tempError = null,
+} = {}) {
+  const order = [];
+  const browser = { id: "browser" };
+  const preview = { id: "preview" };
+  const temporaryRoot = "fixture-temporary-root";
+  const promise = recordingModule.settleRecordingAttempt({
+    result,
+    recordingError,
+    browser,
+    preview,
+    temporaryRoot,
+    closeBrowser: async (received) => {
+      assert.equal(received, browser);
+      order.push("browser");
+      if (browserError) throw browserError;
+    },
+    stopPreviewImpl: async (received) => {
+      assert.equal(received, preview);
+      order.push("preview");
+      if (previewError) throw previewError;
+    },
+    removeTemporaryRoot: async (received) => {
+      assert.equal(received, temporaryRoot);
+      order.push("temp");
+      if (tempError) throw tempError;
+    },
+  });
+  return { order, promise };
 }
 
 function fakeChild() {
@@ -433,24 +529,179 @@ test("GIF commands use a two-pass 720px looping palette pipeline", () => {
   assert.deepEqual(commands[1].slice(-3), ["-loop", "0", "showcase.gif"]);
 });
 
-test("GIF inspection rejects signatures, widths, and files over 5 MiB", async () => {
+test("GIF inspection returns the locked archive manifest", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "mengto-gif-test-"));
   try {
     const valid = path.join(directory, "valid.gif");
-    const invalid = path.join(directory, "invalid.gif");
+    const bytes = archiveGif();
+    await writeFile(valid, bytes);
+    assert.deepEqual(await assertGifFile(valid), {
+      signature: "GIF89a",
+      width: 720,
+      height: 480,
+      frameRate: 4,
+      frames: 60,
+      durationSeconds: 15,
+      loopCount: 0,
+      size: bytes.length,
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("GIF inspection rejects a header-only stub and truncation", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mengto-gif-structure-"));
+  try {
+    const stub = path.join(directory, "stub.gif");
+    const truncated = path.join(directory, "truncated.gif");
+    await writeFile(stub, gifHeaderStub());
+    await writeFile(truncated, archiveGif().subarray(0, -1));
+    await assert.rejects(() => assertGifFile(stub), /GIF/);
+    await assert.rejects(() => assertGifFile(truncated), /GIF/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("GIF inspection rejects a one-frame or wrong-delay manifest", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mengto-gif-timing-"));
+  try {
+    const oneFrame = path.join(directory, "one-frame.gif");
+    const wrongDelay = path.join(directory, "wrong-delay.gif");
+    await writeFile(oneFrame, archiveGif({ frames: 1 }));
+    await writeFile(
+      wrongDelay,
+      archiveGif({ delayCentiseconds: 24 }),
+    );
+    await assert.rejects(() => assertGifFile(oneFrame), /GIF.*60/i);
+    await assert.rejects(() => assertGifFile(wrongDelay), /GIF.*25/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("GIF inspection rejects finite looping and invalid LZW", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mengto-gif-data-"));
+  try {
+    const finiteLoop = path.join(directory, "finite-loop.gif");
+    const invalidLzw = path.join(directory, "invalid-lzw.gif");
+    await writeFile(finiteLoop, archiveGif({ loopCount: 1 }));
+    await writeFile(invalidLzw, archiveGif({ invalidLzw: true }));
+    await assert.rejects(() => assertGifFile(finiteLoop), /GIF.*loop/i);
+    await assert.rejects(() => assertGifFile(invalidLzw), /GIF.*LZW/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("GIF inspection permits only one zero byte after an aligned LZW end code", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mengto-gif-padding-"));
+  try {
+    const allowed = path.join(directory, "one-zero-byte.gif");
+    const nonzero = path.join(directory, "nonzero-byte.gif");
+    const overlong = path.join(directory, "two-zero-bytes.gif");
+    await writeFile(allowed, archiveGif({ paddingBytes: [0x00] }));
+    await writeFile(nonzero, archiveGif({ paddingBytes: [0x01] }));
+    await writeFile(
+      overlong,
+      archiveGif({ paddingBytes: [0x00, 0x00] }),
+    );
+    await assert.doesNotReject(() => assertGifFile(allowed));
+    await assert.rejects(() => assertGifFile(nonzero), /GIF.*LZW/i);
+    await assert.rejects(() => assertGifFile(overlong), /GIF.*LZW/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("GIF inspection rejects wrong dimensions and files over 5 MiB", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mengto-gif-limits-"));
+  try {
     const wrongWidth = path.join(directory, "wrong-width.gif");
+    const wrongHeight = path.join(directory, "wrong-height.gif");
     const oversized = path.join(directory, "oversized.gif");
-    await writeFile(valid, gifHeader());
-    await writeFile(invalid, Buffer.from("not a gif"));
-    await writeFile(wrongWidth, gifHeader(640));
-    await writeFile(oversized, Buffer.concat([gifHeader(), Buffer.alloc(MAX_GIF_BYTES + 1 - gifHeader().length)]));
-    assert.deepEqual(await assertGifFile(valid), { signature: "GIF89a", width: 720, size: 16 });
-    await assert.rejects(() => assertGifFile(invalid), /GIF signature/);
-    await assert.rejects(() => assertGifFile(wrongWidth), /720/);
+    await writeFile(wrongWidth, archiveGif({ width: 640 }));
+    await writeFile(wrongHeight, archiveGif({ height: 400 }));
+    await writeFile(
+      oversized,
+      Buffer.concat([
+        archiveGif(),
+        Buffer.alloc(MAX_GIF_BYTES + 1 - archiveGif().length),
+      ]),
+    );
+    await assert.rejects(() => assertGifFile(wrongWidth), /GIF.*720/i);
+    await assert.rejects(() => assertGifFile(wrongHeight), /GIF.*480/i);
     await assert.rejects(() => assertGifFile(oversized), /5 MiB/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("recording settlement returns the result after ordered cleanup", async () => {
+  const result = { output: SHOWCASE_GIF };
+  const attempt = await settlementAttempt({ result });
+  assert.equal(await attempt.promise, result);
+  assert.deepEqual(attempt.order, ["browser", "preview", "temp"]);
+});
+
+for (const cleanup of ["browser", "preview", "temp"]) {
+  test(`recording settlement preserves a lone ${cleanup} cleanup failure`, async () => {
+    const failure = new Error(`${cleanup} cleanup failed`);
+    const attempt = await settlementAttempt({
+      [`${cleanup}Error`]: failure,
+    });
+    const caught = await attempt.promise.then(
+      () => assert.fail("expected settlement to reject"),
+      (error) => error,
+    );
+    assert.equal(caught, failure);
+    assert.deepEqual(attempt.order, ["browser", "preview", "temp"]);
+  });
+}
+
+test("recording settlement aggregates primary and cleanup failures in order", async () => {
+  const failures = [
+    new Error("recording failed"),
+    new Error("browser cleanup failed"),
+    new Error("preview cleanup failed"),
+    new Error("temp cleanup failed"),
+  ];
+  const attempt = await settlementAttempt({
+    recordingError: failures[0],
+    browserError: failures[1],
+    previewError: failures[2],
+    tempError: failures[3],
+  });
+  const caught = await attempt.promise.then(
+    () => assert.fail("expected settlement to reject"),
+    (error) => error,
+  );
+  assert.ok(caught instanceof AggregateError);
+  assert.deepEqual(caught.errors, failures);
+  assert.equal(caught.cause, failures[0]);
+  assert.deepEqual(attempt.order, ["browser", "preview", "temp"]);
+});
+
+test("recording settlement aggregates simultaneous cleanup failures", async () => {
+  const failures = [
+    new Error("browser cleanup failed"),
+    new Error("preview cleanup failed"),
+    new Error("temp cleanup failed"),
+  ];
+  const attempt = await settlementAttempt({
+    browserError: failures[0],
+    previewError: failures[1],
+    tempError: failures[2],
+  });
+  const caught = await attempt.promise.then(
+    () => assert.fail("expected settlement to reject"),
+    (error) => error,
+  );
+  assert.ok(caught instanceof AggregateError);
+  assert.deepEqual(caught.errors, failures);
+  assert.equal(caught.cause, failures[0]);
+  assert.deepEqual(attempt.order, ["browser", "preview", "temp"]);
 });
 
 test("an invalid candidate cannot overwrite an existing final GIF", async () => {
@@ -461,7 +712,7 @@ test("an invalid candidate cannot overwrite an existing final GIF", async () => 
     const candidate = path.join(directory, "candidate.gif");
     const output = path.join(directory, "final.gif");
     await writeFile(candidate, Buffer.from("not a gif"));
-    await writeFile(output, gifHeader());
+    await writeFile(output, archiveGif());
     const before = await readFile(output);
 
     await assert.rejects(
