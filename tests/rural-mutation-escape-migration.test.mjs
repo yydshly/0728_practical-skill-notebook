@@ -83,7 +83,28 @@ test("project README is complete and distinguishes shipped from planned behavior
     "持续交互开启的南门",
     "核心闭环验证状态",
     "非官方",
+    "默认第三人称、可切换第一人称",
+    "左键点击游戏画面请求指针锁定",
+    "锁定成功后移动鼠标即可环顾",
+    "若锁定失败，则按住左键拖动环顾",
+    "中心半径 4.5 米的出口触发区",
+    "主循环仍继续运行",
+    "可见建筑遮挡 mesh",
+    "buildStructure()",
+    "距离阈值状态机",
+    "不造成攻击或捕获",
+    "BFCache",
+    "pagehide",
+    "pageshow",
   ], "project README");
+  assert.ok(
+    !readme.includes("只移动鼠标而不按住画面不会旋转镜头"),
+    "README must distinguish pointer-lock movement from drag fallback",
+  );
+  assert.ok(
+    !readme.includes("镜头遮挡则只读取标记为 `blocksCamera`"),
+    "README must not claim camera occlusion reads blocksCamera",
+  );
   await assertLocalLinksResolve("rural-mutation-escape/README.md");
   const validationStatus = await read(
     "rural-mutation-escape/docs/superpowers/validation/2026-07-30-rural-mutation-escape-core-loop-status.md",
@@ -105,6 +126,12 @@ test("reference document pins the upstream and the independent implementation bo
     "https://github.com/mshumer/Claude-of-Duty",
     "d9b237b75c9304ab8d9ef4cfa0c3568c7c11a853",
     "MIT",
+    "3f7041737d1d6ba09435e622a14482de7b5c7818",
+    "当前仓库不保证可直接解析",
+    "4cb1e7006664057897cb1140f2f043dc0d002cb0",
+    "git-subtree-split",
+    "c1a01ac55b315329e20b29766ed631090f62eab3",
+    "整合提交",
     "Three.js/WebGL",
     "程序化几何",
     "浏览器证据",
