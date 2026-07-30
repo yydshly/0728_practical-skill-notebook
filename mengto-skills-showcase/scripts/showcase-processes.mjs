@@ -8,6 +8,7 @@ import { SHOWCASE_APPS, resolveServiceLaunch } from "./showcase-apps.mjs";
 const execFilePromise = promisify(execFile);
 const defaultWorkspaceRoot = fileURLToPath(new URL("../", import.meta.url));
 const ASCII_WHITESPACE = /[\t\n\f\r ]/;
+const readinessProbeTimeoutMs = 500;
 
 function readTag(html, start) {
   let quote;
@@ -218,9 +219,20 @@ export async function preflightPorts(services) {
 }
 
 async function isReady(service, expectedContent, signal) {
+  const attempt = new AbortController();
+  const abortAttempt = () => attempt.abort(signal.reason);
+  if (signal.aborted) {
+    abortAttempt();
+  } else {
+    signal.addEventListener("abort", abortAttempt, { once: true });
+  }
+  const timeout = setTimeout(
+    () => attempt.abort(new Error("readiness probe timed out")),
+    readinessProbeTimeoutMs,
+  );
   try {
     const response = await fetch(service.url, {
-      signal,
+      signal: attempt.signal,
       redirect: "manual",
     });
     if (response.status < 200 || response.status > 399) return false;
@@ -231,6 +243,9 @@ async function isReady(service, expectedContent, signal) {
   } catch (error) {
     if (signal.aborted) return false;
     return false;
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener("abort", abortAttempt);
   }
 }
 

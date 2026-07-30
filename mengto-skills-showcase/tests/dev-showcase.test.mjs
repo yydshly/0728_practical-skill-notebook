@@ -272,7 +272,7 @@ describe("semantic readiness", () => {
     const hitFile = join(directory, "healthy-hit.txt");
     const services = await temporaryFixtureServices([
       { id: "held-open", bodyMode: "held-open" },
-      { id: "healthy", hitFile },
+      { id: "healthy", hitFile, delayMs: 750 },
     ]);
     const controller = new AbortController();
     const startup = startShowcaseProcesses({
@@ -281,23 +281,33 @@ describe("semantic readiness", () => {
       signal: controller.signal,
       writeLine: () => {},
     });
-    void startup.catch(() => {});
+    const startupOutcome = startup.then(
+      () => {
+        throw new Error("held-open startup unexpectedly became ready");
+      },
+      (error) => {
+        throw error;
+      },
+    );
     try {
-      await expect.poll(async () => {
-        try {
-          return await readFile(hitFile, "utf8");
-        } catch (error) {
-          if (error.code === "ENOENT") return "";
-          throw error;
-        }
-      }, { timeout: 5_000 }).toContain("hit");
+      await Promise.race([
+        expect.poll(async () => {
+          try {
+            return await readFile(hitFile, "utf8");
+          } catch (error) {
+            if (error.code === "ENOENT") return "";
+            throw error;
+          }
+        }, { timeout: 5_000 }).toContain("hit"),
+        startupOutcome,
+      ]);
     } finally {
       controller.abort("test-complete");
     }
     await expect(startup).rejects.toMatchObject({
       code: "SHOWCASE_INTERRUPTED",
     });
-  }, 10_000);
+  }, 15_000);
 });
 
 describe("supervision and process-tree cleanup", () => {
