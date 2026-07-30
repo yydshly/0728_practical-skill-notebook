@@ -12,6 +12,7 @@ import {
   preflightPorts,
   startShowcaseProcesses,
   terminateProcessTree,
+  terminateWindowsProcessTree,
 } from "../scripts/showcase-processes.mjs";
 import {
   cleanupFixtureResources,
@@ -311,6 +312,41 @@ describe("semantic readiness", () => {
 });
 
 describe("supervision and process-tree cleanup", () => {
+  it("kills one live Windows root tree without enumerating descendants", async () => {
+    const calls = [];
+    await terminateWindowsProcessTree(424_242, {
+      taskkill: async (pid) => {
+        calls.push(["taskkill", pid]);
+        return true;
+      },
+      listDescendants: async (pid) => {
+        calls.push(["list", pid]);
+        return [424_243];
+      },
+    });
+    expect(calls).toEqual([["taskkill", 424_242]]);
+  });
+
+  it("enumerates descendants only after the Windows root has exited", async () => {
+    const calls = [];
+    await terminateWindowsProcessTree(424_242, {
+      taskkill: async (pid) => {
+        calls.push(["taskkill", pid]);
+        return pid !== 424_242;
+      },
+      listDescendants: async (pid) => {
+        calls.push(["list", pid]);
+        return [424_244, 424_243];
+      },
+    });
+    expect(calls).toEqual([
+      ["taskkill", 424_242],
+      ["list", 424_242],
+      ["taskkill", 424_244],
+      ["taskkill", 424_243],
+    ]);
+  });
+
   it("waits for every service, announces once in descriptor order, and resolves done only after stop", async () => {
     const services = await temporaryFixtureServices([
       { id: "one", delayMs: 20 },
