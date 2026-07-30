@@ -51,3 +51,16 @@ Ashfall 的普通组合往返证据只在**真实 live runtime**中成立：进�
 | 外部环境 | 实体 safe-area | defer | 已尝试路径：`100dvh`/`env(safe-area-inset-bottom)` CSS 契约、390/320 模拟视口、单一滚动所有者与底部安全留白均通过；桌面模拟 inset 为 0。未验证风险：真实刘海、圆角和系统手势区遮挡底部操作。复验触发：获得非零 safe-area 的目标 iOS/Android 实机后，纵横屏打开说明层并测量两个操作。 |
 | 外部环境 | 实体 GPU | defer | 已尝试路径：Playwright Chromium 的三产品 WebGL、fallback 与 Ashfall 性能 5/5 通过，fallback 用例只产生预期 WebGL context 错误；当前没有目标实体 GPU 设备矩阵。未验证风险：移动驱动、热降频或显存限制引发掉帧/上下文丢失。复验触发：确定目标低/中/高档实体设备后记录加载、主旅程、帧时间和 fallback 恢复。 |
 | 外部环境 | 公网部署 | defer | 已尝试路径：普通/组合构建、产物 URL 扫描与本地同源预览均通过；本任务未获公开部署授权，也没有公开地址。未验证风险：TLS、CDN 缓存、base path 和跨应用资源策略只在公网暴露。复验触发：获得发布授权和正式 URL 后执行四入口、资产、同标签往返、缓存刷新与错误页 smoke。 |
+
+## 2026-07-30 第 07 项 README/GIF 归档候选
+
+- 内容候选：`adee052c078f8f327f58a50843558d635c2c0b54`。这是写入本节前、包含最终 GIF 和所有已审查 corrective 提交的完整 SHA。
+- 最终 GIF：`docs/demos/07-mengto-skills-showcase.gif`，实际 `701801` bytes；签名 `GIF89a`，`720×480`，`4/1 FPS`，`60` 帧，`15.000000` 秒。最终重录提交为 `34b17c1fa59adbb1dbb9cebcab2c10fe32a3a03e`。
+- 视觉复核：从本轮最终重录 GIF 抽取四个阶段并人工观看，Hub → Monster Forge（Glass Crawler）→ Ashfall Arena → Mech Atelier 的顺序、内容和画面均完整。
+- 项目结构：`npm run validate` 输出 `Workspace contract valid.`；`node scripts/check-selected-skills.mjs` 列出的批准 Skill 为 `16/16`、全部 `installed=true`。
+- 最终默认并行单元门禁：第一次 `npm test` 为 `49/49` files、`728/728` tests，`40.86s`；第二次为 `49/49` files、`728/728` tests，`39.21s`。两次均为 corrective E 后的新鲜完整运行，没有 retry。
+- 构建与组合往返：普通 `npm run build` exit 0（保留一个非阻塞的 `>500 kB` chunk warning）；`npm run build:showcase` exit 0；`npm run test:showcase-preview` 在本地 `127.0.0.1:4292` 单一组合源站为 `4/4` passed（`25.3s`），覆盖三个产品的同标签返回及唯一组合预览源站。
+- 根级归档门禁：两个根测试文件合计 `33/33` passed；第 07 项 checker 输出 `MengTo project 07 check passed: GIF89a, 720px, 701801 bytes.`；`git diff --check` exit 0。
+- corrective 记录：初始完整并行门禁先后暴露 self-closing semantic readiness 的 5 秒外层超时、held-open body 探针未在 5 秒内命中，以及 SIGTERM 清理先后超过 5 秒和 15 秒外层预算；这些失败均未计入上面的两次最终 PASS。corrective A `0bd92e4fef8f746299b50eff1026e43241b0d4d0` 只调整对应参数化测试的外层 harness；corrective C `78c4031c70758cc3d0ff3fa5f178a914d9ffba25` 为 readiness fetch/body 增加全局信号和每次 500ms 边界；corrective D `72e5e024714b6986ed574f06e289bb363785627d` 的纯 test-harness 诊断随后被 15 秒真实失败否定；corrective E `adee052c078f8f327f58a50843558d635c2c0b54` 改为对 live Windows 根进程树执行一次递归终止，并只在根进程已消失时使用 CIM orphan fallback，同时增加两条确定性策略测试。A、C、D、E 均已独立复审通过，E 取代 D 作为最终根因修正。
+- 发布状态：当前未公开部署；本节只证明本地候选、构建产物和本地组合预览，不把 `dist/showcase` 描述成线上环境。
+- 继续 `defer`：30 秒首次理解仍需未读 README 的首次非技术访客计时复述；Ashfall 8–12 分钟仍需真实首次玩家记录全流程、失败次数与阻塞点；实体 safe-area 仍需非零 inset 的 iOS/Android 实机纵横屏测量；实体 GPU 仍需目标低/中/高档设备记录加载、主旅程、帧时间和 fallback；真实 200% 仍需可读取 zoom 指示值的受控 Chrome 记录窗口、旅程和截图；公网部署仍需发布授权与正式 URL 后复验四入口、资产、同标签往返、缓存刷新和错误页。以上复验条件与历史账本保持不变。
