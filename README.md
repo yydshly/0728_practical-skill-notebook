@@ -74,6 +74,8 @@
 
 <img src="./docs/demos/06-rural-south-gate.png" alt="雾村静态南门与第一章完成状态" width="720">
 
+当前 v0.1 已完成阶段性闭环。后续如恢复研究，建议按“补齐游戏闭环 → 提升美术体感 → 沉淀大模型生成流程”推进；三项目前均暂缓实施，不属于当前版本能力。详见[项目 README 的后续演进建议](./rural-mutation-escape/README.md#后续演进建议暂缓实施)。
+
 - [项目 README：功能、操作、架构与限制](./rural-mutation-escape/README.md)
 - [参考来源与独立实现边界](./rural-mutation-escape/docs/REFERENCES.md)
 
