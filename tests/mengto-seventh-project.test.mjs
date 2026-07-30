@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
   MENGTO_SKILLS_URL, PINNED_SKILLS_URL, VESPERFALL_URL,
   assertNoForbiddenStagedPaths, assertNoVesperfallMedia,
-  assertStagedRootReadmeBoundary, extractGifReference, resolveReadmeMediaPath,
+  assertStagedRootReadmeBoundary, checkSeventhProject, extractGifReference, resolveReadmeMediaPath,
   validateSeventhProjectReadmes,
 } from "../scripts/lib/mengto-seventh-project.mjs";
 
@@ -19,9 +22,48 @@ function validShowcaseReadme() {
   return ["## 先看当前效果", '<img src="../docs/demos/07-mengto-skills-showcase.gif" width="720">', "## 来源、参考与独立实现", MENGTO_SKILLS_URL, PINNED_SKILLS_URL, VESPERFALL_URL, disclaimer, runtimeBoundary, "## 四个应用、三款产品", "四个可运行应用，但只有三款展示产品", "## 一条命令本地运行", "## 项目如何实现", "## Skill 安装目录与全局影响", "## 16 项 Skill 与产品/阶段映射", "## 测试、构建与验证", "## 当前归档状态与验证边界", "当前未公开部署", "## Skill 更新与安全卸载"].join("\n");
 }
 
+function git(rootDir, ...args) {
+  execFileSync("git", args, { cwd: rootDir, stdio: "pipe", windowsHide: true });
+}
+
+function gifHeader() {
+  const bytes = Buffer.alloc(16);
+  bytes.write("GIF89a", 0, "ascii");
+  bytes.writeUInt16LE(720, 6);
+  return bytes;
+}
+
+async function createRepository() {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "mengto-seventh-project-"));
+  await mkdir(path.join(rootDir, "mengto-skills-showcase"), { recursive: true });
+  await mkdir(path.join(rootDir, "docs", "demos"), { recursive: true });
+  await writeFile(path.join(rootDir, "README.md"), validRootReadme());
+  await writeFile(path.join(rootDir, "mengto-skills-showcase", "README.md"), validShowcaseReadme());
+  await writeFile(path.join(rootDir, "docs", "demos", "07-mengto-skills-showcase.gif"), gifHeader());
+  git(rootDir, "init");
+  git(rootDir, "config", "user.name", "Task 2 Test");
+  git(rootDir, "config", "user.email", "task-2-test@example.invalid");
+  git(rootDir, "add", "README.md", "mengto-skills-showcase/README.md", "docs/demos/07-mengto-skills-showcase.gif");
+  git(rootDir, "commit", "-m", "fixture");
+  return rootDir;
+}
+
 test("HTML and Markdown GIF references are both parsed", () => {
   assert.equal(extractGifReference(validRootReadme(), "root README"), "./docs/demos/07-mengto-skills-showcase.gif");
   assert.equal(extractGifReference("![演示](../docs/demos/07-mengto-skills-showcase.gif)", "showcase README"), "../docs/demos/07-mengto-skills-showcase.gif");
+});
+
+test("conflicting project 07 GIF references are rejected", () => {
+  assert.throws(
+    () => extractGifReference(
+      [
+        "![wrong](https://example.invalid/07-mengto-skills-showcase.gif)",
+        '<img src="./docs/demos/07-mengto-skills-showcase.gif">',
+      ].join("\n"),
+      "root README",
+    ),
+    /conflicting project 07 GIF references/,
+  );
 });
 
 test("both README media references resolve to the same repository artifact", () => {
@@ -48,4 +90,48 @@ test("Vesperfall media names and user-owned staged prefixes are rejected", () =>
 test("a staged root README cannot expose the independently organized 06 path", () => {
   for (const reference of ["[研究](./claude-of-duty-research/RESEARCH.md)", "[研究](claude-of-duty-research/RESEARCH.md)", "https://github.com/mshumer/Claude-of-Duty"]) assert.throws(() => assertStagedRootReadmeBoundary({ stagedFiles: ["README.md"], indexReadme: reference }), /06 project path/);
   assert.doesNotThrow(() => assertStagedRootReadmeBoundary({ stagedFiles: ["README.md"], indexReadme: ["| 06 | Claude of Duty 技术研究 | — | 独立整理中；不属于本次第 07 项归档。 |", "## 06 · Claude of Duty 技术研究", "该项目正在独立整理中，本次不纳入第 07 项归档或提交范围。"].join("\n") }));
+});
+
+test("repository archive check succeeds for one shared tracked GIF", async () => {
+  const rootDir = await createRepository();
+  try {
+    assert.deepEqual(await checkSeventhProject({ rootDir }), {
+      failures: [],
+      artifact: { signature: "GIF89a", width: 720, size: 16 },
+    });
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("repository archive check reads a staged root README boundary", async () => {
+  const rootDir = await createRepository();
+  try {
+    await writeFile(
+      path.join(rootDir, "README.md"),
+      `${validRootReadme()}\n[research](./claude-of-duty-research/RESEARCH.md)`,
+    );
+    git(rootDir, "add", "README.md");
+    const { failures } = await checkSeventhProject({ rootDir });
+    assert.ok(failures.some((failure) => failure.includes("independent 06 project path")));
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("repository archive check aggregates GIF, tracked-media, and staged-path failures", async () => {
+  const rootDir = await createRepository();
+  try {
+    await rm(path.join(rootDir, "docs", "demos", "07-mengto-skills-showcase.gif"));
+    await writeFile(path.join(rootDir, "docs", "demos", "vesperfall-reference.mp4"), "blocked");
+    await mkdir(path.join(rootDir, ".superpowers"));
+    await writeFile(path.join(rootDir, ".superpowers", "session.json"), "{}");
+    git(rootDir, "add", "docs/demos/vesperfall-reference.mp4", ".superpowers/session.json");
+    const { failures } = await checkSeventhProject({ rootDir });
+    assert.ok(failures.some((failure) => failure.includes("ENOENT")));
+    assert.ok(failures.some((failure) => failure.includes("Vesperfall media")));
+    assert.ok(failures.some((failure) => failure.includes("forbidden staged path")));
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
 });

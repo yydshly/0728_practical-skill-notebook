@@ -22,11 +22,13 @@ export function resolveReadmeMediaPath(repositoryRoot, readmePath, mediaReferenc
 }
 
 export function extractGifReference(readme, label) {
-  const markdownMatch = readme.match(/!\[[^\]]*\]\(([^)\s]*07-mengto-skills-showcase\.gif)\)/);
-  const htmlMatch = readme.match(/<img\b[^>]*\bsrc=["']([^"']*07-mengto-skills-showcase\.gif)["'][^>]*>/i);
-  const reference = markdownMatch?.[1] ?? htmlMatch?.[1];
-  if (!reference) throw new Error(`${label} is missing the project 07 GIF image.`);
-  return reference;
+  const references = new Set([
+    ...readme.matchAll(/!\[[^\]]*\]\(([^)\s]*07-mengto-skills-showcase\.gif)\)/g),
+    ...readme.matchAll(/<img\b[^>]*\bsrc=["']([^"']*07-mengto-skills-showcase\.gif)["'][^>]*>/gi),
+  ].map((match) => match[1]));
+  if (references.size === 0) throw new Error(`${label} is missing the project 07 GIF image.`);
+  if (references.size > 1) throw new Error(`${label} has conflicting project 07 GIF references.`);
+  return [...references][0];
 }
 
 export function validateSeventhProjectReadmes({ rootReadme, showcaseReadme }) {
