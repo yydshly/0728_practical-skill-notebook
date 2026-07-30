@@ -83,6 +83,14 @@ npm.cmd run build
 - `test`：依次运行单元测试、音频测试和 Playwright 浏览器 smoke。首次运行浏览器测试的环境若没有 Chromium，可执行 `npx.cmd playwright install chromium`。
 - `build`：生成 Vite 生产构建到本地 `dist/`；该目录不提交。
 
+### 2026-07-30 发布核验
+
+- `npm.cmd run test:unit`：150/150 条 Node 测试记录通过。
+- `npm.cmd run test:audio`：17/17 条音频资产测试记录通过。
+- `npm.cmd test`：单元、音频与完整 Chromium smoke 脚本通过。
+- `npm.cmd run build`：Vite 生产构建通过；仍有约 566 kB JavaScript chunk 大于 500 kB 提示线的非阻断警告。
+- 根仓库 `node --test tests\*.test.mjs`：14/14 条测试记录通过。
+
 动态音乐的离线流水线：
 
 ```powershell

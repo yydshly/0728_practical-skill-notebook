@@ -96,6 +96,13 @@ test("project README is complete and distinguishes shipped from planned behavior
     "BFCache",
     "pagehide",
     "pageshow",
+    "### 2026-07-30 发布核验",
+    "150/150",
+    "17/17",
+    "Chromium smoke",
+    "14/14",
+    "约 566 kB",
+    "非阻断警告",
   ], "project README");
   assert.ok(
     !readme.includes("只移动鼠标而不按住画面不会旋转镜头"),
