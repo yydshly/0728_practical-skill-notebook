@@ -398,17 +398,20 @@ export function createAudioFeedback({
 
     const runUnlock = async () => {
       if (!ensureContextGraph() || !context) return false;
-      if (context.state === 'suspended') {
+      const operationContext = context;
+      if (operationContext.state === 'suspended') {
         try {
-          await context.resume();
+          await operationContext.resume();
         } catch (error) {
+          if (disposed || context !== operationContext) return false;
           warnOnce('resume', error);
           publish();
           return false;
         }
+        if (disposed || context !== operationContext) return false;
         publish();
       }
-      if (context.state !== 'running') {
+      if (operationContext.state !== 'running') {
         publish();
         return false;
       }
@@ -424,9 +427,10 @@ export function createAudioFeedback({
         } catch {
           // The director owns and reports music-layer failures.
         }
+        if (disposed || context !== operationContext) return false;
       }
       publish();
-      return !disposed && context?.state === 'running';
+      return operationContext.state === 'running';
     };
 
     void runUnlock()
@@ -594,6 +598,7 @@ export function createAudioFeedback({
 
   async function suspend() {
     if (disposed || !context) return false;
+    const operationContext = context;
     stopOscillatorVoices();
     const musicDirector = ensureDirector();
     try {
@@ -601,31 +606,37 @@ export function createAudioFeedback({
     } catch {
       // The director owns and reports music-layer failures.
     }
-    if (context.state === 'running') {
+    if (disposed || context !== operationContext) return false;
+    if (operationContext.state === 'running') {
       try {
-        await context.suspend();
+        await operationContext.suspend();
       } catch (error) {
+        if (disposed || context !== operationContext) return false;
         warnOnce('context', error);
         publish();
         return false;
       }
+      if (disposed || context !== operationContext) return false;
     }
     publish();
-    return context.state === 'suspended';
+    return operationContext.state === 'suspended';
   }
 
   async function resume() {
     if (disposed || muted || !context) return false;
-    if (context.state === 'suspended') {
+    const operationContext = context;
+    if (operationContext.state === 'suspended') {
       try {
-        await context.resume();
+        await operationContext.resume();
       } catch (error) {
+        if (disposed || context !== operationContext) return false;
         warnOnce('resume', error);
         publish();
         return false;
       }
+      if (disposed || context !== operationContext) return false;
     }
-    if (context.state !== 'running') {
+    if (operationContext.state !== 'running') {
       publish();
       return false;
     }
@@ -635,8 +646,9 @@ export function createAudioFeedback({
     } catch {
       // The director owns and reports music-layer failures.
     }
+    if (disposed || context !== operationContext) return false;
     publish();
-    return !disposed && context?.state === 'running';
+    return operationContext.state === 'running';
   }
 
   function dispose() {

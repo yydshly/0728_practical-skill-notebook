@@ -63,7 +63,7 @@ const MUSIC_ASSETS = Object.freeze(Object.fromEntries(
 ));
 
 test('audio lifecycle follows visibility and cleans every owner exactly once', async (t) => {
-  function createHarness() {
+  function createHarness({ audioOverride = null } = {}) {
     const documentRef = new EventTarget();
     const windowRef = new EventTarget();
     const calls = {
@@ -91,7 +91,7 @@ test('audio lifecycle follows visibility and cleans every owner exactly once', a
     Object.defineProperty(documentRef, 'hidden', {
       get: () => hidden,
     });
-    const audio = {
+    const audio = audioOverride ?? {
       dispose() {
         calls.dispose += 1;
       },
@@ -142,6 +142,126 @@ test('audio lifecycle follows visibility and cleans every owner exactly once', a
     assert.equal(harness.calls.resume, 1);
   });
 
+  await t.test('rapid hidden to visible reconciles to running after deferred suspension', async () => {
+    const suspension = createDeferred();
+    const order = [];
+    let state = 'running';
+    const harness = createHarness({
+      audioOverride: {
+        dispose() {
+          order.push('dispose');
+          state = 'closed';
+        },
+        async resume() {
+          order.push(`resume:${state}`);
+          if (state === 'suspended') state = 'running';
+          return state === 'running';
+        },
+        async suspend() {
+          order.push('suspend:start');
+          await suspension.promise;
+          state = 'suspended';
+          order.push('suspend:end');
+          return true;
+        },
+      },
+    });
+
+    harness.setHidden(true);
+    harness.documentRef.dispatchEvent(new Event('visibilitychange'));
+    harness.setHidden(false);
+    harness.documentRef.dispatchEvent(new Event('visibilitychange'));
+    suspension.resolve();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(state, 'running');
+    assert.deepEqual(order, [
+      'suspend:start',
+      'suspend:end',
+      'resume:suspended',
+    ]);
+  });
+
+  await t.test('rejected suspension stays contained and a later visible event resumes', async (t) => {
+    const order = [];
+    const unhandled = [];
+    const onUnhandledRejection = (error) => {
+      unhandled.push(error.message);
+    };
+    process.on('unhandledRejection', onUnhandledRejection);
+    t.after(() => {
+      process.off('unhandledRejection', onUnhandledRejection);
+    });
+    const harness = createHarness({
+      audioOverride: {
+        dispose() {
+          order.push('dispose');
+        },
+        resume() {
+          order.push('resume');
+          return Promise.resolve(true);
+        },
+        suspend() {
+          order.push('suspend');
+          return Promise.reject(new Error('suspend failed'));
+        },
+      },
+    });
+
+    harness.setHidden(true);
+    harness.documentRef.dispatchEvent(new Event('visibilitychange'));
+    await new Promise((resolve) => setImmediate(resolve));
+    harness.setHidden(false);
+    harness.documentRef.dispatchEvent(new Event('visibilitychange'));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(order, ['suspend', 'resume']);
+    assert.deepEqual(unhandled, []);
+  });
+
+  await t.test('persisted pagehide suspends and persisted pageshow restores owned listeners', async () => {
+    const order = [];
+    let state = 'running';
+    const harness = createHarness({
+      audioOverride: {
+        dispose() {
+          order.push('dispose');
+          state = 'closed';
+        },
+        async resume() {
+          order.push('resume');
+          state = 'running';
+          return true;
+        },
+        async suspend() {
+          order.push('suspend');
+          state = 'suspended';
+          return true;
+        },
+      },
+    });
+    const pagehide = new Event('pagehide');
+    Object.defineProperty(pagehide, 'persisted', { value: true });
+    harness.windowRef.dispatchEvent(pagehide);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(state, 'suspended');
+    assert.equal(harness.calls.unsubscribe, 0);
+    assert.deepEqual(harness.removedListeners, { document: [], window: [] });
+
+    const pageshow = new Event('pageshow');
+    Object.defineProperty(pageshow, 'persisted', { value: true });
+    harness.windowRef.dispatchEvent(pageshow);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(state, 'running');
+    assert.deepEqual(order, ['suspend', 'resume']);
+    harness.setHidden(true);
+    harness.documentRef.dispatchEvent(new Event('visibilitychange'));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(order, ['suspend', 'resume', 'suspend']);
+  });
+
   await t.test('pagehide unsubscribes, disposes, and removes lifecycle listeners', () => {
     const harness = createHarness();
     harness.windowRef.dispatchEvent(new Event('pagehide'));
@@ -160,7 +280,7 @@ test('audio lifecycle follows visibility and cleans every owner exactly once', a
     );
     assert.deepEqual(
       harness.removedListeners.window.map(({ type }) => type),
-      ['pagehide'],
+      ['pagehide', 'pageshow'],
     );
   });
 
@@ -2563,6 +2683,141 @@ test('audio feedback suspends, resumes, and disposes its full graph idempotently
       snapshots.at(-1).musicState.playback],
     ['closed', 'disposed', 'disposed'],
   );
+});
+
+test('audio feedback aborts deferred suspension after terminal disposal', async () => {
+  const suspension = createDeferred();
+  const harness = createAudioContextCtor({ state: 'running' });
+  const stub = createStubMusicDirectorFactory();
+  const audio = createAudioFeedback({
+    AudioContextCtor: harness.AudioContextCtor,
+    musicAssets: MUSIC_ASSETS,
+    musicDirectorFactory(options) {
+      const director = stub.factory(options);
+      director.suspendTransientVoices = () => suspension.promise;
+      return director;
+    },
+  });
+  const snapshots = [];
+  audio.subscribe((snapshot) => snapshots.push(snapshot));
+  assert.equal(await audio.unlock(), true);
+
+  const suspending = audio.suspend();
+  await Promise.resolve();
+  audio.dispose();
+  const terminalSnapshot = audio.getSnapshot();
+  const publicationCount = snapshots.length;
+  suspension.resolve(true);
+
+  assert.equal(await suspending, false);
+  assert.strictEqual(audio.getSnapshot(), terminalSnapshot);
+  assert.equal(snapshots.length, publicationCount);
+  assert.equal(harness.instances[0].suspendCalls.length, 0);
+});
+
+test('audio feedback aborts deferred context suspension after terminal disposal', async () => {
+  const suspension = createDeferred();
+  const suspendStarted = createDeferred();
+  let deferSuspend = false;
+  const harness = createAudioContextCtor({
+    state: 'running',
+    suspendPlan() {
+      if (!deferSuspend) return undefined;
+      suspendStarted.resolve();
+      return suspension.promise;
+    },
+  });
+  const audio = createAudioFeedback({ AudioContextCtor: harness.AudioContextCtor });
+  const snapshots = [];
+  audio.subscribe((snapshot) => snapshots.push(snapshot));
+  assert.equal(await audio.unlock(), true);
+  deferSuspend = true;
+
+  const suspending = audio.suspend();
+  await suspendStarted.promise;
+  audio.dispose();
+  const terminalSnapshot = audio.getSnapshot();
+  const publicationCount = snapshots.length;
+  suspension.resolve();
+
+  assert.equal(await suspending, false);
+  assert.strictEqual(audio.getSnapshot(), terminalSnapshot);
+  assert.equal(snapshots.length, publicationCount);
+});
+
+test('audio feedback aborts deferred context resume after terminal disposal', async () => {
+  const resumption = createDeferred();
+  const resumeStarted = createDeferred();
+  let deferResume = false;
+  const harness = createAudioContextCtor({
+    state: 'running',
+    resumePlan() {
+      if (!deferResume) return undefined;
+      resumeStarted.resolve();
+      return resumption.promise;
+    },
+  });
+  const audio = createAudioFeedback({ AudioContextCtor: harness.AudioContextCtor });
+  const snapshots = [];
+  audio.subscribe((snapshot) => snapshots.push(snapshot));
+  assert.equal(await audio.unlock(), true);
+  const context = harness.instances[0];
+  context.state = 'suspended';
+  deferResume = true;
+  const resuming = audio.resume();
+  await resumeStarted.promise;
+  audio.dispose();
+  const terminalSnapshot = audio.getSnapshot();
+  const publicationCount = snapshots.length;
+  resumption.resolve();
+
+  assert.equal(await resuming, false);
+  assert.strictEqual(audio.getSnapshot(), terminalSnapshot);
+  assert.equal(snapshots.length, publicationCount);
+  assert.deepEqual(terminalSnapshot, {
+    contextState: 'closed',
+    assetState: 'disposed',
+    musicState: {
+      playback: 'disposed',
+      mode: 'safe',
+      loopGeneration: 0,
+      startedAt: null,
+    },
+    dangerMix: 0,
+    activeVoices: 0,
+    muted: false,
+  });
+});
+
+test('audio feedback cancels deferred unlock quietly after terminal disposal', async () => {
+  const resumption = createDeferred();
+  const resumeStarted = createDeferred();
+  const warnings = [];
+  const harness = createAudioContextCtor({
+    state: 'suspended',
+    resumePlan() {
+      resumeStarted.resolve();
+      return resumption.promise;
+    },
+  });
+  const audio = createAudioFeedback({
+    AudioContextCtor: harness.AudioContextCtor,
+    logger: { warn: (...args) => warnings.push(args) },
+  });
+  const snapshots = [];
+  audio.subscribe((snapshot) => snapshots.push(snapshot));
+
+  const unlocking = audio.unlock();
+  await resumeStarted.promise;
+  audio.dispose();
+  const terminalSnapshot = audio.getSnapshot();
+  const publicationCount = snapshots.length;
+  resumption.resolve();
+
+  assert.equal(await unlocking, false);
+  assert.strictEqual(audio.getSnapshot(), terminalSnapshot);
+  assert.equal(snapshots.length, publicationCount);
+  assert.deepEqual(warnings, []);
 });
 
 test('audio feedback ignores synchronous and late director callbacks after disposal', async () => {
