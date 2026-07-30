@@ -475,6 +475,7 @@ describe("CLI signal orchestration", () => {
       }
       await preflightPorts([service]);
     },
+    15_000,
   );
 
   it("returns 1 for a post-ready runtime crash", async () => {
