@@ -13,6 +13,7 @@
 | 05 | [Fungarium 原版与业务展厅改造](./fungarium-product-showcase/) | `fungarium-product-showcase` | 对照上游标本展厅交互与本仓库的中文业务能力展厅。 |
 | 06 | [《雾村：逃离》](./rural-mutation-escape/) | `rural-mutation-escape` | 第三人称农村变异逃生原型与 AI 辅助游戏开发研究。 |
 | 07 | [MengTo Skills 三产品能力展](./mengto-skills-showcase/) | `mengto-skills-showcase` | 用固定、可审计的 MengTo Skills 工作流，完成 3D 资产审阅、等距动作游戏与复杂商品配置三款独立产品，并由统一中文展厅串联体验与验证。 |
+| 08 | [Finesse Skill 产品研究](./finesse-skill-product-research/) | `finesse-skill-product-research` | 文档与研究计划：梳理 Finesse 能力、受控验证方法与产品机会；交互研究展厅仍在计划中，当前不可运行。 |
 
 ## 01 · 雾屿灯塔
 
@@ -123,6 +124,14 @@ npm run dev
 - [完整项目说明](./mengto-skills-showcase/README.md)
 - [套件验证账本](./mengto-skills-showcase/docs/SHOWCASE-VALIDATION.md)
 
+## 08 · Finesse Skill 产品研究
+
+这是一个面向 Finesse 的中文研究入口，而非当前可运行的演示。它以固定上游提交为范围，先在[能力地图](./finesse-skill-product-research/docs/CAPABILITY-MAP.md)中梳理 register 路由、SOUL / SPECTACLE / DENSITY、三条设计路线、设计模型与质量门禁的已知机制及边界；再用[受控研究计划](./finesse-skill-product-research/docs/RESEARCH-PLAN.md)规定 B1–B5、A/B/C 对照、证据记录和停止规则。
+
+[产品机会方向](./finesse-skill-product-research/docs/PRODUCT-DIRECTIONS.md)提出六个待验证方向：Design Brief Router、AI Design Review Console、Design Model Studio、Multi-Register Prototype Lab、Pattern Knowledge Base 与 Team Governance Layer。推荐主线是“设计决策与审计工作台”：将输入路由、生成前约束与分层证据审计连接成可追溯闭环；这只是研究排序，不是已上线产品。
+
+当前交付为文档。未来的[研究展厅计划](./finesse-skill-product-research/docs/SHOWCASE-PLAN.md)定义了能力总览、决策实验室、三路线对照、审计台和机会地图，但没有展厅代码、交互、数据接入、截图、部署、性能结果或验证结论，因而不能运行或作为功能证明。
+
 ## 获取项目库代码
 
 ```powershell
@@ -208,3 +217,8 @@ node scripts/check-fungarium-fifth-project.mjs
 - [《雾村：逃离》参考来源说明](./rural-mutation-escape/docs/REFERENCES.md)
 - [完整项目说明](./mengto-skills-showcase/README.md)
 - [套件验证账本](./mengto-skills-showcase/docs/SHOWCASE-VALIDATION.md)
+- [Finesse Skill 产品研究：项目说明](./finesse-skill-product-research/README.md)
+- [Finesse Skill 产品研究：能力地图](./finesse-skill-product-research/docs/CAPABILITY-MAP.md)
+- [Finesse Skill 产品研究：受控研究计划](./finesse-skill-product-research/docs/RESEARCH-PLAN.md)
+- [Finesse Skill 产品研究：产品机会方向](./finesse-skill-product-research/docs/PRODUCT-DIRECTIONS.md)
+- [Finesse Skill 产品研究：未来研究展厅计划](./finesse-skill-product-research/docs/SHOWCASE-PLAN.md)
