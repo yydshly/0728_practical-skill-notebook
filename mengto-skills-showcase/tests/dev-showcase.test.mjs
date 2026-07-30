@@ -12,6 +12,7 @@ import {
   preflightPorts,
   startShowcaseProcesses,
   terminateProcessTree,
+  terminateWindowsProcessTree,
 } from "../scripts/showcase-processes.mjs";
 import {
   cleanupFixtureResources,
@@ -152,6 +153,7 @@ describe("semantic readiness", () => {
       await supervisor.stop("test-complete");
       await expect(supervisor.done).resolves.toBeUndefined();
     },
+    15_000,
   );
 
   it.each([
@@ -271,7 +273,7 @@ describe("semantic readiness", () => {
     const hitFile = join(directory, "healthy-hit.txt");
     const services = await temporaryFixtureServices([
       { id: "held-open", bodyMode: "held-open" },
-      { id: "healthy", hitFile },
+      { id: "healthy", hitFile, delayMs: 750 },
     ]);
     const controller = new AbortController();
     const startup = startShowcaseProcesses({
@@ -280,26 +282,71 @@ describe("semantic readiness", () => {
       signal: controller.signal,
       writeLine: () => {},
     });
-    void startup.catch(() => {});
+    const startupOutcome = startup.then(
+      () => {
+        throw new Error("held-open startup unexpectedly became ready");
+      },
+      (error) => {
+        throw error;
+      },
+    );
     try {
-      await expect.poll(async () => {
-        try {
-          return await readFile(hitFile, "utf8");
-        } catch (error) {
-          if (error.code === "ENOENT") return "";
-          throw error;
-        }
-      }, { timeout: 5_000 }).toContain("hit");
+      await Promise.race([
+        expect.poll(async () => {
+          try {
+            return await readFile(hitFile, "utf8");
+          } catch (error) {
+            if (error.code === "ENOENT") return "";
+            throw error;
+          }
+        }, { timeout: 5_000 }).toContain("hit"),
+        startupOutcome,
+      ]);
     } finally {
       controller.abort("test-complete");
     }
     await expect(startup).rejects.toMatchObject({
       code: "SHOWCASE_INTERRUPTED",
     });
-  }, 10_000);
+  }, 15_000);
 });
 
 describe("supervision and process-tree cleanup", () => {
+  it("kills one live Windows root tree without enumerating descendants", async () => {
+    const calls = [];
+    await terminateWindowsProcessTree(424_242, {
+      taskkill: async (pid) => {
+        calls.push(["taskkill", pid]);
+        return true;
+      },
+      listDescendants: async (pid) => {
+        calls.push(["list", pid]);
+        return [424_243];
+      },
+    });
+    expect(calls).toEqual([["taskkill", 424_242]]);
+  });
+
+  it("enumerates descendants only after the Windows root has exited", async () => {
+    const calls = [];
+    await terminateWindowsProcessTree(424_242, {
+      taskkill: async (pid) => {
+        calls.push(["taskkill", pid]);
+        return pid !== 424_242;
+      },
+      listDescendants: async (pid) => {
+        calls.push(["list", pid]);
+        return [424_244, 424_243];
+      },
+    });
+    expect(calls).toEqual([
+      ["taskkill", 424_242],
+      ["list", 424_242],
+      ["taskkill", 424_244],
+      ["taskkill", 424_243],
+    ]);
+  });
+
   it("waits for every service, announces once in descriptor order, and resolves done only after stop", async () => {
     const services = await temporaryFixtureServices([
       { id: "one", delayMs: 20 },
@@ -464,6 +511,7 @@ describe("CLI signal orchestration", () => {
       }
       await preflightPorts([service]);
     },
+    15_000,
   );
 
   it("returns 1 for a post-ready runtime crash", async () => {

@@ -23,13 +23,6 @@ const packageFolders = [
   "ui-system",
 ];
 
-const markdownSection = (source, heading) => {
-  const start = source.indexOf(`## ${heading}`);
-  if (start < 0) return "";
-  const next = source.indexOf("\n## ", start + heading.length + 3);
-  return source.slice(start, next < 0 ? source.length : next);
-};
-
 const readReadmeSkillRows = (readme) => [...readme.matchAll(
   /^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|$/gm,
 )].map(([, name, sourcePath, products, phases]) => ({
@@ -203,52 +196,52 @@ describe("showcase workspace", () => {
     expect(guide).toContain("不属于能力展厅三产品");
   });
 
-  it("opens with a nontechnical three-product showroom quick start", async () => {
-    const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
-    const quickStart = markdownSection(
-      readme,
-      "先看效果：一条命令打开三产品能力展厅",
+  it("documents the archive story in the required Chinese order", async () => {
+    const readme = await readFile(
+      new URL("../README.md", import.meta.url),
+      "utf8",
     );
+    const orderedHeadings = [
+      "## 先看当前效果",
+      "## 来源、参考与独立实现",
+      "## 四个应用、三款产品",
+      "## 一条命令本地运行",
+      "## 项目如何实现",
+      "## Skill 安装目录与全局影响",
+      "## 16 项 Skill 与产品/阶段映射",
+      "## 测试、构建与验证",
+      "## 当前归档状态与验证边界",
+      "## Skill 更新与安全卸载",
+    ];
+    const positions = orderedHeadings.map((heading) =>
+      readme.indexOf(heading));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect([...positions].sort((left, right) => left - right))
+      .toEqual(positions);
 
-    expect(quickStart).toContain("npm install");
-    expect(quickStart).toContain("npm run dev");
-    expect(quickStart).toContain("http://127.0.0.1:4172/");
-    expect(quickStart).toContain("三款独立产品");
-    expect(quickStart).toContain("不是同一款游戏的三个关卡");
-    expect(quickStart).toContain("这是什么？");
-    expect(quickStart).toContain("返回能力展厅");
-  });
-
-  it("以中文说明产品、安装位置和运行时边界", async () => {
-    const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
-    for (const heading of [
-      "## 产品矩阵",
-      "## 本地运行",
-      "## Skill 源码与安装目录",
-      "## 已安装 Skills",
-      "## Skill 对项目的影响",
-      "## 更新与卸载",
-      "## 验证",
-    ]) expect(readme).toContain(heading);
-
-    expect(readme).toContain("skills-source/MengTo-Skills");
-    expect(readme).toContain("C:\\Users\\yun68\\.codex\\skills");
-    expect(readme).toContain("不会进入最终产品包");
-    expect(readme).toContain("不会自动同步");
-    expect(readme).toContain("Skill 是 Codex 开发与验收时读取的工作说明");
-    expect(readme).toContain("网页运行时不会加载这些 Skill");
-    expect(readme).toContain("普通 Vite/Three.js 网页产品");
-    expect(readme).toContain("独立演示");
-    expect(readme).toContain("不属于能力展厅三产品");
-    expect(readme).toContain("人工可用性门槛未关闭");
-    expect(readme).toContain("未公开部署");
-    expect(readme).toContain("[验证记录](apps/ashfall-arena/docs/VALIDATION.md)");
-    expect(readme).toContain("Node.js 22.12+");
-
-    const selection = await readJson("../config/selected-skills.json");
-    for (const skill of selection.skills) {
-      expect(readme).toContain(`\`${skill.name}\``);
+    for (const required of [
+      '<img src="../docs/demos/07-mengto-skills-showcase.gif"',
+      "https://github.com/MengTo/Skills",
+      "https://github.com/MengTo/Skills/tree/93da48f13fb1b91bdbf4718d0f49df1a469edb45",
+      "https://vesperfall.mengto.chatgpt.site/",
+      "Vesperfall 仅作为关联效果参考。本项目没有复制或重新托管其源码、模型、贴图、动画或页面素材，也不存在官方关联。",
+      "Skill 指导 Codex 如何规划、实现、测试和交付；浏览器运行时不会加载 Skill，最终产物仍是普通的 Vite/Three.js 网页。",
+      "四个可运行应用",
+      "只有三款展示产品",
+      "当前未公开部署",
+      "C:\\Users\\yun68\\.codex\\skills",
+      "不会进入最终产品包",
+      "不会自动同步",
+      "node scripts/record-mengto-showcase-demo.mjs",
+      "node scripts/check-mengto-seventh-project.mjs",
+      "MENGTO_SHOWCASE_FFMPEG",
+      "[验证记录](apps/ashfall-arena/docs/VALIDATION.md)",
+      "Node.js 22.12+",
+    ]) {
+      expect(readme).toContain(required);
     }
+    expect(readme).not.toContain("四款产品");
+    expect(readme).not.toContain("## 两个独立演示");
   });
 
   it("让 README 的 Skill 表格与所选清单的产品和阶段映射一致", async () => {

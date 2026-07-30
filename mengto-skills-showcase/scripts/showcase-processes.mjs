@@ -8,6 +8,7 @@ import { SHOWCASE_APPS, resolveServiceLaunch } from "./showcase-apps.mjs";
 const execFilePromise = promisify(execFile);
 const defaultWorkspaceRoot = fileURLToPath(new URL("../", import.meta.url));
 const ASCII_WHITESPACE = /[\t\n\f\r ]/;
+const readinessProbeTimeoutMs = 500;
 
 function readTag(html, start) {
   let quote;
@@ -218,9 +219,20 @@ export async function preflightPorts(services) {
 }
 
 async function isReady(service, expectedContent, signal) {
+  const attempt = new AbortController();
+  const abortAttempt = () => attempt.abort(signal.reason);
+  if (signal.aborted) {
+    abortAttempt();
+  } else {
+    signal.addEventListener("abort", abortAttempt, { once: true });
+  }
+  const timeout = setTimeout(
+    () => attempt.abort(new Error("readiness probe timed out")),
+    readinessProbeTimeoutMs,
+  );
   try {
     const response = await fetch(service.url, {
-      signal,
+      signal: attempt.signal,
       redirect: "manual",
     });
     if (response.status < 200 || response.status > 399) return false;
@@ -231,6 +243,9 @@ async function isReady(service, expectedContent, signal) {
   } catch (error) {
     if (signal.aborted) return false;
     return false;
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener("abort", abortAttempt);
   }
 }
 
@@ -267,26 +282,39 @@ async function listWindowsDescendants(rootPid) {
 }
 
 async function taskkillIfRunning(pid) {
-  await execFilePromise("taskkill", ["/PID", String(pid), "/T", "/F"], {
-    windowsHide: true,
-  }).catch((error) => {
+  try {
+    await execFilePromise("taskkill", ["/PID", String(pid), "/T", "/F"], {
+      windowsHide: true,
+    });
+    return true;
+  } catch (error) {
     try {
       process.kill(pid, 0);
     } catch (probeError) {
-      if (probeError.code === "ESRCH") return;
+      if (probeError.code === "ESRCH") return false;
     }
     throw error;
-  });
+  }
+}
+
+export async function terminateWindowsProcessTree(
+  pid,
+  {
+    taskkill = taskkillIfRunning,
+    listDescendants = listWindowsDescendants,
+  } = {},
+) {
+  if (await taskkill(pid)) return;
+  const descendants = await listDescendants(pid);
+  for (const descendantPid of descendants) {
+    await taskkill(descendantPid);
+  }
 }
 
 export async function terminateProcessTree(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return;
   if (process.platform === "win32") {
-    const descendants = await listWindowsDescendants(pid);
-    for (const descendantPid of descendants) {
-      await taskkillIfRunning(descendantPid);
-    }
-    await taskkillIfRunning(pid);
+    await terminateWindowsProcessTree(pid);
     return;
   }
   try {

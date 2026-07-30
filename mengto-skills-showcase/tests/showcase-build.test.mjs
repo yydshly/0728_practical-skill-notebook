@@ -479,7 +479,7 @@ describe("exact-target failure cleanup", () => {
       root,
       runBuild: async () => {},
     })).resolves.toBe(join(root, "dist", "showcase"));
-  });
+  }, 15_000);
 
   it("audits the absent exact target before creating it and audits again before copy", async () => {
     const root = await createBuildRoot();

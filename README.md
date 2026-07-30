@@ -204,3 +204,5 @@ node scripts/check-fungarium-fifth-project.mjs
 - [Fabrica 视觉复刻记录](./docs/interactive-refinement/fabrica-visual-refinement.md)
 - [《雾村：逃离》项目 README](./rural-mutation-escape/README.md)
 - [《雾村：逃离》参考来源说明](./rural-mutation-escape/docs/REFERENCES.md)
+- [完整项目说明](./mengto-skills-showcase/README.md)
+- [套件验证账本](./mengto-skills-showcase/docs/SHOWCASE-VALIDATION.md)
