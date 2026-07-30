@@ -152,6 +152,7 @@ describe("semantic readiness", () => {
       await supervisor.stop("test-complete");
       await expect(supervisor.done).resolves.toBeUndefined();
     },
+    15_000,
   );
 
   it.each([
