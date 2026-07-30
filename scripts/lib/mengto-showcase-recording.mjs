@@ -125,6 +125,13 @@ export async function assertGifFile(
   return { signature, width, size: metadata.size };
 }
 
+export async function publishGifCandidate(candidatePath, outputPath) {
+  await assertGifFile(candidatePath);
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  await copyFile(candidatePath, outputPath);
+  return assertGifFile(outputPath);
+}
+
 async function runCommand(command, args, { cwd }) {
   const invocation = commandInvocation(command);
   const child = spawn(invocation.command, args, {
@@ -152,8 +159,76 @@ async function runCommand(command, args, { cwd }) {
 const delay = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+function observedChildTermination(child) {
+  const exitCode = child.exitCode ?? null;
+  const signalCode = child.signalCode ?? null;
+  if (exitCode === null && signalCode === null) {
+    return null;
+  }
+  return { exitCode, signalCode, error: null };
+}
+
+export function createPreviewLifecycle(child, output = () => "") {
+  let termination = null;
+  let resolveCompletion;
+  const completion = new Promise((resolve) => {
+    resolveCompletion = resolve;
+  });
+  const settle = (nextTermination) => {
+    if (termination !== null) {
+      return;
+    }
+    termination = nextTermination;
+    resolveCompletion(nextTermination);
+  };
+
+  child.on("error", (error) => {
+    settle({
+      exitCode: child.exitCode ?? null,
+      signalCode: child.signalCode ?? null,
+      error,
+    });
+  });
+  child.once("close", (exitCode, signalCode) => {
+    settle({
+      exitCode: exitCode ?? child.exitCode ?? null,
+      signalCode: signalCode ?? child.signalCode ?? null,
+      error: null,
+    });
+  });
+
+  const alreadyTerminated = observedChildTermination(child);
+  if (alreadyTerminated) {
+    settle(alreadyTerminated);
+  }
+
+  return {
+    child,
+    completion,
+    output,
+    get termination() {
+      return termination;
+    },
+  };
+}
+
+function previewTermination(preview) {
+  return preview.termination ?? observedChildTermination(preview.child);
+}
+
 function previewExitError(url, preview) {
-  const details = preview.output().trim();
+  const termination = previewTermination(preview);
+  const lifecycleDetails = termination?.error
+    ? termination.error.message
+    : termination?.signalCode
+      ? `Preview terminated by signal ${termination.signalCode}.`
+      : termination?.exitCode !== null &&
+          termination?.exitCode !== undefined
+        ? `Preview exited with code ${termination.exitCode}.`
+        : "";
+  const details = [preview.output().trim(), lifecycleDetails]
+    .filter(Boolean)
+    .join("\n");
   return new Error(
     `Vite exited before ${url} became ready.` +
       (details ? `\n${details}` : ""),
@@ -163,6 +238,38 @@ function previewExitError(url, preview) {
 const ansiEscape = /\u001B\[[0-?]*[ -/]*[@-~]/g;
 const showcaseHubMarker =
   /<meta\s+name=["']showcase-app["']\s+content=["']showcase-hub["']\s*\/?>/i;
+
+class ReadinessOperationTimeout extends Error {}
+
+async function raceReadinessOperation({
+  operation,
+  preview,
+  timeoutMs,
+  controller,
+  url,
+}) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller?.abort();
+      reject(new ReadinessOperationTimeout());
+    }, Math.max(1, timeoutMs));
+  });
+  const contenders = [Promise.resolve().then(operation), timeout];
+  if (preview.completion) {
+    contenders.push(
+      preview.completion.then(() => {
+        controller?.abort();
+        throw previewExitError(url, preview);
+      }),
+    );
+  }
+  try {
+    return await Promise.race(contenders);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 function hasOwnPreviewReadyMarker(url, preview) {
   const output = preview.output().replace(ansiEscape, "");
@@ -179,22 +286,50 @@ export async function waitForServer(
   {
     fetchImpl = globalThis.fetch,
     sleep = delay,
+    readinessTimeoutMs = 30_000,
+    requestTimeoutMs = 2_000,
   } = {},
 ) {
+  const deadline = Date.now() + readinessTimeoutMs;
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    if (preview.child.exitCode !== null) {
+    if (previewTermination(preview)) {
       throw previewExitError(url, preview);
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      break;
     }
     let response;
     let html = "";
+    const controller = new AbortController();
     try {
-      response = await fetchImpl(url);
-      html = response.ok ? await response.text() : "";
+      response = await raceReadinessOperation({
+        operation: () => fetchImpl(url, { signal: controller.signal }),
+        preview,
+        timeoutMs: Math.min(requestTimeoutMs, remaining),
+        controller,
+        url,
+      });
+      if (response.ok) {
+        html = await raceReadinessOperation({
+          operation: () => response.text(),
+          preview,
+          timeoutMs: Math.min(
+            requestTimeoutMs,
+            Math.max(1, deadline - Date.now()),
+          ),
+          controller,
+          url,
+        });
+      }
     } catch {
-      if (preview.child.exitCode !== null) {
+      if (previewTermination(preview)) {
         throw previewExitError(url, preview);
       }
-      await sleep(250);
+      const retryDelay = Math.min(250, Math.max(0, deadline - Date.now()));
+      if (retryDelay > 0) {
+        await sleep(retryDelay);
+      }
       continue;
     }
     if (
@@ -202,13 +337,22 @@ export async function waitForServer(
       showcaseHubMarker.test(html) &&
       hasOwnPreviewReadyMarker(url, preview)
     ) {
-      await sleep(250);
-      if (preview.child.exitCode !== null) {
+      const settleDelay = Math.min(
+        250,
+        Math.max(0, deadline - Date.now()),
+      );
+      if (settleDelay > 0) {
+        await sleep(settleDelay);
+      }
+      if (previewTermination(preview)) {
         throw previewExitError(url, preview);
       }
       return;
     }
-    await sleep(250);
+    const retryDelay = Math.min(250, Math.max(0, deadline - Date.now()));
+    if (retryDelay > 0) {
+      await sleep(retryDelay);
+    }
   }
   const details = preview.output().trim();
   throw new Error(
@@ -231,6 +375,7 @@ async function saveFrames(page, frameDirectory, frameState, count) {
 }
 
 function startPreview({ workspaceDir, port }) {
+  let output = "";
   const viteEntry = path.join(
     workspaceDir,
     "node_modules",
@@ -255,25 +400,83 @@ function startPreview({ workspaceDir, port }) {
       windowsHide: true,
     },
   );
-  let output = "";
+  const preview = createPreviewLifecycle(child, () => output);
   const appendOutput = (chunk) => {
     output = `${output}${chunk.toString()}`.slice(-16_384);
   };
   child.stdout.on("data", appendOutput);
   child.stderr.on("data", appendOutput);
-  return {
-    child,
-    output: () => output,
-  };
+  return preview;
 }
 
-async function stopChild(child) {
-  if (child.exitCode !== null) {
-    return;
+const stopTimedOut = Symbol("stopTimedOut");
+
+async function waitForPreviewStop(preview, timeoutMs) {
+  const termination = previewTermination(preview);
+  if (termination) {
+    return termination;
   }
-  const closed = once(child, "close");
-  child.kill();
-  await closed;
+  let timeoutId;
+  const timeout = new Promise((resolve) => {
+    timeoutId = setTimeout(() => resolve(stopTimedOut), timeoutMs);
+  });
+  try {
+    return await Promise.race([preview.completion, timeout]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function signalPreview(preview, signal) {
+  try {
+    if (signal) {
+      preview.child.kill(signal);
+    } else {
+      preview.child.kill();
+    }
+  } catch (error) {
+    const termination = previewTermination(preview);
+    if (termination) {
+      return termination;
+    }
+    throw error;
+  }
+  return previewTermination(preview);
+}
+
+export async function stopPreview(
+  preview,
+  {
+    graceTimeoutMs = 2_000,
+    forceTimeoutMs = 2_000,
+  } = {},
+) {
+  const existingTermination = previewTermination(preview);
+  if (existingTermination) {
+    return existingTermination;
+  }
+
+  const gracefulTermination = signalPreview(preview);
+  if (gracefulTermination) {
+    return gracefulTermination;
+  }
+  let termination = await waitForPreviewStop(preview, graceTimeoutMs);
+  if (termination !== stopTimedOut) {
+    return termination;
+  }
+  if (previewTermination(preview)) {
+    return previewTermination(preview);
+  }
+
+  const forcedTermination = signalPreview(preview, "SIGKILL");
+  if (forcedTermination) {
+    return forcedTermination;
+  }
+  termination = await waitForPreviewStop(preview, forceTimeoutMs);
+  if (termination !== stopTimedOut) {
+    return termination;
+  }
+  throw new Error("Preview did not close after forced termination.");
 }
 
 async function captureStage({
@@ -474,10 +677,7 @@ export async function recordMengToShowcaseDemo({
     const ffmpeg = resolveFfmpegCommand();
     await runCommand(ffmpeg, paletteArgs, { cwd: rootDir });
     await runCommand(ffmpeg, gifArgs, { cwd: rootDir });
-    await assertGifFile(candidatePath);
-    await mkdir(path.dirname(outputPath), { recursive: true });
-    await copyFile(candidatePath, outputPath);
-    const artifact = await assertGifFile(outputPath);
+    const artifact = await publishGifCandidate(candidatePath, outputPath);
     return {
       output: SHOWCASE_GIF,
       ...artifact,
@@ -486,9 +686,17 @@ export async function recordMengToShowcaseDemo({
     if (browser) {
       await browser.close().catch(() => undefined);
     }
+    let previewCleanupError = null;
     if (preview) {
-      await stopChild(preview.child).catch(() => undefined);
+      try {
+        await stopPreview(preview);
+      } catch (error) {
+        previewCleanupError = error;
+      }
     }
     await rm(temporaryRoot, { recursive: true, force: true });
+    if (previewCleanupError) {
+      throw previewCleanupError;
+    }
   }
 }

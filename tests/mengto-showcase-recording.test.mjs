@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { EventEmitter } from "node:events";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -11,10 +12,13 @@ import {
   SHOWCASE_GIF,
   assertGifFile,
   commandInvocation,
+  createPreviewLifecycle,
   createGifCommands,
+  publishGifCandidate,
   recordMengToShowcaseDemo,
   resolveChromium,
   resolveFfmpegCommand,
+  stopPreview,
   waitForServer,
 } from "../scripts/lib/mengto-showcase-recording.mjs";
 
@@ -24,6 +28,18 @@ function gifHeader(width = GIF_WIDTH, height = 480) {
   bytes.writeUInt16LE(width, 6);
   bytes.writeUInt16LE(height, 8);
   return bytes;
+}
+
+function fakeChild() {
+  const child = new EventEmitter();
+  child.exitCode = null;
+  child.signalCode = null;
+  child.killSignals = [];
+  child.kill = (signal = "SIGTERM") => {
+    child.killSignals.push(signal);
+    return true;
+  };
+  return child;
 }
 
 test("recording manifest fixes one 15-second four-stage GIF", () => {
@@ -138,6 +154,197 @@ test("readiness accepts Vite's self-closing Hub marker", async () => {
   });
 });
 
+test("readiness rejects a same-origin page without the Hub marker", async () => {
+  const preview = {
+    child: { exitCode: null, signalCode: null },
+    output: () => "➜  Local: http://127.0.0.1:5277/",
+  };
+  await assert.rejects(
+    () => waitForServer("http://127.0.0.1:5277/", preview, {
+      fetchImpl: async () => ({
+        ok: true,
+        text: async () =>
+          '<meta name="showcase-app" content="not-showcase-hub">',
+      }),
+      sleep: async () => undefined,
+      readinessTimeoutMs: 20,
+      requestTimeoutMs: 5,
+    }),
+    /Timed out waiting/,
+  );
+});
+
+test("a signal-terminated preview fails readiness immediately", async () => {
+  const preview = {
+    child: { exitCode: null, signalCode: "SIGTERM" },
+    output: () => "terminated",
+  };
+  await assert.rejects(
+    () => waitForServer("http://127.0.0.1:5277/", preview, {
+      fetchImpl: async () => ({
+        ok: false,
+        text: async () => "",
+      }),
+      sleep: async () => undefined,
+    }),
+    /Vite exited before.*terminated/s,
+  );
+});
+
+test("readiness has a real deadline when fetch never settles", async () => {
+  const preview = {
+    child: { exitCode: null, signalCode: null },
+    output: () => "➜  Local: http://127.0.0.1:5277/",
+  };
+  const guard = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error("fetch test guard expired")), 200);
+  });
+  await assert.rejects(
+    Promise.race([
+      waitForServer("http://127.0.0.1:5277/", preview, {
+        fetchImpl: async () => new Promise(() => undefined),
+        sleep: async () => undefined,
+        readinessTimeoutMs: 30,
+        requestTimeoutMs: 10,
+      }),
+      guard,
+    ]),
+    /Timed out waiting/,
+  );
+});
+
+test("readiness has a real deadline when response text never settles", async () => {
+  const preview = {
+    child: { exitCode: null, signalCode: null },
+    output: () => "➜  Local: http://127.0.0.1:5277/",
+  };
+  const guard = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error("response text test guard expired")), 200);
+  });
+  await assert.rejects(
+    Promise.race([
+      waitForServer("http://127.0.0.1:5277/", preview, {
+        fetchImpl: async () => ({
+          ok: true,
+          text: async () => new Promise(() => undefined),
+        }),
+        sleep: async () => undefined,
+        readinessTimeoutMs: 30,
+        requestTimeoutMs: 10,
+      }),
+      guard,
+    ]),
+    /Timed out waiting/,
+  );
+});
+
+test("hung fetch loses the race when this preview closes by signal", async () => {
+  const child = fakeChild();
+  const preview = createPreviewLifecycle(
+    child,
+    () => "➜  Local: http://127.0.0.1:5277/",
+  );
+  setTimeout(() => {
+    child.signalCode = "SIGTERM";
+    child.emit("close", null, "SIGTERM");
+  }, 5);
+  await assert.rejects(
+    waitForServer("http://127.0.0.1:5277/", preview, {
+      fetchImpl: async () => new Promise(() => undefined),
+      readinessTimeoutMs: 1_000,
+      requestTimeoutMs: 1_000,
+    }),
+    /Vite exited before.*SIGTERM/s,
+  );
+});
+
+test("hung response text loses the race when this preview closes", async () => {
+  const child = fakeChild();
+  const preview = createPreviewLifecycle(
+    child,
+    () => "➜  Local: http://127.0.0.1:5277/",
+  );
+  setTimeout(() => {
+    child.exitCode = 1;
+    child.emit("close", 1, null);
+  }, 5);
+  await assert.rejects(
+    waitForServer("http://127.0.0.1:5277/", preview, {
+      fetchImpl: async () => ({
+        ok: true,
+        text: async () => new Promise(() => undefined),
+      }),
+      readinessTimeoutMs: 1_000,
+      requestTimeoutMs: 1_000,
+    }),
+    /Vite exited before/,
+  );
+});
+
+test("preview lifecycle keeps spawn errors handled after termination", async () => {
+  const child = fakeChild();
+  const preview = createPreviewLifecycle(child, () => "");
+  assert.doesNotThrow(() => {
+    child.emit("error", new Error("spawn ENOENT"));
+  });
+  const termination = await preview.completion;
+  assert.equal(termination.error.message, "spawn ENOENT");
+  assert.doesNotThrow(() => {
+    child.emit("error", new Error("late spawn error"));
+  });
+  await stopPreview(preview, {
+    graceTimeoutMs: 5,
+    forceTimeoutMs: 5,
+  });
+  assert.deepEqual(child.killSignals, []);
+});
+
+test("cleanup returns immediately after close already happened", async () => {
+  const child = fakeChild();
+  const preview = createPreviewLifecycle(child, () => "");
+  child.signalCode = "SIGTERM";
+  child.emit("close", null, "SIGTERM");
+  await preview.completion;
+  await stopPreview(preview, {
+    graceTimeoutMs: 5,
+    forceTimeoutMs: 5,
+  });
+  assert.deepEqual(child.killSignals, []);
+});
+
+test("cleanup tolerates close winning the race with kill", async () => {
+  const child = fakeChild();
+  child.kill = () => {
+    child.signalCode = "SIGTERM";
+    child.emit("close", null, "SIGTERM");
+    throw new Error("kill raced with close");
+  };
+  const preview = createPreviewLifecycle(child, () => "");
+  await stopPreview(preview, {
+    graceTimeoutMs: 5,
+    forceTimeoutMs: 5,
+  });
+  assert.equal((await preview.completion).signalCode, "SIGTERM");
+});
+
+test("cleanup escalates to a bounded forced termination", async () => {
+  const child = fakeChild();
+  child.kill = (signal = "SIGTERM") => {
+    child.killSignals.push(signal);
+    if (signal === "SIGKILL") {
+      child.signalCode = "SIGKILL";
+      queueMicrotask(() => child.emit("close", null, "SIGKILL"));
+    }
+    return true;
+  };
+  const preview = createPreviewLifecycle(child, () => "");
+  await stopPreview(preview, {
+    graceTimeoutMs: 5,
+    forceTimeoutMs: 50,
+  });
+  assert.deepEqual(child.killSignals, ["SIGTERM", "SIGKILL"]);
+});
+
 test("Windows npm and a configured FFmpeg executable resolve explicitly", () => {
   assert.deepEqual(commandInvocation("npm", "win32"), { command: "npm.cmd", shell: true });
   assert.deepEqual(commandInvocation("node", "win32"), { command: "node", shell: false });
@@ -174,6 +381,27 @@ test("GIF inspection rejects signatures, widths, and files over 5 MiB", async ()
     await assert.rejects(() => assertGifFile(invalid), /GIF signature/);
     await assert.rejects(() => assertGifFile(wrongWidth), /720/);
     await assert.rejects(() => assertGifFile(oversized), /5 MiB/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("an invalid candidate cannot overwrite an existing final GIF", async () => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), "mengto-gif-publish-test-"),
+  );
+  try {
+    const candidate = path.join(directory, "candidate.gif");
+    const output = path.join(directory, "final.gif");
+    await writeFile(candidate, Buffer.from("not a gif"));
+    await writeFile(output, gifHeader());
+    const before = await readFile(output);
+
+    await assert.rejects(
+      () => publishGifCandidate(candidate, output),
+      /GIF signature/,
+    );
+    assert.deepEqual(await readFile(output), before);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
