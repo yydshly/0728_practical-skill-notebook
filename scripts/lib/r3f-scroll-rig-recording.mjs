@@ -2,7 +2,15 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { connect } from "node:net";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+} from "node:fs/promises";
 
 export const UPSTREAM_REPOSITORY = "https://github.com/14islands/r3f-scroll-rig";
 export const UPSTREAM_COMMIT = "adf7d47ea5bf3d8e8cf957b0f3667bea752e5f63";
@@ -20,15 +28,162 @@ const ORIGINAL_URL = "http://127.0.0.1:5223/";
 const SHOWCASE_URL = "http://127.0.0.1:5224/";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
+function invalidGif(filePath, reason) {
+  return new Error(`GIF artifact is invalid (${reason}): ${filePath}`);
+}
+
+function parseGif(bytes, filePath) {
+  let offset = 0;
+  const requireBytes = (length, description) => {
+    if (offset + length > bytes.length) {
+      throw invalidGif(filePath, `truncated ${description}`);
+    }
+  };
+  const readByte = (description) => {
+    requireBytes(1, description);
+    const value = bytes[offset];
+    offset += 1;
+    return value;
+  };
+  const readSubBlocks = (description) => {
+    const blocks = [];
+    while (true) {
+      const blockLength = readByte(`${description} sub-block length`);
+      if (blockLength === 0) return Buffer.concat(blocks);
+      requireBytes(blockLength, `${description} sub-block`);
+      blocks.push(bytes.subarray(offset, offset + blockLength));
+      offset += blockLength;
+    }
+  };
+
+  requireBytes(6, "GIF89a signature");
+  const signature = bytes.subarray(offset, offset + 6).toString("ascii");
+  offset += 6;
+  if (signature !== "GIF89a") {
+    throw invalidGif(filePath, "expected exact GIF89a signature");
+  }
+
+  requireBytes(7, "logical screen descriptor");
+  const width = bytes.readUInt16LE(offset);
+  const height = bytes.readUInt16LE(offset + 2);
+  const screenPacked = bytes[offset + 4];
+  offset += 7;
+  if (screenPacked & 0x80) {
+    const tableLength = 3 * (2 ** ((screenPacked & 0x07) + 1));
+    requireBytes(tableLength, "global color table");
+    offset += tableLength;
+  }
+
+  const frameDelays = [];
+  const loopCounts = [];
+  let pendingFrameDelay = null;
+  let sawTrailer = false;
+
+  while (offset < bytes.length) {
+    const marker = readByte("block marker");
+    if (marker === 0x3b) {
+      sawTrailer = true;
+      if (offset !== bytes.length) {
+        throw invalidGif(filePath, "bytes remain after final trailer");
+      }
+      break;
+    }
+
+    if (marker === 0x21) {
+      const extensionType = readByte("extension label");
+      if (extensionType === 0xf9) {
+        const blockLength = readByte("graphic control extension length");
+        if (blockLength !== 4) {
+          throw invalidGif(filePath, "graphic control extension length is not 4");
+        }
+        requireBytes(blockLength, "graphic control extension");
+        pendingFrameDelay = bytes.readUInt16LE(offset + 1);
+        offset += blockLength;
+        if (readByte("graphic control extension terminator") !== 0) {
+          throw invalidGif(filePath, "graphic control extension lacks a terminator");
+        }
+        continue;
+      }
+
+      if (extensionType === 0xff) {
+        const blockLength = readByte("application extension length");
+        requireBytes(blockLength, "application extension identifier");
+        const identifier = bytes
+          .subarray(offset, offset + blockLength)
+          .toString("ascii");
+        offset += blockLength;
+        const applicationData = readSubBlocks("application extension");
+        if (identifier === "NETSCAPE2.0" || identifier === "ANIMEXTS1.0") {
+          if (applicationData.length < 3 || applicationData[0] !== 1) {
+            throw invalidGif(filePath, "malformed animation loop extension");
+          }
+          loopCounts.push(applicationData.readUInt16LE(1));
+        }
+        continue;
+      }
+
+      if (extensionType === 0x01) {
+        const blockLength = readByte("plain text extension length");
+        requireBytes(blockLength, "plain text extension");
+        offset += blockLength;
+        readSubBlocks("plain text extension");
+        pendingFrameDelay = null;
+        continue;
+      }
+
+      readSubBlocks("extension");
+      continue;
+    }
+
+    if (marker === 0x2c) {
+      requireBytes(9, "image descriptor");
+      const imagePacked = bytes[offset + 8];
+      offset += 9;
+      if (imagePacked & 0x80) {
+        const tableLength = 3 * (2 ** ((imagePacked & 0x07) + 1));
+        requireBytes(tableLength, "local color table");
+        offset += tableLength;
+      }
+      readByte("LZW minimum code size");
+      readSubBlocks("image data");
+      frameDelays.push(pendingFrameDelay ?? 0);
+      pendingFrameDelay = null;
+      continue;
+    }
+
+    throw invalidGif(
+      filePath,
+      `unexpected block marker 0x${marker.toString(16).padStart(2, "0")}`,
+    );
+  }
+
+  if (!sawTrailer) {
+    throw invalidGif(filePath, "missing final trailer");
+  }
+  return { width, height, frameDelays, loopCounts };
+}
+
 export async function assertGifFile(filePath) {
   const [metadata, bytes] = await Promise.all([stat(filePath), readFile(filePath)]);
-  const signature = bytes.subarray(0, 6).toString("ascii");
-  if (
-    metadata.size < 10_000 ||
-    metadata.size > 8_000_000 ||
-    (signature !== "GIF87a" && signature !== "GIF89a")
-  ) {
-    throw new Error(`GIF artifact is invalid: ${filePath}`);
+  if (metadata.size < 10_000 || metadata.size > 8_000_000) {
+    throw invalidGif(filePath, "size must be between 10 KB and 8 MB");
+  }
+  const { width, height, frameDelays, loopCounts } = parseGif(bytes, filePath);
+  if (width !== CAPTURE_VIEWPORT.width || height !== CAPTURE_VIEWPORT.height) {
+    throw invalidGif(filePath, "expected a 960x640 logical screen");
+  }
+  if (frameDelays.length !== 40) {
+    throw invalidGif(filePath, "expected exactly 40 image frames");
+  }
+  const duration = frameDelays.reduce((total, delay) => total + delay, 0);
+  if (frameDelays.some((delay) => delay !== 20) || duration !== 800) {
+    throw invalidGif(
+      filePath,
+      "every frame delay must be 20 centiseconds and total duration must be 800 centiseconds",
+    );
+  }
+  if (loopCounts.length === 0 || loopCounts.some((loopCount) => loopCount !== 0)) {
+    throw invalidGif(filePath, "expected an infinite loop extension");
   }
 }
 
@@ -37,7 +192,13 @@ export function assertLegacySource({
   head,
   repositoryVersion,
   resolvedVersion,
+  trackedChanges = "",
 }) {
+  if (trackedChanges.trim() !== "") {
+    throw new Error(
+      `legacy source has tracked staged or unstaged changes: ${legacyDir}`,
+    );
+  }
   if (head !== UPSTREAM_COMMIT) {
     throw new Error(`legacy source commit must be ${UPSTREAM_COMMIT}: ${legacyDir}`);
   }
@@ -63,10 +224,11 @@ export function buildScrollFrames(stops, framesPerStage = 10) {
   });
 }
 
-function run(command, args, { cwd } = {}) {
+function run(command, args, { cwd, signal } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
+      signal,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -95,18 +257,38 @@ function resolveLegacyDirectory(rootDir, legacyDir) {
   );
 }
 
-async function inspectLegacySource(legacyDir) {
-  const head = await run("git", [
+export async function inspectLegacySource(
+  legacyDir,
+  {
+    signal,
+    runCommandImpl = run,
+    readJsonImpl = readJson,
+  } = {},
+) {
+  const gitPrefix = [
     "-c",
     `safe.directory=${legacyDir.replaceAll("\\", "/")}`,
     "-C",
     legacyDir,
-    "rev-parse",
-    "HEAD",
+  ];
+  const [head, trackedChanges] = await Promise.all([
+    runCommandImpl("git", [
+      ...gitPrefix,
+      "rev-parse",
+      "HEAD",
+    ], { signal }),
+    runCommandImpl("git", [
+      ...gitPrefix,
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=no",
+    ], { signal }),
   ]);
-  const repositoryVersion = (await readJson(path.join(legacyDir, "package.json"))).version;
+  const repositoryVersion = (
+    await readJsonImpl(path.join(legacyDir, "package.json"))
+  ).version;
   const resolvedVersion = (
-    await readJson(
+    await readJsonImpl(
       path.join(
         legacyDir,
         "examples",
@@ -117,32 +299,55 @@ async function inspectLegacySource(legacyDir) {
       ),
     )
   ).version;
-  assertLegacySource({ legacyDir, head, repositoryVersion, resolvedVersion });
+  assertLegacySource({
+    legacyDir,
+    head,
+    repositoryVersion,
+    resolvedVersion,
+    trackedChanges,
+  });
 }
 
 function childOutput(child) {
   return `stdout:\n${child.stdoutText}\nstderr:\n${child.stderrText}`;
 }
 
-async function waitForServer(url, child) {
+function childHasExited(child) {
+  return child.exitCode != null || child.signalCode != null;
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) {
+    throw signal.reason instanceof Error
+      ? signal.reason
+      : new Error("Recording aborted");
+  }
+}
+
+async function waitForServer(url, child, { signal } = {}) {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) {
+    throwIfAborted(signal);
+    if (childHasExited(child)) {
       throw new Error(`Server exited before serving ${url}\n${childOutput(child)}`);
     }
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
+      const requestSignal = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(1_000)])
+        : AbortSignal.timeout(1_000);
+      const response = await fetch(url, { signal: requestSignal });
       if (response.ok) return;
     } catch {
       // The server may not have finished binding its port yet.
     }
+    throwIfAborted(signal);
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
   throw new Error(`Timed out waiting for server at ${url}\n${childOutput(child)}`);
 }
 
 function createChildExitWait(child, timeoutMs) {
-  if (child.exitCode !== null) {
+  if (childHasExited(child)) {
     return { promise: Promise.resolve(true), cancel() {} };
   }
   let finish;
@@ -159,21 +364,65 @@ function createChildExitWait(child, timeoutMs) {
   return { promise, cancel: () => finish(false) };
 }
 
-async function signalProcessGroupAndWait(
-  child,
-  signal,
-  timeoutMs,
-  killProcessGroupImpl,
-) {
-  const exitWait = createChildExitWait(child, timeoutMs);
+function processGroupExists(processGroupId) {
   try {
-    killProcessGroupImpl(-child.pid, signal);
+    process.kill(processGroupId, 0);
+    return true;
   } catch (error) {
-    exitWait.cancel();
-    if (error.code === "ESRCH") return child.exitCode !== null;
+    if (error.code === "ESRCH") return false;
     throw error;
   }
-  return exitWait.promise;
+}
+
+function portIsReleased(port, host = "127.0.0.1") {
+  if (port === undefined || port === null) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const socket = connect({ host, port });
+    let settled = false;
+    const finish = (released) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(released);
+    };
+    socket.once("connect", () => finish(false));
+    socket.once("error", (error) => {
+      finish(error.code === "ECONNREFUSED");
+    });
+    socket.setTimeout(250, () => finish(false));
+  });
+}
+
+async function waitForProcessGroupAndPort({
+  processGroupId,
+  port,
+  host,
+  timeoutMs,
+  pollIntervalMs,
+  processGroupExistsImpl,
+  portIsReleasedImpl,
+}) {
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    const [groupExists, released] = await Promise.all([
+      processGroupExistsImpl(processGroupId),
+      portIsReleasedImpl(port, host),
+    ]);
+    if (!groupExists && released) return true;
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(
+      resolve,
+      Math.min(pollIntervalMs, Math.max(0, deadline - Date.now())),
+    ));
+  }
+}
+
+function signalProcessGroup(processGroupId, signal, killProcessGroupImpl) {
+  try {
+    killProcessGroupImpl(processGroupId, signal);
+  } catch (error) {
+    if (error.code !== "ESRCH") throw error;
+  }
 }
 
 export async function stopProcessTree(
@@ -183,32 +432,43 @@ export async function stopProcessTree(
     runCommandImpl = run,
     terminationTimeoutMs = 5_000,
     killProcessGroupImpl = process.kill,
+    processGroupExistsImpl = processGroupExists,
+    portIsReleasedImpl = portIsReleased,
+    port,
+    host = "127.0.0.1",
+    pollIntervalMs = 25,
   } = {},
 ) {
-  if (!child?.pid || child.exitCode !== null) return;
+  if (!child?.pid) return;
   if (platform === "win32") {
+    if (childHasExited(child)) return;
     await runCommandImpl("taskkill", ["/PID", String(child.pid), "/T", "/F"]);
     return;
   }
-  if (
-    await signalProcessGroupAndWait(
-      child,
-      "SIGTERM",
-      terminationTimeoutMs,
-      killProcessGroupImpl,
-    )
-  ) {
-    return;
+
+  const processGroupId = -child.pid;
+  const waitOptions = {
+    processGroupId,
+    port,
+    host,
+    timeoutMs: terminationTimeoutMs,
+    pollIntervalMs,
+    processGroupExistsImpl,
+    portIsReleasedImpl,
+  };
+  signalProcessGroup(processGroupId, "SIGTERM", killProcessGroupImpl);
+  if (await waitForProcessGroupAndPort(waitOptions)) return;
+
+  if (await processGroupExistsImpl(processGroupId)) {
+    signalProcessGroup(processGroupId, "SIGKILL", killProcessGroupImpl);
   }
-  if (
-    !await signalProcessGroupAndWait(
-      child,
-      "SIGKILL",
-      terminationTimeoutMs,
-      killProcessGroupImpl,
-    )
-  ) {
-    throw new Error(`Process group ${child.pid} did not exit after SIGKILL`);
+  if (!await waitForProcessGroupAndPort(waitOptions)) {
+    const groupExists = await processGroupExistsImpl(processGroupId);
+    const released = await portIsReleasedImpl(port, host);
+    throw new Error(
+      `Process group ${child.pid} cleanup incomplete after SIGKILL `
+      + `(groupExists=${groupExists}, portReleased=${released})`,
+    );
   }
 }
 
@@ -219,6 +479,9 @@ export async function startOriginalServer(
     spawnImpl = spawn,
     waitForServerImpl = waitForServer,
     stopProcessTreeImpl = stopProcessTree,
+    signal,
+    startupCleanupTimeoutMs = 10_000,
+    reportCleanupErrorImpl = reportCleanupError,
   } = {},
 ) {
   const environment = {
@@ -246,25 +509,31 @@ export async function startOriginalServer(
   child.stderrText = "";
   child.stdout?.on("data", (chunk) => { child.stdoutText += chunk; });
   child.stderr?.on("data", (chunk) => { child.stderrText += chunk; });
-  const close = () => stopProcessTreeImpl(child, { platform });
+  const close = () => stopProcessTreeImpl(child, { platform, port: 5223 });
   try {
-    await waitForServerImpl(ORIGINAL_URL, child);
+    await waitForServerImpl(ORIGINAL_URL, child, { signal });
     return { url: ORIGINAL_URL, child, close };
   } catch (error) {
-    await close();
-    throw error;
+    await cleanupRecordingResources(
+      { originalServer: { close } },
+      {
+        operationError: error,
+        cleanupTimeoutMs: startupCleanupTimeoutMs,
+        reportCleanupErrorImpl,
+      },
+    );
   }
 }
 
-async function stopShowcaseServer(server) {
-  if (!server?.child || server.child.exitCode !== null) return;
+export async function stopShowcaseServer(server) {
+  if (!server?.child || childHasExited(server.child)) return;
   await new Promise((resolve) => {
     server.child.once("exit", resolve);
     server.child.kill();
   });
 }
 
-async function startShowcaseServer(rootDir) {
+async function startShowcaseServer(rootDir, { signal } = {}) {
   const showcaseDir = path.join(rootDir, "r3f-scroll-rig-showcase");
   const child = spawn(
     process.execPath,
@@ -281,11 +550,13 @@ async function startShowcaseServer(rootDir) {
   child.stdout.on("data", (chunk) => { child.stdoutText += chunk; });
   child.stderr.on("data", (chunk) => { child.stderrText += chunk; });
   try {
-    await waitForServer(SHOWCASE_URL, child);
+    await waitForServer(SHOWCASE_URL, child, { signal });
     return { url: SHOWCASE_URL, child };
   } catch (error) {
-    await stopShowcaseServer({ child });
-    throw error;
+    await cleanupRecordingResources(
+      { showcaseServer: { child } },
+      { operationError: error },
+    );
   }
 }
 
@@ -379,7 +650,7 @@ async function captureLighthouse(browser, frameDirectory) {
   }
 }
 
-async function framesToGif(frameDirectory, outputFile) {
+async function framesToGif(frameDirectory, outputFile, { signal } = {}) {
   await run("ffmpeg", [
     "-y",
     "-framerate", "5",
@@ -388,39 +659,322 @@ async function framesToGif(frameDirectory, outputFile) {
     "[0:v]fps=5,scale=960:-2:flags=lanczos,split[p][s];[s]palettegen=max_colors=128:stats_mode=diff[pal];[p][pal]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle",
     "-loop", "0",
     outputFile,
-  ], { cwd: frameDirectory });
+  ], { cwd: frameDirectory, signal });
+}
+
+export async function encodeAndPublishGifs({
+  temporaryRoot,
+  frameDirectories,
+  outputs,
+  signal,
+  encodeGifImpl = framesToGif,
+  validateGifImpl = assertGifFile,
+  copyFileImpl = copyFile,
+  publishFileImpl = copyFile,
+  removeFileImpl = rm,
+} = {}) {
+  if (
+    !temporaryRoot
+    || frameDirectories?.length !== 2
+    || outputs?.length !== 2
+  ) {
+    throw new Error("Dual GIF publication requires two frames and two outputs");
+  }
+
+  const encodedDirectory = path.join(temporaryRoot, "encoded");
+  const backupDirectory = path.join(temporaryRoot, "prior");
+  await Promise.all([
+    mkdir(encodedDirectory, { recursive: true }),
+    mkdir(backupDirectory, { recursive: true }),
+  ]);
+  const temporaryOutputs = outputs.map((output, index) => path.join(
+    encodedDirectory,
+    `${index + 1}-${path.basename(output)}`,
+  ));
+
+  for (let index = 0; index < temporaryOutputs.length; index += 1) {
+    throwIfAborted(signal);
+    await encodeGifImpl(
+      frameDirectories[index],
+      temporaryOutputs[index],
+      { signal },
+    );
+  }
+  throwIfAborted(signal);
+  await Promise.all(temporaryOutputs.map((temporaryOutput) => (
+    validateGifImpl(temporaryOutput)
+  )));
+
+  const priorOutputs = [];
+  for (let index = 0; index < outputs.length; index += 1) {
+    const backup = path.join(
+      backupDirectory,
+      `${index + 1}-${path.basename(outputs[index])}`,
+    );
+    try {
+      await copyFileImpl(outputs[index], backup);
+      priorOutputs.push({ existed: true, backup });
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      priorOutputs.push({ existed: false, backup });
+    }
+  }
+
+  try {
+    for (let index = 0; index < outputs.length; index += 1) {
+      throwIfAborted(signal);
+      await publishFileImpl(temporaryOutputs[index], outputs[index]);
+    }
+    await Promise.all(outputs.map((output) => validateGifImpl(output)));
+    throwIfAborted(signal);
+  } catch (publishError) {
+    const rollbackResults = await Promise.allSettled(outputs.map(
+      (output, index) => (
+        priorOutputs[index].existed
+          ? copyFileImpl(priorOutputs[index].backup, output)
+          : removeFileImpl(output, { force: true })
+      ),
+    ));
+    const rollbackErrors = rollbackResults
+      .filter(({ status }) => status === "rejected")
+      .map(({ reason }) => reason);
+    if (rollbackErrors.length > 0) {
+      throw new AggregateError(
+        [publishError, ...rollbackErrors],
+        "Dual GIF publication failed and rollback was incomplete",
+        { cause: publishError },
+      );
+    }
+    throw publishError;
+  }
+
+  return outputs;
+}
+
+function awaitWithAbort(promise, signal) {
+  if (!signal) return promise;
+  throwIfAborted(signal);
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      reject(signal.reason instanceof Error
+        ? signal.reason
+        : new Error("Recording aborted"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    Promise.resolve(promise).then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function runCleanupWithTimeout(name, close, cleanupTimeoutMs) {
+  let timeout;
+  try {
+    await Promise.race([
+      Promise.resolve().then(close),
+      new Promise((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(
+            `${name} cleanup timed out after ${cleanupTimeoutMs}ms`,
+          ));
+        }, cleanupTimeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function reportCleanupError(name, error) {
+  console.error(
+    `Recording cleanup failed for ${name}: ${error.stack || error.message}`,
+  );
+}
+
+export async function cleanupRecordingResources(
+  {
+    browser,
+    browserLaunchPromise,
+    showcaseServer,
+    originalServer,
+    temporaryRoot,
+  },
+  {
+    operationError,
+    cleanupTimeoutMs = 10_000,
+    stopShowcaseServerImpl = stopShowcaseServer,
+    removeTemporaryRootImpl = rm,
+    reportCleanupErrorImpl = reportCleanupError,
+  } = {},
+) {
+  const cleanupSteps = [
+    browser && { name: "browser", close: () => browser.close() },
+    !browser && browserLaunchPromise && {
+      name: "browser-launch",
+      close: async () => {
+        const lateBrowser = await browserLaunchPromise;
+        await lateBrowser.close();
+      },
+    },
+    showcaseServer && {
+      name: "showcase",
+      close: () => stopShowcaseServerImpl(showcaseServer),
+    },
+    originalServer && {
+      name: "original",
+      close: () => originalServer.close(),
+    },
+    temporaryRoot && {
+      name: "temporary",
+      close: () => removeTemporaryRootImpl(
+        temporaryRoot,
+        { recursive: true, force: true },
+      ),
+    },
+  ].filter(Boolean);
+
+  const results = await Promise.all(cleanupSteps.map(async ({ name, close }) => {
+    try {
+      await runCleanupWithTimeout(name, close, cleanupTimeoutMs);
+      return null;
+    } catch (error) {
+      return { name, error };
+    }
+  }));
+  const failures = results.filter(Boolean);
+  for (const { name, error } of failures) {
+    reportCleanupErrorImpl(name, error);
+  }
+
+  if (operationError) {
+    operationError.cleanupErrors = [
+      ...(operationError.cleanupErrors ?? []),
+      ...failures.map(({ error }) => error),
+    ];
+    throw operationError;
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(
+      failures.map(({ error }) => error),
+      "Recording cleanup failed",
+    );
+  }
 }
 
 export async function recordR3fScrollRigDemos({
   rootDir = repositoryRoot,
   legacyDir,
+  signal,
 } = {}) {
   const resolvedLegacyDir = resolveLegacyDirectory(rootDir, legacyDir);
-  await inspectLegacySource(resolvedLegacyDir);
+  await inspectLegacySource(resolvedLegacyDir, { signal });
   const temporaryRoot = await mkdtemp(
     path.join(os.tmpdir(), "r3f-scroll-rig-recording-"),
   );
   let originalServer;
   let showcaseServer;
   let browser;
+  let browserLaunchPromise;
+  let outputs;
+  let operationError;
   try {
-    originalServer = await startOriginalServer(resolvedLegacyDir);
-    showcaseServer = await startShowcaseServer(rootDir);
-    browser = await (await loadChromium(rootDir)).chromium.launch({
+    originalServer = await startOriginalServer(resolvedLegacyDir, { signal });
+    showcaseServer = await startShowcaseServer(rootDir, { signal });
+    const { chromium } = await awaitWithAbort(loadChromium(rootDir), signal);
+    browserLaunchPromise = chromium.launch({
       headless: true,
       args: ["--enable-webgl", "--ignore-gpu-blocklist", "--use-angle=swiftshader"],
     });
-    await captureOriginal(browser, path.join(temporaryRoot, "original"));
-    await captureLighthouse(browser, path.join(temporaryRoot, "lighthouse"));
-    const outputs = RECORDINGS.map(({ output }) => path.join(rootDir, output));
-    await framesToGif(path.join(temporaryRoot, "original"), outputs[0]);
-    await framesToGif(path.join(temporaryRoot, "lighthouse"), outputs[1]);
-    await Promise.all(outputs.map(assertGifFile));
-    return outputs;
+    browser = await awaitWithAbort(
+      browserLaunchPromise,
+      signal,
+    );
+    await awaitWithAbort(
+      captureOriginal(browser, path.join(temporaryRoot, "original")),
+      signal,
+    );
+    await awaitWithAbort(
+      captureLighthouse(browser, path.join(temporaryRoot, "lighthouse")),
+      signal,
+    );
+    outputs = RECORDINGS.map(({ output }) => path.join(rootDir, output));
+    await encodeAndPublishGifs({
+      temporaryRoot,
+      frameDirectories: [
+        path.join(temporaryRoot, "original"),
+        path.join(temporaryRoot, "lighthouse"),
+      ],
+      outputs,
+      signal,
+    });
+  } catch (error) {
+    operationError = error;
+  }
+  await cleanupRecordingResources(
+    {
+      browser,
+      browserLaunchPromise: signal?.aborted && !browser
+        ? browserLaunchPromise
+        : undefined,
+      showcaseServer,
+      originalServer,
+      temporaryRoot,
+    },
+    { operationError },
+  );
+  return outputs;
+}
+
+export async function runRecorderCli({
+  processImpl = process,
+  recordImpl = recordR3fScrollRigDemos,
+  logImpl = console.log,
+  errorImpl = console.error,
+} = {}) {
+  const controller = new AbortController();
+  let receivedSignal;
+  const handlers = new Map();
+  for (const signalName of ["SIGINT", "SIGTERM"]) {
+    const handler = () => {
+      if (receivedSignal) return;
+      receivedSignal = signalName;
+      const error = new Error(`Recording interrupted by ${signalName}`);
+      error.name = "AbortError";
+      error.signal = signalName;
+      controller.abort(error);
+    };
+    handlers.set(signalName, handler);
+    processImpl.on(signalName, handler);
+  }
+
+  try {
+    const files = await recordImpl({ signal: controller.signal });
+    if (receivedSignal) {
+      const exitCode = 128 + os.constants.signals[receivedSignal];
+      processImpl.exitCode = exitCode;
+      return exitCode;
+    }
+    logImpl(`Recorded r3f-scroll-rig GIFs:\n${files.join("\n")}`);
+    return 0;
+  } catch (error) {
+    if (receivedSignal) {
+      const exitCode = 128 + os.constants.signals[receivedSignal];
+      processImpl.exitCode = exitCode;
+      return exitCode;
+    }
+    errorImpl(error.stack || error.message);
+    processImpl.exitCode = 1;
+    return 1;
   } finally {
-    await browser?.close();
-    await stopShowcaseServer(showcaseServer);
-    await originalServer?.close();
-    await rm(temporaryRoot, { recursive: true, force: true });
+    for (const [signalName, handler] of handlers) {
+      processImpl.off(signalName, handler);
+    }
   }
 }
