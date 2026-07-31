@@ -16,7 +16,9 @@ import {
   navigateLighthousePage,
   navigateOriginalPage,
   resolveStaticAsset,
+  scrollPageTo,
   waitForLighthouseHeading,
+  waitForOriginalReadiness,
 } from "../scripts/lib/r3f-scroll-rig-recording.mjs";
 
 test("recording contract pins source, outputs, viewport, and story stops", () => {
@@ -27,7 +29,7 @@ test("recording contract pins source, outputs, viewport, and story stops", () =>
     "docs/demos/08-r3f-scroll-rig-original.gif",
     "docs/demos/08-r3f-scroll-rig-lighthouse.gif",
   ]);
-  assert.deepEqual(ORIGINAL_SCROLL_STOPS, [0, 720, 1440, 2280]);
+  assert.deepEqual(ORIGINAL_SCROLL_STOPS, [2560, 5368, 6300, 6800]);
   assert.deepEqual(SHOWCASE_SCROLL_STOPS, [0, 1100, 2200, 3800]);
 });
 
@@ -71,10 +73,62 @@ test("legacy source validation requires the pinned commit and versions", () => {
 test("four story stops become a forty-frame eight-second sequence", () => {
   const frames = buildScrollFrames([0, 720, 1440, 2280], 10);
   assert.equal(frames.length, 40);
-  assert.equal(frames[0], 0);
+  assert.deepEqual(
+    [frames[0], frames[10], frames[20], frames[30]],
+    [0, 720, 1440, 2280],
+  );
   assert.equal(frames[9], 0);
   assert.equal(frames.at(-1), 2280);
   assert.ok(frames.every((value, index) => index === 0 || value >= frames[index - 1]));
+});
+
+test("historical scroll capture bypasses the demo's smoothing override", async () => {
+  const calls = [];
+  let paintFrames = 0;
+  let positionChecks = 0;
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const page = {
+    evaluate: async (callback, top) => {
+      if (top === undefined) {
+        globalThis.requestAnimationFrame = (next) => {
+          paintFrames += 1;
+          next();
+        };
+      } else {
+        globalThis.window = {
+          scrollTo: (...args) => calls.push(args),
+        };
+      }
+      try {
+        await callback(top);
+      } finally {
+        globalThis.window = previousWindow;
+        globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+      }
+    },
+    waitForFunction: async (callback, top, options) => {
+      globalThis.window = { innerHeight: 640, scrollY: 13_159 };
+      globalThis.document = {
+        documentElement: { scrollHeight: 13_799 },
+      };
+      try {
+        positionChecks += 1;
+        assert.equal(callback(top), true);
+        assert.deepEqual(options, { timeout: 10_000 });
+      } finally {
+        globalThis.window = previousWindow;
+        globalThis.document = previousDocument;
+      }
+    },
+  };
+
+  await scrollPageTo(page, 15_000);
+
+  assert.deepEqual(calls, [[0, 15_000, 1]]);
+  assert.equal(positionChecks, 1);
+  assert.equal(paintFrames, 2);
 });
 
 test("static server resolves files inside the historical build only", () => {
@@ -104,6 +158,38 @@ test("original demo navigation waits for DOM content instead of an idle network"
     url: "http://127.0.0.1:5223/",
     options: { waitUntil: "domcontentloaded" },
   });
+});
+
+test("original readiness waits for both rendered copy and the loading overlay to leave", async () => {
+  const calls = [];
+  const locator = (label) => ({
+    waitFor: async (options) => {
+      calls.push({ label, options });
+    },
+  });
+  const page = {
+    getByText: (text, options) => locator(
+      typeof text === "string"
+        ? { text, options }
+        : { pattern: text.source },
+    ),
+  };
+
+  await waitForOriginalReadiness(page);
+
+  assert.deepEqual(calls, [
+    {
+      label: {
+        text: "A ScrollScene with a Cube mesh inside using global lights.",
+        options: { exact: true },
+      },
+      options: { timeout: 60_000 },
+    },
+    {
+      label: { pattern: "^Loading\\s+\\d+(?:\\.\\d+)?%$" },
+      options: { state: "hidden", timeout: 60_000 },
+    },
+  ]);
 });
 
 test("lighthouse navigation waits for DOM content instead of an idle network", async () => {

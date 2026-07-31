@@ -10,7 +10,7 @@ export const UPSTREAM_COMMIT = "adf7d47ea5bf3d8e8cf957b0f3667bea752e5f63";
 export const UPSTREAM_REPOSITORY_VERSION = "7.0.7";
 export const UPSTREAM_RESOLVED_VERSION = "6.0.5";
 export const CAPTURE_VIEWPORT = { width: 960, height: 640 };
-export const ORIGINAL_SCROLL_STOPS = [0, 720, 1440, 2280];
+export const ORIGINAL_SCROLL_STOPS = [2560, 5368, 6300, 6800];
 export const SHOWCASE_SCROLL_STOPS = [0, 1100, 2200, 3800];
 export const RECORDINGS = [
   { id: "original", output: "docs/demos/08-r3f-scroll-rig-original.gif" },
@@ -67,11 +67,11 @@ export function assertLegacySource({
 
 export function buildScrollFrames(stops, framesPerStage = 10) {
   return stops.flatMap((target, stageIndex) => {
-    const start = stageIndex === 0 ? target : stops[stageIndex - 1];
+    const next = stops[stageIndex + 1] ?? target;
     return Array.from({ length: framesPerStage }, (_, frameIndex) => {
-      if (stageIndex === 0) return target;
-      const progress = (frameIndex + 1) / framesPerStage;
-      return Math.round(start + (target - start) * progress);
+      if (stageIndex === 0 || stageIndex === stops.length - 1) return target;
+      const progress = frameIndex / framesPerStage;
+      return Math.round(target + (next - target) * progress);
     });
   });
 }
@@ -243,7 +243,7 @@ async function loadChromium(rootDir) {
 
 async function captureFrames(page, stops, frameDirectory) {
   for (const [index, top] of buildScrollFrames(stops, 10).entries()) {
-    await page.evaluate((scrollTop) => window.scrollTo(0, scrollTop), top);
+    await scrollPageTo(page, top);
     await page.waitForTimeout(120);
     await page.screenshot({
       path: path.join(frameDirectory, `frame-${String(index + 1).padStart(3, "0")}.png`),
@@ -263,14 +263,40 @@ export function waitForLighthouseHeading(page) {
   return page.getByRole("heading", { name: "雾屿灯塔", exact: true }).waitFor();
 }
 
+export async function scrollPageTo(page, top) {
+  await page.evaluate((scrollTop) => window.scrollTo(0, scrollTop, 1), top);
+  await page.waitForFunction(
+    (scrollTop) => {
+      const maximum = Math.max(
+        0,
+        document.documentElement.scrollHeight - window.innerHeight,
+      );
+      const target = Math.min(Math.max(scrollTop, 0), maximum);
+      return Math.abs(window.scrollY - target) <= 1;
+    },
+    top,
+    { timeout: 10_000 },
+  );
+  await page.evaluate(() => new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  }));
+}
+
+export async function waitForOriginalReadiness(page) {
+  await page.getByText(
+    "A ScrollScene with a Cube mesh inside using global lights.",
+    { exact: true },
+  ).waitFor({ timeout: 60_000 });
+  await page.getByText(
+    /^Loading\s+\d+(?:\.\d+)?%$/,
+  ).waitFor({ state: "hidden", timeout: 60_000 });
+}
+
 async function captureOriginal(browser, frameDirectory) {
   const page = await browser.newPage({ viewport: CAPTURE_VIEWPORT });
   try {
     await navigateOriginalPage(page);
-    await page.getByText(
-      "A ScrollScene with a Cube mesh inside using global lights.",
-      { exact: true },
-    ).waitFor({ timeout: 60_000 });
+    await waitForOriginalReadiness(page);
     await captureFrames(page, ORIGINAL_SCROLL_STOPS, frameDirectory);
   } finally {
     await page.close();
