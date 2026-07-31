@@ -130,7 +130,19 @@ npm run dev
 
 `@14islands/r3f-scroll-rig` 是把 DOM 内容与 WebGL 场景同步起来的封装库：它支持由滚动驱动场景状态、让元素在视口中固定，并用视差建立前后景深层次。这里已有一个雾屿灯塔样例，内置两种可对照的构图模式：默认的“稳定构图”与 `?composition=legacy` 的“原始漂移”。
 
-它适合需要网页文本、图片与三维场景共同随滚动编排的专题页、产品叙事和沉浸式落地页；它不是把一张图片自动转换成 3D 的工具。运行和验证方式如下：
+它适合需要网页文本、图片与三维场景共同随滚动编排的专题页、产品叙事和沉浸式落地页；它不是把一张图片自动转换成 3D 的工具。
+
+原库 Demo 回答“这个库能做什么”：
+
+<img src="./docs/demos/08-r3f-scroll-rig-original.gif" alt="r3f-scroll-rig 原库 Demo 的滚动同步、Sticky 与内联 3D 能力展示" width="720">
+
+灯塔 Demo 回答“我们如何把它用于真实场景”：
+
+<img src="./docs/demos/08-r3f-scroll-rig-lighthouse.gif" alt="雾屿灯塔滚动叙事 Demo" width="720">
+
+原库录制固定来自 [14islands/r3f-scroll-rig](https://github.com/14islands/r3f-scroll-rig) 提交 `adf7d47ea5bf3d8e8cf957b0f3667bea752e5f63` 的源码样例入口，历史样例实际安装版本为 `6.0.5`。上游采用 ISC 许可；本仓库是独立研究与应用验证，不表示官方关联。
+
+运行和验证方式如下：
 
 ```powershell
 cd r3f-scroll-rig-showcase

@@ -4,6 +4,16 @@
 
 这类能力适用于滚动专题、产品故事和需要让网页信息与三维场景协同排布的落地页。它不是将图片自动转换为 3D 的服务或模型生成器。
 
+## 两个演示分别证明什么？
+
+原库 Demo 回答“这个库能做什么”：
+
+<img src="../docs/demos/08-r3f-scroll-rig-original.gif" alt="r3f-scroll-rig 原库 Demo 的滚动同步、Sticky 与内联 3D 能力展示" width="720">
+
+灯塔 Demo 回答“我们如何把它用于真实场景”：
+
+<img src="../docs/demos/08-r3f-scroll-rig-lighthouse.gif" alt="雾屿灯塔滚动叙事 Demo" width="720">
+
 ## 本地运行
 
 ```powershell

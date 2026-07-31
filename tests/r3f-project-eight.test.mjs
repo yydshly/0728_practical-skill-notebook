@@ -32,7 +32,7 @@ test("nested research repositories and generated folders are forbidden", () => {
   );
 });
 
-test("project 08 documentation is registered without GIF dependencies", async () => {
+test("project 08 documentation presents approved original and lighthouse GIF evidence", async () => {
   const [rootReadme, projectReadme] = await Promise.all([
     readFile(path.join(rootDir, "README.md"), "utf8"),
     readFile(path.join(rootDir, SHOWCASE_DIRECTORY, "README.md"), "utf8"),
@@ -45,8 +45,15 @@ test("project 08 documentation is registered without GIF dependencies", async ()
   assert.match(rootReadme, /## 08 · r3f-scroll-rig 原库能力与雾屿灯塔应用验证/);
   assert.match(rootReadme, /## 09 · Finesse Skill 产品研究/);
   assert.doesNotMatch(rootReadme, /## 08 · Finesse Skill 产品研究/);
+  assert.match(rootReadme, /\.\/docs\/demos\/08-r3f-scroll-rig-original\.gif/);
+  assert.match(rootReadme, /\.\/docs\/demos\/08-r3f-scroll-rig-lighthouse\.gif/);
+  assert.match(rootReadme, /原库 Demo 回答“这个库能做什么”/);
+  assert.match(rootReadme, /灯塔 Demo 回答“我们如何把它用于真实场景”/);
+  assert.match(rootReadme, /adf7d47ea5bf3d8e8cf957b0f3667bea752e5f63/);
+  assert.match(rootReadme, /上游采用 ISC 许可/);
   assert.match(projectReadme, /@14islands\/r3f-scroll-rig 8\.15\.0/);
   assert.match(projectReadme, /adf7d47ea5bf3d8e8cf957b0f3667bea752e5f63/);
   assert.match(projectReadme, /实际安装 `6\.0\.5`/);
-  assert.doesNotMatch(`${rootReadme}\n${projectReadme}`, /08-r3f-scroll-rig-.*\.gif/);
+  assert.match(projectReadme, /\.\.\/docs\/demos\/08-r3f-scroll-rig-original\.gif/);
+  assert.match(projectReadme, /\.\.\/docs\/demos\/08-r3f-scroll-rig-lighthouse\.gif/);
 });
