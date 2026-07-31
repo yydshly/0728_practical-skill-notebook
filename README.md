@@ -13,8 +13,9 @@
 | 05 | [Fungarium 原版与业务展厅改造](./fungarium-product-showcase/) | `fungarium-product-showcase` | 对照上游标本展厅交互与本仓库的中文业务能力展厅。 |
 | 06 | [《雾村：逃离》](./rural-mutation-escape/) | `rural-mutation-escape` | 第三人称农村变异逃生原型与 AI 辅助游戏开发研究。 |
 | 07 | [MengTo Skills 三产品能力展](./mengto-skills-showcase/) | `mengto-skills-showcase` | 用固定、可审计的 MengTo Skills 工作流，完成 3D 资产审阅、等距动作游戏与复杂商品配置三款独立产品，并由统一中文展厅串联体验与验证。 |
-| 08 | [Finesse Skill 产品研究](./finesse-skill-product-research/) | `finesse-skill-product-research` | 文档与研究计划：梳理 Finesse 能力、受控验证方法与产品机会；交互研究展厅仍在计划中，当前不可运行。 |
-| 09 | [My Room in 3D 空间化产品承载研究](./my-room-in-3d-research/) | `my-room-in-3d-research` | 研究 Bruno Simon 的 3D 房间作品集如何将空间、内容入口与动态媒体组合为可探索的个人/产品展示形态。 |
+| 08 | [r3f-scroll-rig 原库能力与雾屿灯塔应用验证](./r3f-scroll-rig-showcase/) | `r3f-scroll-rig-showcase` | 封装库的 DOM/WebGL 同步、滚动驱动、固定与视差能力，以及雾屿灯塔应用的两种内置对照构图。 |
+| 09 | [Finesse Skill 产品研究](./finesse-skill-product-research/) | `finesse-skill-product-research` | 文档与研究计划：梳理 Finesse 能力、受控验证方法与产品机会；交互研究展厅仍在计划中，当前不可运行。 |
+| 10 | [My Room in 3D 空间化产品承载研究](./my-room-in-3d-research/) | `my-room-in-3d-research` | 研究 Bruno Simon 的 3D 房间作品集如何将空间、内容入口与动态媒体组合为可探索的个人/产品展示形态。 |
 
 ## 01 · 雾屿灯塔
 
@@ -125,7 +126,23 @@ npm run dev
 - [完整项目说明](./mengto-skills-showcase/README.md)
 - [套件验证账本](./mengto-skills-showcase/docs/SHOWCASE-VALIDATION.md)
 
-## 08 · Finesse Skill 产品研究
+## 08 · r3f-scroll-rig 原库能力与雾屿灯塔应用验证
+
+`@14islands/r3f-scroll-rig` 是把 DOM 内容与 WebGL 场景同步起来的封装库：它支持由滚动驱动场景状态、让元素在视口中固定，并用视差建立前后景深层次。这里已有一个雾屿灯塔样例，内置两种可对照的构图模式：默认的“稳定构图”与 `?composition=legacy` 的“原始漂移”。
+
+它适合需要网页文本、图片与三维场景共同随滚动编排的专题页、产品叙事和沉浸式落地页；它不是把一张图片自动转换成 3D 的工具。运行和验证方式如下：
+
+```powershell
+cd r3f-scroll-rig-showcase
+npm ci
+npm run dev
+npm test
+npm run build
+```
+
+开发服务器启动后，可访问 `http://127.0.0.1:4174/?composition=legacy` 查看“原始漂移”对照模式。
+
+## 09 · Finesse Skill 产品研究
 
 这是一个面向 Finesse 的中文研究入口，而非当前可运行的演示。它以固定上游提交为范围，先在[能力地图](./finesse-skill-product-research/docs/CAPABILITY-MAP.md)中梳理 register 路由、SOUL / SPECTACLE / DENSITY、三条设计路线、设计模型与质量门禁的已知机制及边界；再用[受控研究计划](./finesse-skill-product-research/docs/RESEARCH-PLAN.md)规定 B1–B5、A/B/C 对照、证据记录和停止规则。
 
@@ -133,7 +150,7 @@ npm run dev
 
 当前交付为文档。未来的[研究展厅计划](./finesse-skill-product-research/docs/SHOWCASE-PLAN.md)定义了能力总览、决策实验室、三路线对照、审计台和机会地图，但没有展厅代码、交互、数据接入、截图、部署、性能结果或验证结论，因而不能运行或作为功能证明。
 
-## 09 · My Room in 3D 空间化产品承载研究
+## 10 · My Room in 3D 空间化产品承载研究
 
 这是对 [brunosimon/my-room-in-3d](https://github.com/brunosimon/my-room-in-3d) 的源码与体验研究。上游作品把个人作品集组织成一个可自由观察的 3D 房间：模型、灯光、动态屏幕和局部特效共同构成空间化的内容入口。
 
