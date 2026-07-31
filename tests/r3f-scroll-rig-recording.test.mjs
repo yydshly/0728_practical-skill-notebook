@@ -44,7 +44,7 @@ test("legacy source validation requires the pinned commit and versions", () => {
     legacyDir: "C:/temporary/r3f-scroll-rig",
     head: UPSTREAM_COMMIT,
     repositoryVersion: UPSTREAM_REPOSITORY_VERSION,
-    resolvedVersion: "8.15.0",
+    resolvedVersion: "6.0.5",
   };
   assert.doesNotThrow(() => assertLegacySource(source));
   assert.throws(
@@ -57,6 +57,10 @@ test("legacy source validation requires the pinned commit and versions", () => {
   );
   assert.throws(
     () => assertLegacySource({ ...source, resolvedVersion: "latest" }),
+    /legacy source resolved version/,
+  );
+  assert.throws(
+    () => assertLegacySource({ ...source, resolvedVersion: "8.15.0" }),
     /legacy source resolved version/,
   );
 });
