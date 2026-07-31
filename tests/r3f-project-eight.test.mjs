@@ -64,8 +64,11 @@ test("project 08 documentation presents approved original and lighthouse GIF evi
   assert.match(rootReadme, /历史样例实际安装版本为 `6\.0\.5`/);
   assert.match(rootReadme, /上游采用 ISC 许可/);
   assert.match(projectReadme, /@14islands\/r3f-scroll-rig 8\.15\.0/);
+  assert.match(projectReadme, /不是将图片自动转换为 3D 的服务或模型生成器/);
   assert.match(projectReadme, /adf7d47ea5bf3d8e8cf957b0f3667bea752e5f63/);
   assert.match(projectReadme, /实际安装 `6\.0\.5`/);
+  assert.match(projectReadme, /上游采用 ISC 许可/);
+  assert.match(projectReadme, /不表示与上游存在官方关联/);
   assert.match(projectReadme, /\.\.\/docs\/demos\/08-r3f-scroll-rig-original\.gif/);
   assert.match(projectReadme, /\.\.\/docs\/demos\/08-r3f-scroll-rig-lighthouse\.gif/);
   assert.match(
