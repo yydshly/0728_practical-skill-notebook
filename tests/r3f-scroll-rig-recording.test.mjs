@@ -16,6 +16,7 @@ import {
   navigateLighthousePage,
   navigateOriginalPage,
   resolveStaticAsset,
+  waitForLighthouseHeading,
 } from "../scripts/lib/r3f-scroll-rig-recording.mjs";
 
 test("recording contract pins source, outputs, viewport, and story stops", () => {
@@ -118,5 +119,25 @@ test("lighthouse navigation waits for DOM content instead of an idle network", a
   assert.deepEqual(call, {
     url: "http://127.0.0.1:5224/",
     options: { waitUntil: "domcontentloaded" },
+  });
+});
+
+test("lighthouse readiness targets the exact rendered heading", async () => {
+  let call;
+  const locator = {
+    waitFor: async () => {},
+  };
+  const page = {
+    getByRole: (role, options) => {
+      call = { role, options };
+      return locator;
+    },
+  };
+
+  await waitForLighthouseHeading(page);
+
+  assert.deepEqual(call, {
+    role: "heading",
+    options: { name: "雾屿灯塔", exact: true },
   });
 });

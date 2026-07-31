@@ -259,6 +259,10 @@ export function navigateLighthousePage(page) {
   return page.goto(SHOWCASE_URL, { waitUntil: "domcontentloaded" });
 }
 
+export function waitForLighthouseHeading(page) {
+  return page.getByRole("heading", { name: "雾屿灯塔", exact: true }).waitFor();
+}
+
 async function captureOriginal(browser, frameDirectory) {
   const page = await browser.newPage({ viewport: CAPTURE_VIEWPORT });
   try {
@@ -277,7 +281,7 @@ async function captureLighthouse(browser, frameDirectory) {
   const page = await browser.newPage({ viewport: CAPTURE_VIEWPORT });
   try {
     await navigateLighthousePage(page);
-    await page.getByRole("heading", { name: "雾岚灯塔", exact: true }).waitFor();
+    await waitForLighthouseHeading(page);
     await page.getByRole("button", { name: "稳定构图", exact: true }).waitFor();
     await page.waitForFunction(
       () => document.documentElement.classList.contains("webgl-ready"),
