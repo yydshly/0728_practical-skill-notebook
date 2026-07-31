@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -20,6 +22,33 @@ import {
   waitForLighthouseHeading,
   waitForOriginalReadiness,
 } from "../scripts/lib/r3f-scroll-rig-recording.mjs";
+
+async function createLoopbackProcessFixture(pid) {
+  const server = createServer((_request, response) => response.end("ready"));
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const child = new EventEmitter();
+  child.pid = pid;
+  child.exitCode = null;
+  const url = `http://127.0.0.1:${server.address().port}/`;
+  return {
+    child,
+    server,
+    url,
+    terminate() {
+      server.close(() => {
+        child.exitCode = 0;
+        child.emit("exit", 0, null);
+      });
+    },
+    async cleanup() {
+      if (!server.listening) return;
+      await new Promise((resolve) => server.close(resolve));
+    },
+  };
+}
 
 test("recording contract pins source, outputs, viewport, and story stops", () => {
   assert.equal(UPSTREAM_COMMIT, "adf7d47ea5bf3d8e8cf957b0f3667bea752e5f63");
@@ -212,6 +241,127 @@ test("Windows cleanup terminates the original demo and all descendants", async (
     command: "taskkill",
     args: ["/PID", "4321", "/T", "/F"],
   });
+});
+
+test("POSIX source entry keeps NODE_OPTIONS platform-neutral", async () => {
+  const child = new EventEmitter();
+  child.pid = 4321;
+  child.exitCode = null;
+  let spawnCall;
+  let stoppedChild;
+  const server = await recording.startOriginalServer("/legacy", {
+    platform: "linux",
+    spawnImpl: (command, args, options) => {
+      spawnCall = { command, args, options };
+      return child;
+    },
+    waitForServerImpl: async () => {},
+    stopProcessTreeImpl: async (spawnedChild) => {
+      stoppedChild = spawnedChild;
+    },
+  });
+
+  assert.equal(spawnCall.command, "npm");
+  assert.deepEqual(spawnCall.args, ["start"]);
+  assert.equal(spawnCall.options.detached, true);
+  assert.notEqual(
+    spawnCall.options.env.NODE_OPTIONS,
+    "--openssl-legacy-provider",
+  );
+  await server.close();
+  assert.equal(stoppedChild, child);
+});
+
+test("POSIX successful close waits until the listening process exits", async () => {
+  const fixture = await createLoopbackProcessFixture(43_210);
+  const signals = [];
+  try {
+    assert.equal((await fetch(fixture.url)).status, 200);
+    const originalServer = await recording.startOriginalServer("/legacy", {
+      platform: "linux",
+      spawnImpl: () => fixture.child,
+      waitForServerImpl: async () => {},
+      stopProcessTreeImpl: (child, { platform }) => recording.stopProcessTree(
+        child,
+        {
+          platform,
+          terminationTimeoutMs: 50,
+          killProcessGroupImpl: (processGroupId, signal) => {
+            signals.push({ processGroupId, signal });
+            fixture.terminate();
+          },
+        },
+      ),
+    });
+
+    await originalServer.close();
+
+    assert.deepEqual(signals, [
+      { processGroupId: -43_210, signal: "SIGTERM" },
+    ]);
+    await assert.rejects(
+      () => fetch(fixture.url, { signal: AbortSignal.timeout(500) }),
+    );
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("POSIX readiness failure waits for port release before rejecting", async () => {
+  const fixture = await createLoopbackProcessFixture(43_211);
+  try {
+    assert.equal((await fetch(fixture.url)).status, 200);
+
+    await assert.rejects(
+      () => recording.startOriginalServer("/legacy", {
+        platform: "linux",
+        spawnImpl: () => fixture.child,
+        waitForServerImpl: async () => {
+          throw new Error("source readiness failed");
+        },
+        stopProcessTreeImpl: (child, { platform }) => recording.stopProcessTree(
+          child,
+          {
+            platform,
+            terminationTimeoutMs: 50,
+            killProcessGroupImpl: (_processGroupId, signal) => {
+              assert.equal(signal, "SIGTERM");
+              fixture.terminate();
+            },
+          },
+        ),
+      }),
+      /source readiness failed/,
+    );
+
+    await assert.rejects(
+      () => fetch(fixture.url, { signal: AbortSignal.timeout(500) }),
+    );
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("POSIX cleanup escalates to SIGKILL and still waits for exit", async () => {
+  const child = new EventEmitter();
+  child.pid = 43_212;
+  child.exitCode = null;
+  const signals = [];
+
+  await recording.stopProcessTree(child, {
+    platform: "linux",
+    terminationTimeoutMs: 5,
+    killProcessGroupImpl: (_processGroupId, signal) => {
+      signals.push(signal);
+      if (signal === "SIGKILL") {
+        child.exitCode = 137;
+        child.emit("exit", null, "SIGKILL");
+      }
+    },
+  });
+
+  assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
+  assert.equal(child.exitCode, 137);
 });
 
 test("original demo navigation waits for DOM content instead of an idle network", async () => {

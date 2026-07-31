@@ -141,11 +141,48 @@ async function waitForServer(url, child) {
   throw new Error(`Timed out waiting for server at ${url}\n${childOutput(child)}`);
 }
 
+function createChildExitWait(child, timeoutMs) {
+  if (child.exitCode !== null) {
+    return { promise: Promise.resolve(true), cancel() {} };
+  }
+  let finish;
+  const promise = new Promise((resolve) => {
+    const onExit = () => finish(true);
+    const timeout = setTimeout(() => finish(false), timeoutMs);
+    finish = (exited) => {
+      clearTimeout(timeout);
+      child.off("exit", onExit);
+      resolve(exited);
+    };
+    child.once("exit", onExit);
+  });
+  return { promise, cancel: () => finish(false) };
+}
+
+async function signalProcessGroupAndWait(
+  child,
+  signal,
+  timeoutMs,
+  killProcessGroupImpl,
+) {
+  const exitWait = createChildExitWait(child, timeoutMs);
+  try {
+    killProcessGroupImpl(-child.pid, signal);
+  } catch (error) {
+    exitWait.cancel();
+    if (error.code === "ESRCH") return child.exitCode !== null;
+    throw error;
+  }
+  return exitWait.promise;
+}
+
 export async function stopProcessTree(
   child,
   {
     platform = process.platform,
     runCommandImpl = run,
+    terminationTimeoutMs = 5_000,
+    killProcessGroupImpl = process.kill,
   } = {},
 ) {
   if (!child?.pid || child.exitCode !== null) return;
@@ -153,10 +190,25 @@ export async function stopProcessTree(
     await runCommandImpl("taskkill", ["/PID", String(child.pid), "/T", "/F"]);
     return;
   }
-  try {
-    process.kill(-child.pid, "SIGTERM");
-  } catch (error) {
-    if (error.code !== "ESRCH") throw error;
+  if (
+    await signalProcessGroupAndWait(
+      child,
+      "SIGTERM",
+      terminationTimeoutMs,
+      killProcessGroupImpl,
+    )
+  ) {
+    return;
+  }
+  if (
+    !await signalProcessGroupAndWait(
+      child,
+      "SIGKILL",
+      terminationTimeoutMs,
+      killProcessGroupImpl,
+    )
+  ) {
+    throw new Error(`Process group ${child.pid} did not exit after SIGKILL`);
   }
 }
 
