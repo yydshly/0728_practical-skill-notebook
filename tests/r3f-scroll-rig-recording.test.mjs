@@ -13,6 +13,7 @@ import {
   assertGifFile,
   assertLegacySource,
   buildScrollFrames,
+  navigateOriginalPage,
   resolveStaticAsset,
 } from "../scripts/lib/r3f-scroll-rig-recording.mjs";
 
@@ -85,4 +86,20 @@ test("static server resolves files inside the historical build only", () => {
     () => resolveStaticAsset(buildDir, "/../package.json"),
     /outside historical build/,
   );
+});
+
+test("original demo navigation waits for DOM content instead of an idle network", async () => {
+  let call;
+  const page = {
+    goto: async (url, options) => {
+      call = { url, options };
+    },
+  };
+
+  await navigateOriginalPage(page);
+
+  assert.deepEqual(call, {
+    url: "http://127.0.0.1:5223/",
+    options: { waitUntil: "domcontentloaded" },
+  });
 });

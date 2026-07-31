@@ -251,10 +251,14 @@ async function captureFrames(page, stops, frameDirectory) {
   }
 }
 
+export function navigateOriginalPage(page) {
+  return page.goto(ORIGINAL_URL, { waitUntil: "domcontentloaded" });
+}
+
 async function captureOriginal(browser, frameDirectory) {
   const page = await browser.newPage({ viewport: CAPTURE_VIEWPORT });
   try {
-    await page.goto(ORIGINAL_URL, { waitUntil: "networkidle" });
+    await navigateOriginalPage(page);
     await page.getByText(
       "A ScrollScene with a Cube mesh inside using global lights.",
       { exact: true },
