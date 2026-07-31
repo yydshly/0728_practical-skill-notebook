@@ -1,4 +1,3 @@
-import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -10,24 +9,13 @@ export const UPSTREAM_COMMIT = "adf7d47ea5bf3d8e8cf957b0f3667bea752e5f63";
 export const UPSTREAM_REPOSITORY_VERSION = "7.0.7";
 export const UPSTREAM_RESOLVED_VERSION = "6.0.5";
 export const CAPTURE_VIEWPORT = { width: 960, height: 640 };
-export const ORIGINAL_SCROLL_STOPS = [2560, 5368, 6300, 6800];
+export const ORIGINAL_SCROLL_STOPS = [0, 2560, 3600, 5368];
 export const SHOWCASE_SCROLL_STOPS = [0, 1100, 2200, 3800];
 export const RECORDINGS = [
   { id: "original", output: "docs/demos/08-r3f-scroll-rig-original.gif" },
   { id: "lighthouse", output: "docs/demos/08-r3f-scroll-rig-lighthouse.gif" },
 ];
 
-const CONTENT_TYPES = new Map([
-  [".html", "text/html; charset=utf-8"],
-  [".js", "text/javascript; charset=utf-8"],
-  [".css", "text/css; charset=utf-8"],
-  [".json", "application/json; charset=utf-8"],
-  [".png", "image/png"],
-  [".jpg", "image/jpeg"],
-  [".webp", "image/webp"],
-  [".glb", "model/gltf-binary"],
-  [".drc", "application/octet-stream"],
-]);
 const ORIGINAL_URL = "http://127.0.0.1:5223/";
 const SHOWCASE_URL = "http://127.0.0.1:5224/";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -66,24 +54,13 @@ export function assertLegacySource({
 }
 
 export function buildScrollFrames(stops, framesPerStage = 10) {
-  return stops.flatMap((target, stageIndex) => {
+  return Array.from({ length: stops.length * framesPerStage }, (_, frameIndex) => {
+    const stageIndex = Math.floor(frameIndex / framesPerStage);
+    const target = stops[stageIndex];
     const next = stops[stageIndex + 1] ?? target;
-    return Array.from({ length: framesPerStage }, (_, frameIndex) => {
-      if (stageIndex === 0 || stageIndex === stops.length - 1) return target;
-      const progress = frameIndex / framesPerStage;
-      return Math.round(target + (next - target) * progress);
-    });
+    const progress = (frameIndex % framesPerStage) / framesPerStage;
+    return Math.round(target + (next - target) * progress);
   });
-}
-
-export function resolveStaticAsset(buildDir, pathname) {
-  const relative = decodeURIComponent(pathname === "/" ? "index.html" : pathname.slice(1));
-  const resolved = path.resolve(buildDir, relative);
-  const boundary = `${path.resolve(buildDir)}${path.sep}`;
-  if (resolved !== path.join(path.resolve(buildDir), "index.html") && !resolved.startsWith(boundary)) {
-    throw new Error(`Static asset is outside historical build: ${pathname}`);
-  }
-  return resolved;
 }
 
 function run(command, args, { cwd } = {}) {
@@ -143,39 +120,6 @@ async function inspectLegacySource(legacyDir) {
   assertLegacySource({ legacyDir, head, repositoryVersion, resolvedVersion });
 }
 
-async function startStaticServer(buildDir, port = 5223) {
-  const server = createServer(async (request, response) => {
-    try {
-      const requestUrl = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
-      let assetPath = resolveStaticAsset(buildDir, requestUrl.pathname);
-      try {
-        response.setHeader(
-          "Content-Type",
-          CONTENT_TYPES.get(path.extname(assetPath)) ?? "application/octet-stream",
-        );
-        response.end(await readFile(assetPath));
-      } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-        assetPath = path.join(buildDir, "index.html");
-        response.setHeader("Content-Type", "text/html; charset=utf-8");
-        response.end(await readFile(assetPath));
-      }
-    } catch (error) {
-      response.statusCode = 500;
-      response.end(error.message);
-    }
-  });
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(port, "127.0.0.1", resolve);
-  });
-  return {
-    url: `http://127.0.0.1:${port}/`,
-    close: () => new Promise((resolve, reject) =>
-      server.close((error) => error ? reject(error) : resolve())),
-  };
-}
-
 function childOutput(child) {
   return `stdout:\n${child.stdoutText}\nstderr:\n${child.stderrText}`;
 }
@@ -184,7 +128,7 @@ async function waitForServer(url, child) {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
-      throw new Error(`Vite exited before serving ${url}\n${childOutput(child)}`);
+      throw new Error(`Server exited before serving ${url}\n${childOutput(child)}`);
     }
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
@@ -194,7 +138,70 @@ async function waitForServer(url, child) {
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  throw new Error(`Timed out waiting for Vite at ${url}\n${childOutput(child)}`);
+  throw new Error(`Timed out waiting for server at ${url}\n${childOutput(child)}`);
+}
+
+export async function stopProcessTree(
+  child,
+  {
+    platform = process.platform,
+    runCommandImpl = run,
+  } = {},
+) {
+  if (!child?.pid || child.exitCode !== null) return;
+  if (platform === "win32") {
+    await runCommandImpl("taskkill", ["/PID", String(child.pid), "/T", "/F"]);
+    return;
+  }
+  try {
+    process.kill(-child.pid, "SIGTERM");
+  } catch (error) {
+    if (error.code !== "ESRCH") throw error;
+  }
+}
+
+export async function startOriginalServer(
+  legacyDir,
+  {
+    platform = process.platform,
+    spawnImpl = spawn,
+    waitForServerImpl = waitForServer,
+    stopProcessTreeImpl = stopProcessTree,
+  } = {},
+) {
+  const environment = {
+    ...process.env,
+    PORT: "5223",
+    HOST: "127.0.0.1",
+    BROWSER: "none",
+    CI: "true",
+  };
+  if (platform === "win32") {
+    environment.NODE_OPTIONS = "--openssl-legacy-provider";
+  }
+  const child = spawnImpl(
+    platform === "win32" ? (process.env.ComSpec ?? "cmd.exe") : "npm",
+    platform === "win32" ? ["/d", "/s", "/c", "npm start"] : ["start"],
+    {
+      cwd: path.join(legacyDir, "examples"),
+      env: environment,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      detached: platform !== "win32",
+    },
+  );
+  child.stdoutText = "";
+  child.stderrText = "";
+  child.stdout?.on("data", (chunk) => { child.stdoutText += chunk; });
+  child.stderr?.on("data", (chunk) => { child.stderrText += chunk; });
+  const close = () => stopProcessTreeImpl(child, { platform });
+  try {
+    await waitForServerImpl(ORIGINAL_URL, child);
+    return { url: ORIGINAL_URL, child, close };
+  } catch (error) {
+    await close();
+    throw error;
+  }
 }
 
 async function stopShowcaseServer(server) {
@@ -345,10 +352,7 @@ export async function recordR3fScrollRigDemos({
   let showcaseServer;
   let browser;
   try {
-    originalServer = await startStaticServer(
-      path.join(resolvedLegacyDir, "examples", "build"),
-      5223,
-    );
+    originalServer = await startOriginalServer(resolvedLegacyDir);
     showcaseServer = await startShowcaseServer(rootDir);
     browser = await (await loadChromium(rootDir)).chromium.launch({
       headless: true,

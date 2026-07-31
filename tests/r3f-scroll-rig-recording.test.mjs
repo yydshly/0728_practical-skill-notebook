@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import * as recording from "../scripts/lib/r3f-scroll-rig-recording.mjs";
 import {
   CAPTURE_VIEWPORT,
   ORIGINAL_SCROLL_STOPS,
@@ -15,7 +16,6 @@ import {
   buildScrollFrames,
   navigateLighthousePage,
   navigateOriginalPage,
-  resolveStaticAsset,
   scrollPageTo,
   waitForLighthouseHeading,
   waitForOriginalReadiness,
@@ -29,7 +29,7 @@ test("recording contract pins source, outputs, viewport, and story stops", () =>
     "docs/demos/08-r3f-scroll-rig-original.gif",
     "docs/demos/08-r3f-scroll-rig-lighthouse.gif",
   ]);
-  assert.deepEqual(ORIGINAL_SCROLL_STOPS, [2560, 5368, 6300, 6800]);
+  assert.deepEqual(ORIGINAL_SCROLL_STOPS, [0, 2560, 3600, 5368]);
   assert.deepEqual(SHOWCASE_SCROLL_STOPS, [0, 1100, 2200, 3800]);
 });
 
@@ -70,16 +70,13 @@ test("legacy source validation requires the pinned commit and versions", () => {
   );
 });
 
-test("four story stops become a forty-frame eight-second sequence", () => {
-  const frames = buildScrollFrames([0, 720, 1440, 2280], 10);
-  assert.equal(frames.length, 40);
-  assert.deepEqual(
-    [frames[0], frames[10], frames[20], frames[30]],
-    [0, 720, 1440, 2280],
-  );
-  assert.equal(frames[9], 0);
-  assert.equal(frames.at(-1), 2280);
-  assert.ok(frames.every((value, index) => index === 0 || value >= frames[index - 1]));
+test("original story stops form forty continuous frames with exact ten-frame anchors", () => {
+  assert.deepEqual(buildScrollFrames(ORIGINAL_SCROLL_STOPS, 10), [
+    0, 256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304,
+    2560, 2664, 2768, 2872, 2976, 3080, 3184, 3288, 3392, 3496,
+    3600, 3777, 3954, 4130, 4307, 4484, 4661, 4838, 5014, 5191,
+    5368, 5368, 5368, 5368, 5368, 5368, 5368, 5368, 5368, 5368,
+  ]);
 });
 
 test("historical scroll capture bypasses the demo's smoothing override", async () => {
@@ -131,17 +128,90 @@ test("historical scroll capture bypasses the demo's smoothing override", async (
   assert.equal(paintFrames, 2);
 });
 
-test("static server resolves files inside the historical build only", () => {
-  const buildDir = path.resolve("legacy/build");
-  assert.equal(
-    resolveStaticAsset(buildDir, "/static/js/main.js"),
-    path.join(buildDir, "static", "js", "main.js"),
+test("original demo starts npm source entry through the Windows command interpreter", async () => {
+  const child = { pid: 4321, exitCode: null };
+  let spawnCall;
+  let waitCall;
+  let stoppedChild;
+  const server = await recording.startOriginalServer("C:\\legacy", {
+    platform: "win32",
+    spawnImpl: (command, args, options) => {
+      spawnCall = { command, args, options };
+      return child;
+    },
+    waitForServerImpl: async (url, spawnedChild) => {
+      waitCall = { url, spawnedChild };
+    },
+    stopProcessTreeImpl: async (spawnedChild) => {
+      stoppedChild = spawnedChild;
+    },
+  });
+
+  assert.equal(spawnCall.command, process.env.ComSpec ?? "cmd.exe");
+  assert.deepEqual(spawnCall.args, ["/d", "/s", "/c", "npm start"]);
+  assert.equal(spawnCall.options.cwd, path.join("C:\\legacy", "examples"));
+  assert.deepEqual(
+    {
+      PORT: spawnCall.options.env.PORT,
+      HOST: spawnCall.options.env.HOST,
+      BROWSER: spawnCall.options.env.BROWSER,
+      CI: spawnCall.options.env.CI,
+      NODE_OPTIONS: spawnCall.options.env.NODE_OPTIONS,
+    },
+    {
+      PORT: "5223",
+      HOST: "127.0.0.1",
+      BROWSER: "none",
+      CI: "true",
+      NODE_OPTIONS: "--openssl-legacy-provider",
+    },
   );
-  assert.equal(resolveStaticAsset(buildDir, "/"), path.join(buildDir, "index.html"));
-  assert.throws(
-    () => resolveStaticAsset(buildDir, "/../package.json"),
-    /outside historical build/,
+  assert.deepEqual(waitCall, {
+    url: "http://127.0.0.1:5223/",
+    spawnedChild: child,
+  });
+  await server.close();
+  assert.equal(stoppedChild, child);
+});
+
+test("original demo startup failure stops the spawned process tree", async () => {
+  const child = { pid: 4321, exitCode: null };
+  let stoppedChild;
+
+  await assert.rejects(
+    () => recording.startOriginalServer("C:\\legacy", {
+      platform: "win32",
+      spawnImpl: () => child,
+      waitForServerImpl: async () => {
+        throw new Error("source compile failed");
+      },
+      stopProcessTreeImpl: async (spawnedChild) => {
+        stoppedChild = spawnedChild;
+      },
+    }),
+    /source compile failed/,
   );
+
+  assert.equal(stoppedChild, child);
+});
+
+test("Windows cleanup terminates the original demo and all descendants", async () => {
+  let runCall;
+
+  await recording.stopProcessTree(
+    { pid: 4321, exitCode: null },
+    {
+      platform: "win32",
+      runCommandImpl: async (command, args) => {
+        runCall = { command, args };
+      },
+    },
+  );
+
+  assert.deepEqual(runCall, {
+    command: "taskkill",
+    args: ["/PID", "4321", "/T", "/F"],
+  });
 });
 
 test("original demo navigation waits for DOM content instead of an idle network", async () => {
