@@ -13,6 +13,7 @@ import {
   assertGifFile,
   assertLegacySource,
   buildScrollFrames,
+  navigateLighthousePage,
   navigateOriginalPage,
   resolveStaticAsset,
 } from "../scripts/lib/r3f-scroll-rig-recording.mjs";
@@ -100,6 +101,22 @@ test("original demo navigation waits for DOM content instead of an idle network"
 
   assert.deepEqual(call, {
     url: "http://127.0.0.1:5223/",
+    options: { waitUntil: "domcontentloaded" },
+  });
+});
+
+test("lighthouse navigation waits for DOM content instead of an idle network", async () => {
+  let call;
+  const page = {
+    goto: async (url, options) => {
+      call = { url, options };
+    },
+  };
+
+  await navigateLighthousePage(page);
+
+  assert.deepEqual(call, {
+    url: "http://127.0.0.1:5224/",
     options: { waitUntil: "domcontentloaded" },
   });
 });

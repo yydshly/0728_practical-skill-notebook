@@ -255,6 +255,10 @@ export function navigateOriginalPage(page) {
   return page.goto(ORIGINAL_URL, { waitUntil: "domcontentloaded" });
 }
 
+export function navigateLighthousePage(page) {
+  return page.goto(SHOWCASE_URL, { waitUntil: "domcontentloaded" });
+}
+
 async function captureOriginal(browser, frameDirectory) {
   const page = await browser.newPage({ viewport: CAPTURE_VIEWPORT });
   try {
@@ -272,7 +276,7 @@ async function captureOriginal(browser, frameDirectory) {
 async function captureLighthouse(browser, frameDirectory) {
   const page = await browser.newPage({ viewport: CAPTURE_VIEWPORT });
   try {
-    await page.goto(SHOWCASE_URL, { waitUntil: "networkidle" });
+    await navigateLighthousePage(page);
     await page.getByRole("heading", { name: "雾岚灯塔", exact: true }).waitFor();
     await page.getByRole("button", { name: "稳定构图", exact: true }).waitFor();
     await page.waitForFunction(
