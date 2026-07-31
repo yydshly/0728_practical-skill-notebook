@@ -12,6 +12,8 @@ import {
   UPSTREAM_REPOSITORY_VERSION,
   assertGifFile,
   assertLegacySource,
+  buildScrollFrames,
+  resolveStaticAsset,
 } from "../scripts/lib/r3f-scroll-rig-recording.mjs";
 
 test("recording contract pins source, outputs, viewport, and story stops", () => {
@@ -56,5 +58,27 @@ test("legacy source validation requires the pinned commit and versions", () => {
   assert.throws(
     () => assertLegacySource({ ...source, resolvedVersion: "latest" }),
     /legacy source resolved version/,
+  );
+});
+
+test("four story stops become a forty-frame eight-second sequence", () => {
+  const frames = buildScrollFrames([0, 720, 1440, 2280], 10);
+  assert.equal(frames.length, 40);
+  assert.equal(frames[0], 0);
+  assert.equal(frames[9], 0);
+  assert.equal(frames.at(-1), 2280);
+  assert.ok(frames.every((value, index) => index === 0 || value >= frames[index - 1]));
+});
+
+test("static server resolves files inside the historical build only", () => {
+  const buildDir = path.resolve("legacy/build");
+  assert.equal(
+    resolveStaticAsset(buildDir, "/static/js/main.js"),
+    path.join(buildDir, "static", "js", "main.js"),
+  );
+  assert.equal(resolveStaticAsset(buildDir, "/"), path.join(buildDir, "index.html"));
+  assert.throws(
+    () => resolveStaticAsset(buildDir, "/../package.json"),
+    /outside historical build/,
   );
 });
