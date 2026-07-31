@@ -137,6 +137,14 @@ npm run dev
 
 这是对 [brunosimon/my-room-in-3d](https://github.com/brunosimon/my-room-in-3d) 的源码与体验研究。上游作品把个人作品集组织成一个可自由观察的 3D 房间：模型、灯光、动态屏幕和局部特效共同构成空间化的内容入口。
 
+**参考演示（上游运行版本）**：点击下图可体验原始 3D 房间；这不是本仓库自行开发或托管的产品。
+
+<a href="https://my-room-in-3d.vercel.app"><img src="https://raw.githubusercontent.com/brunosimon/my-room-in-3d/5d00b3f870da81f103e901e0d12e20bbcc816834/static/social/share-1200x630.png" alt="Bruno Simon My Room in 3D 的上游参考预览图" width="720"></a>
+
+- [体验上游在线演示](https://my-room-in-3d.vercel.app)
+- [查看上游源码](https://github.com/brunosimon/my-room-in-3d)
+- [阅读本仓库的研究归档](./docs/research/my-room-in-3d.md)
+
 对我们的意义不在于复刻一间房，而在于提炼“**3D 场景作为品牌入口与内容导航，常规页面承载高效阅读和转化**”的产品模式。它适合个人作品集、创意工作室、互动展厅与叙事型产品介绍；不适合作为信息检索、表单填写或高频交易流程的唯一界面。
 
 子项目以固定上游提交 [`5d00b3f`](https://github.com/brunosimon/my-room-in-3d/tree/5d00b3f870da81f103e901e0d12e20bbcc816834) 保存为研究参考；技术结论、产品化缺口和后续可复用架构见 [研究笔记](./docs/research/my-room-in-3d.md)。上游源码、模型和媒体资产的权利归原作者及各自权利人所有；本仓库不将它们表述为自研资产，也不以本研究作为再发布或商用授权依据。
