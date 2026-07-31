@@ -9,7 +9,7 @@ export const UPSTREAM_COMMIT = "adf7d47ea5bf3d8e8cf957b0f3667bea752e5f63";
 export const UPSTREAM_REPOSITORY_VERSION = "7.0.7";
 export const UPSTREAM_RESOLVED_VERSION = "6.0.5";
 export const CAPTURE_VIEWPORT = { width: 960, height: 640 };
-export const ORIGINAL_SCROLL_STOPS = [0, 2560, 3600, 5368];
+export const ORIGINAL_SCROLL_STOPS = [0, 1280, 2560, 3600];
 export const SHOWCASE_SCROLL_STOPS = [0, 1100, 2200, 3800];
 export const RECORDINGS = [
   { id: "original", output: "docs/demos/08-r3f-scroll-rig-original.gif" },

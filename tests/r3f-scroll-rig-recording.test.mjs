@@ -58,7 +58,7 @@ test("recording contract pins source, outputs, viewport, and story stops", () =>
     "docs/demos/08-r3f-scroll-rig-original.gif",
     "docs/demos/08-r3f-scroll-rig-lighthouse.gif",
   ]);
-  assert.deepEqual(ORIGINAL_SCROLL_STOPS, [0, 2560, 3600, 5368]);
+  assert.deepEqual(ORIGINAL_SCROLL_STOPS, [0, 1280, 2560, 3600]);
   assert.deepEqual(SHOWCASE_SCROLL_STOPS, [0, 1100, 2200, 3800]);
 });
 
@@ -99,12 +99,12 @@ test("legacy source validation requires the pinned commit and versions", () => {
   );
 });
 
-test("original story stops form forty continuous frames with exact ten-frame anchors", () => {
+test("original opening, sticky, inline, and viewport stops anchor continuous frames", () => {
   assert.deepEqual(buildScrollFrames(ORIGINAL_SCROLL_STOPS, 10), [
-    0, 256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304,
+    0, 128, 256, 384, 512, 640, 768, 896, 1024, 1152,
+    1280, 1408, 1536, 1664, 1792, 1920, 2048, 2176, 2304, 2432,
     2560, 2664, 2768, 2872, 2976, 3080, 3184, 3288, 3392, 3496,
-    3600, 3777, 3954, 4130, 4307, 4484, 4661, 4838, 5014, 5191,
-    5368, 5368, 5368, 5368, 5368, 5368, 5368, 5368, 5368, 5368,
+    3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600,
   ]);
 });
 
