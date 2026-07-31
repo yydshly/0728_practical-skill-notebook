@@ -1,3 +1,6 @@
 [submodule "mengto-skills-showcase/skills-source/MengTo-Skills"]
 	path = mengto-skills-showcase/skills-source/MengTo-Skills
 	url = https://github.com/MengTo/Skills.git
+[submodule "my-room-in-3d-research"]
+	path = my-room-in-3d-research
+	url = https://github.com/brunosimon/my-room-in-3d.git

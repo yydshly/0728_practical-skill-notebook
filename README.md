@@ -14,6 +14,7 @@
 | 06 | [《雾村：逃离》](./rural-mutation-escape/) | `rural-mutation-escape` | 第三人称农村变异逃生原型与 AI 辅助游戏开发研究。 |
 | 07 | [MengTo Skills 三产品能力展](./mengto-skills-showcase/) | `mengto-skills-showcase` | 用固定、可审计的 MengTo Skills 工作流，完成 3D 资产审阅、等距动作游戏与复杂商品配置三款独立产品，并由统一中文展厅串联体验与验证。 |
 | 08 | [Finesse Skill 产品研究](./finesse-skill-product-research/) | `finesse-skill-product-research` | 文档与研究计划：梳理 Finesse 能力、受控验证方法与产品机会；交互研究展厅仍在计划中，当前不可运行。 |
+| 09 | [My Room in 3D 空间化产品承载研究](./my-room-in-3d-research/) | `my-room-in-3d-research` | 研究 Bruno Simon 的 3D 房间作品集如何将空间、内容入口与动态媒体组合为可探索的个人/产品展示形态。 |
 
 ## 01 · 雾屿灯塔
 
@@ -131,6 +132,14 @@ npm run dev
 [产品机会方向](./finesse-skill-product-research/docs/PRODUCT-DIRECTIONS.md)提出六个待验证方向：Design Brief Router、AI Design Review Console、Design Model Studio、Multi-Register Prototype Lab、Pattern Knowledge Base 与 Team Governance Layer。推荐主线是“设计决策与审计工作台”：将输入路由、生成前约束与分层证据审计连接成可追溯闭环；这只是研究排序，不是已上线产品。
 
 当前交付为文档。未来的[研究展厅计划](./finesse-skill-product-research/docs/SHOWCASE-PLAN.md)定义了能力总览、决策实验室、三路线对照、审计台和机会地图，但没有展厅代码、交互、数据接入、截图、部署、性能结果或验证结论，因而不能运行或作为功能证明。
+
+## 09 · My Room in 3D 空间化产品承载研究
+
+这是对 [brunosimon/my-room-in-3d](https://github.com/brunosimon/my-room-in-3d) 的源码与体验研究。上游作品把个人作品集组织成一个可自由观察的 3D 房间：模型、灯光、动态屏幕和局部特效共同构成空间化的内容入口。
+
+对我们的意义不在于复刻一间房，而在于提炼“**3D 场景作为品牌入口与内容导航，常规页面承载高效阅读和转化**”的产品模式。它适合个人作品集、创意工作室、互动展厅与叙事型产品介绍；不适合作为信息检索、表单填写或高频交易流程的唯一界面。
+
+子项目以固定上游提交 [`5d00b3f`](https://github.com/brunosimon/my-room-in-3d/tree/5d00b3f870da81f103e901e0d12e20bbcc816834) 保存为研究参考；技术结论、产品化缺口和后续可复用架构见 [研究笔记](./docs/research/my-room-in-3d.md)。上游源码、模型和媒体资产的权利归原作者及各自权利人所有；本仓库不将它们表述为自研资产，也不以本研究作为再发布或商用授权依据。
 
 ## 获取项目库代码
 
