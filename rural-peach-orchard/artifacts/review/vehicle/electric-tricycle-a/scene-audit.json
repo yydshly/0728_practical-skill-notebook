@@ -1,0 +1,114 @@
+{
+  "assetId": "vehicle.electric-tricycle-a",
+  "cargoOccupancy": {
+    "bedInternal": [
+      1.5,
+      1.06,
+      0.42
+    ],
+    "crateDimensions": [
+      0.5,
+      0.35,
+      0.28
+    ],
+    "formalAssetContainsCrates": false,
+    "layout": "2 across X by 3 along Y"
+  },
+  "collisionObjectCount": 10,
+  "dimensions": {
+    "heightZ": 1.3701,
+    "lengthY": 3.0087,
+    "maximum": [
+      0.605,
+      1.593,
+      1.3614
+    ],
+    "minimum": [
+      -0.605,
+      -1.4157,
+      -0.0087
+    ],
+    "widthX": 1.21
+  },
+  "exportIsolation": {
+    "cameraCountInExportCollections": 0,
+    "lightCountInExportCollections": 0,
+    "visualCollisionSharedObjects": 0
+  },
+  "imageTextureCount": 0,
+  "materials": [
+    "M_Trike_Chassis",
+    "M_Trike_Paint",
+    "M_Trike_Rubber",
+    "M_Trike_Utility"
+  ],
+  "sceneTriangles": {
+    "collision": 264,
+    "visual": 54718
+  },
+  "socketCount": 11,
+  "socketLocations": {
+    "cargo_slot_01": [
+      -0.25,
+      0.35,
+      0.665
+    ],
+    "cargo_slot_02": [
+      0.25,
+      0.35,
+      0.665
+    ],
+    "cargo_slot_03": [
+      -0.25,
+      0.75,
+      0.665
+    ],
+    "cargo_slot_04": [
+      0.25,
+      0.75,
+      0.665
+    ],
+    "cargo_slot_05": [
+      -0.25,
+      1.15,
+      0.665
+    ],
+    "cargo_slot_06": [
+      0.25,
+      1.15,
+      0.665
+    ],
+    "driver_seat": [
+      0.0,
+      -0.19,
+      0.8
+    ],
+    "exit_left": [
+      -0.55,
+      -0.34,
+      0.0
+    ],
+    "wheel_front": [
+      0.0,
+      -1.1,
+      0.29
+    ],
+    "wheel_rear_left": [
+      -0.47,
+      0.9,
+      0.275
+    ],
+    "wheel_rear_right": [
+      0.47,
+      0.9,
+      0.275
+    ]
+  },
+  "sourceReloadedFrom": "D:\\codex_project_work\\0728_some_github\\rural-peach-orchard\\resources\\blender\\vehicle\\electric-tricycle-a.blend",
+  "visualObjectCount": 288,
+  "wheelTireObjects": [
+    "wheel_front_tire_sidewall",
+    "wheel_rear_left_tire_sidewall",
+    "wheel_rear_right_tire_sidewall"
+  ]
+}

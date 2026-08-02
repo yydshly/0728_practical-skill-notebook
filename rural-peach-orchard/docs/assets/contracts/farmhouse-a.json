@@ -1,0 +1,70 @@
+{
+  "assetId": "environment.farmhouse-a",
+  "kind": "environment",
+  "units": "meter",
+  "upAxis": "Y",
+  "forwardAxis": "-Z",
+  "origin": "ground-center",
+  "lods": [
+    {
+      "level": 0,
+      "maxDistance": 35,
+      "maxTriangles": 40000
+    },
+    {
+      "level": 1,
+      "maxDistance": 75,
+      "maxTriangles": 18000
+    },
+    {
+      "level": 2,
+      "maxDistance": 150,
+      "maxTriangles": 4000
+    }
+  ],
+  "textureBudget": {
+    "maxDimension": 2048,
+    "maxTextureCount": 2
+  },
+  "materialBudget": {
+    "maxMaterials": 6
+  },
+  "requiredCollections": [
+    "VISUAL",
+    "COLLISION",
+    "SOCKETS",
+    "RIG"
+  ],
+  "requiredNodes": [
+    "entry_socket",
+    "yard_socket"
+  ],
+  "requiredAnimations": [],
+  "requiredAnimationEvents": {},
+  "creationRoute": "original",
+  "placementLandmarks": {
+    "space": "blender-authoring",
+    "upAxis": "Z",
+    "forwardAxis": "-Y",
+    "groundCenter": [
+      0,
+      0,
+      0
+    ],
+    "mainThresholdCenter": [
+      0,
+      -2.9,
+      0
+    ],
+    "entrySocket": [
+      0,
+      -3.05,
+      0
+    ],
+    "yardSocket": [
+      0,
+      -6.2,
+      0
+    ]
+  }
+}

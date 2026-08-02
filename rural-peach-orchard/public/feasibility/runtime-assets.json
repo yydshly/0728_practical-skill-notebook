@@ -1,0 +1,51 @@
+{
+  "version": 2,
+  "vehicle": {
+    "assetId": "vehicle.electric-tricycle-a",
+    "upAxis": "Y",
+    "forwardAxis": "-Z",
+    "chassisColliderNodes": [
+      "box_chassis", "box_driver_mass", "box_bed_floor",
+      "box_bed_left_wall", "box_bed_right_wall",
+      "box_bed_front_wall", "box_bed_rear_wall"
+    ],
+    "wheelEnvelopeNodes": [
+      "convex_front_wheel", "convex_rear_left", "convex_rear_right"
+    ],
+    "anchors": {
+      "seat": "driver_seat", "exit": "exit_left",
+      "frontWheel": "wheel_front", "rearLeftWheel": "wheel_rear_left",
+      "rearRightWheel": "wheel_rear_right", "cargo": "cargo_slot_01"
+    },
+    "emptyMassKg": 420,
+    "centerOfMass": [0, 0.4, -0.12],
+    "frontRadiusM": 0.29,
+    "rearRadiusM": 0.275,
+    "suspensionRestM": 0.18,
+    "suspensionTravelM": 0.12,
+    "springNPerM": 26000,
+    "compressionDampingNsPerM": 3800,
+    "reboundDampingNsPerM": 4200,
+    "maxDriveForceN": 2600,
+    "maxBrakeForceN": 6000,
+    "maxSteerRad": 0.48,
+    "maxSpeedMps": 5,
+    "lateralGripCoefficient": 1.15
+  },
+  "character": {
+    "assetId": "character.farmer-a-base",
+    "capsuleHalfHeightM": 0.62,
+    "capsuleRadiusM": 0.22,
+    "stepHeightM": 0.24,
+    "maxSlopeDeg": 42
+  },
+  "environment": {
+    "worldAssetId": "environment.orchard-world-overall-v1",
+    "treeAssetId": "environment.peach-tree-overall-v1",
+    "treeVariantNodes": {
+      "a": "peach_tree_variant_a",
+      "b": "peach_tree_variant_b",
+      "c": "peach_tree_variant_c"
+    }
+  }
+}

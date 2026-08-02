@@ -1,0 +1,8 @@
+{
+  "assetId": "template.empty",
+  "requiredCollections": ["VISUAL", "COLLISION", "SOCKETS", "RIG"],
+  "requiredNodes": [],
+  "requiredAnimations": [],
+  "requiredAnimationEvents": {},
+  "allowEmpty": true
+}

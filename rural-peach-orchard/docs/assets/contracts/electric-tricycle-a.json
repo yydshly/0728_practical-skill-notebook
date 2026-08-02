@@ -1,0 +1,44 @@
+{
+  "assetId": "vehicle.electric-tricycle-a",
+  "kind": "vehicle",
+  "units": "meter",
+  "upAxis": "Y",
+  "forwardAxis": "-Z",
+  "origin": "ground-center",
+  "lods": [
+    {
+      "level": 0,
+      "maxDistance": 30,
+      "maxTriangles": 60000
+    }
+  ],
+  "textureBudget": {
+    "maxDimension": 2048,
+    "maxTextureCount": 6
+  },
+  "materialBudget": {
+    "maxMaterials": 4
+  },
+  "requiredCollections": [
+    "VISUAL",
+    "COLLISION",
+    "SOCKETS",
+    "RIG"
+  ],
+  "requiredNodes": [
+    "driver_seat",
+    "exit_left",
+    "wheel_front",
+    "wheel_rear_left",
+    "wheel_rear_right",
+    "cargo_slot_01",
+    "cargo_slot_02",
+    "cargo_slot_03",
+    "cargo_slot_04",
+    "cargo_slot_05",
+    "cargo_slot_06"
+  ],
+  "requiredAnimations": [],
+  "requiredAnimationEvents": {},
+  "creationRoute": "original"
+}

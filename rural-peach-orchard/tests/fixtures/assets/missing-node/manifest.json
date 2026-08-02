@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "assetId": "prop.missing-node",
+      "kind": "prop",
+      "sourceId": "source.fixture.missing-node",
+      "visual": "tests/fixtures/assets/missing-node/visual.glb",
+      "collider": "tests/fixtures/assets/missing-node/collider.glb",
+      "blenderSource": "tests/fixtures/assets/missing-node/source.blend",
+      "units": "meter",
+      "upAxis": "Y",
+      "forwardAxis": "-Z",
+      "origin": "ground-center",
+      "lods": [
+        { "level": 0, "maxDistance": 30, "maxTriangles": 99 }
+      ],
+      "textureBudget": { "maxDimension": 1, "maxTextureCount": 1 },
+      "materialBudget": { "maxMaterials": 1 },
+      "requiredNodes": ["interaction_anchor"],
+      "requiredAnimations": ["idle"],
+      "requiredAnimationEvents": { "idle": ["ready"] },
+      "maxInstances": 1,
+      "critical": false
+    }
+  ]
+}

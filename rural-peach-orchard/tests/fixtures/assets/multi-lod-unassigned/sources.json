@@ -1,0 +1,11 @@
+[
+  {
+    "sourceId": "source.fixture.multi-lod-unassigned",
+    "acquisition": "original",
+    "author": "Orchard test fixture generator",
+    "sourceUrl": null,
+    "license": "Test fixture only",
+    "licenseFile": "tests/fixtures/assets/multi-lod-unassigned/license.txt",
+    "modifiedByProject": true
+  }
+]

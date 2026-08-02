@@ -1,0 +1,11 @@
+[
+  {
+    "sourceId": "source.fixture.valid-minimal",
+    "acquisition": "original",
+    "author": "Orchard test fixture generator",
+    "sourceUrl": null,
+    "license": "Test fixture only",
+    "licenseFile": "tests/fixtures/assets/valid-minimal/license.txt",
+    "modifiedByProject": true
+  }
+]

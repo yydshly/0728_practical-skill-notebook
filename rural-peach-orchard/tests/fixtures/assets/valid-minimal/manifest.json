@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "assetId": "prop.valid-minimal",
+      "kind": "prop",
+      "sourceId": "source.fixture.valid-minimal",
+      "visual": "tests/fixtures/assets/valid-minimal/visual.glb",
+      "collider": "tests/fixtures/assets/valid-minimal/collider.glb",
+      "blenderSource": "tests/fixtures/assets/valid-minimal/source.blend",
+      "units": "meter",
+      "upAxis": "Y",
+      "forwardAxis": "-Z",
+      "origin": "ground-center",
+      "lods": [
+        { "level": 0, "maxDistance": 30, "maxTriangles": 99 }
+      ],
+      "textureBudget": { "maxDimension": 1, "maxTextureCount": 1 },
+      "materialBudget": { "maxMaterials": 1 },
+      "requiredNodes": ["interaction_anchor"],
+      "requiredAnimations": ["idle"],
+      "requiredAnimationEvents": { "idle": ["ready", "loop"] },
+      "maxInstances": 1,
+      "critical": false
+    }
+  ]
+}

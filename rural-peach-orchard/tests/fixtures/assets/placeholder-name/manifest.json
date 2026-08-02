@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "assetId": "prop.placeholder-crate",
+      "kind": "prop",
+      "sourceId": "source.fixture.placeholder-name",
+      "visual": "tests/fixtures/assets/placeholder-name/visual.glb",
+      "collider": "tests/fixtures/assets/placeholder-name/collider.glb",
+      "blenderSource": "tests/fixtures/assets/placeholder-name/source.blend",
+      "units": "meter",
+      "upAxis": "Y",
+      "forwardAxis": "-Z",
+      "origin": "ground-center",
+      "lods": [
+        { "level": 0, "maxDistance": 30, "maxTriangles": 99 }
+      ],
+      "textureBudget": { "maxDimension": 1, "maxTextureCount": 1 },
+      "materialBudget": { "maxMaterials": 1 },
+      "requiredNodes": [],
+      "requiredAnimations": ["idle"],
+      "requiredAnimationEvents": { "idle": ["ready"] },
+      "maxInstances": 1,
+      "critical": false
+    }
+  ]
+}

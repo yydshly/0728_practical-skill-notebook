@@ -1,0 +1,11 @@
+[
+  {
+    "sourceId": "source.fixture.missing-node",
+    "acquisition": "original",
+    "author": "Orchard test fixture generator",
+    "sourceUrl": null,
+    "license": "Test fixture only",
+    "licenseFile": "tests/fixtures/assets/missing-node/license.txt",
+    "modifiedByProject": true
+  }
+]

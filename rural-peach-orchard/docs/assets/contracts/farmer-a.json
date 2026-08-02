@@ -1,0 +1,84 @@
+{
+  "assetId": "character.farmer-a",
+  "kind": "character",
+  "units": "meter",
+  "upAxis": "Y",
+  "forwardAxis": "-Z",
+  "origin": "root-bone",
+  "lods": [
+    {
+      "level": 0,
+      "maxDistance": 25,
+      "maxTriangles": 60000
+    }
+  ],
+  "textureBudget": {
+    "maxDimension": 2048,
+    "maxTextureCount": 6
+  },
+  "materialBudget": {
+    "maxMaterials": 4
+  },
+  "requiredCollections": [
+    "VISUAL",
+    "COLLISION",
+    "SOCKETS",
+    "RIG"
+  ],
+  "requiredNodes": [
+    "root",
+    "pelvis",
+    "spine_01",
+    "spine_02",
+    "neck",
+    "head",
+    "clavicle_l",
+    "upper_arm_l",
+    "lower_arm_l",
+    "hand_l",
+    "clavicle_r",
+    "upper_arm_r",
+    "lower_arm_r",
+    "hand_r",
+    "thigh_l",
+    "calf_l",
+    "foot_l",
+    "thigh_r",
+    "calf_r",
+    "foot_r"
+  ],
+  "requiredAnimations": [
+    "idle",
+    "walk",
+    "enter_vehicle",
+    "drive",
+    "exit_vehicle",
+    "pick_low",
+    "pick_mid",
+    "pick_high",
+    "carry_crate",
+    "lift_crate",
+    "load_crate"
+  ],
+  "requiredAnimationEvents": {
+    "pick_low": [
+      "fruit_contact"
+    ],
+    "pick_mid": [
+      "fruit_contact"
+    ],
+    "pick_high": [
+      "fruit_contact"
+    ],
+    "carry_crate": [
+      "crate_gripped"
+    ],
+    "lift_crate": [
+      "crate_gripped"
+    ],
+    "load_crate": [
+      "crate_released"
+    ]
+  },
+  "creationRoute": "original"
+}

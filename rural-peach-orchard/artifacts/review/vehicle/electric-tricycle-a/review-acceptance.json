@@ -1,0 +1,142 @@
+{
+  "assetId": "vehicle.electric-tricycle-a",
+  "cargoFixture": {
+    "count": 6,
+    "dimensionsM": [
+      0.5,
+      0.35,
+      0.28
+    ],
+    "features": [
+      "ventilated grid",
+      "short-side handholds",
+      "stacking rim",
+      "four feet"
+    ],
+    "reviewOnly": true,
+    "type": "contemporary-ventilated-plastic-crate"
+  },
+  "driver": {
+    "cameraLensMm": 50,
+    "cameraPositionM": [
+      0.0,
+      1.1,
+      1.55
+    ],
+    "cameraSensorWidthMm": 40,
+    "cameraTargetM": [
+      0.0,
+      -0.62,
+      0.76
+    ],
+    "contactNote": "Hands target grips and feet target footboards; contact gaps are not non-contact clearance failures.",
+    "fixture": "review-only-1.70m-articulated-mannequin",
+    "measurements": {
+      "elbowToGuardMm": 74.0,
+      "footContactGapMm": 18.0,
+      "handToGripMm": 12.0,
+      "kneeToSteeringMm": 290.0,
+      "minimumNonContactClearanceMm": 74.0
+    },
+    "minimumClearanceMm": 74.0,
+    "pose": "seated-drive",
+    "projectionAudit": {
+      "coordinateSystem": "normalized frame; origin bottom-left",
+      "objects": {
+        "brake_lever_left": {
+          "xMax": 0.77524,
+          "xMin": 0.69255,
+          "yMax": 0.93603,
+          "yMin": 0.88431
+        },
+        "brake_lever_right": {
+          "xMax": 0.30745,
+          "xMin": 0.22476,
+          "yMax": 0.93603,
+          "yMin": 0.88431
+        },
+        "footboard_left": {
+          "xMax": 0.88251,
+          "xMin": 0.66791,
+          "yMax": 0.32759,
+          "yMin": 0.07482
+        },
+        "footboard_right": {
+          "xMax": 0.33209,
+          "xMin": 0.11749,
+          "yMax": 0.32759,
+          "yMin": 0.07482
+        },
+        "handle_grip_left": {
+          "xMax": 0.85449,
+          "xMin": 0.72478,
+          "yMax": 0.91015,
+          "yMin": 0.86018
+        },
+        "handle_grip_right": {
+          "xMax": 0.27522,
+          "xMin": 0.14551,
+          "yMax": 0.91015,
+          "yMin": 0.86018
+        },
+        "instrument_display": {
+          "xMax": 0.54356,
+          "xMin": 0.45644,
+          "yMax": 0.88956,
+          "yMin": 0.84747
+        },
+        "key_switch": {
+          "xMax": 0.4385,
+          "xMin": 0.41162,
+          "yMax": 0.84895,
+          "yMin": 0.82091
+        }
+      },
+      "renderResolutionPx": [
+        1024,
+        1024
+      ],
+      "safeMarginFraction": 0.05
+    }
+  },
+  "evidenceGenerated": [
+    "cargo-crates-top.png",
+    "cargo-occupancy-top.png",
+    "collision-overlay-left.png",
+    "collision-overlay-rear.png",
+    "collision-overlay-side.png",
+    "collision-overlay-top.png",
+    "dimension-human-scale.png",
+    "driver-fit-clearance.png",
+    "driver.png",
+    "front.png",
+    "hero.png",
+    "left.png",
+    "material-id-inventory.png",
+    "rear-three-quarter.png",
+    "rear.png",
+    "right.png",
+    "sockets-named.png",
+    "top.png",
+    "underside.png",
+    "uv-texel-density.png",
+    "warm-hero.png",
+    "wireframe-left.png"
+  ],
+  "formalGlbExcludesReviewFixtures": true,
+  "runtimeMaterialVariation": {
+    "attribute": "wear_color",
+    "causalMasks": [
+      "upward paint fade",
+      "dust below 250 mm",
+      "cargo floor scratches",
+      "tailgate contact chips",
+      "grip and saddle polish",
+      "tire soil",
+      "utility role colors"
+    ],
+    "imageTextureCount": 0,
+    "sourceMeshCount": 288
+  },
+  "sourceReloadedFrom": "D:\\codex_project_work\\0728_some_github\\rural-peach-orchard\\resources\\blender\\vehicle\\electric-tricycle-a.blend"
+}

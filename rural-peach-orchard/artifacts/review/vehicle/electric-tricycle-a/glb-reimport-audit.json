@@ -1,0 +1,45 @@
+{
+  "collision": {
+    "allNamesUseColliderPrefixes": true,
+    "meshCount": 10,
+    "nodeCount": 10,
+    "triangleCount": 264
+  },
+  "issues": [],
+  "valid": true,
+  "visual": {
+    "cameraCount": 0,
+    "containsCratesOrPeaches": false,
+    "dimensionsAfterBlenderReimport": {
+      "heightZ": 1.3701,
+      "lengthY": 3.0087,
+      "widthX": 1.21
+    },
+    "lightCount": 0,
+    "materialCount": 4,
+    "materials": [
+      "M_Trike_Chassis",
+      "M_Trike_Paint",
+      "M_Trike_Rubber",
+      "M_Trike_Utility"
+    ],
+    "meshCount": 288,
+    "nodeCount": 299,
+    "paintMetallicFactor": 0.0,
+    "requiredNodeCount": 11,
+    "requiredNodesPresent": true,
+    "textureCount": 0,
+    "triangleCount": 54718,
+    "uniqueVertexColorCount": 65,
+    "vertexColorAttributeMeshCount": 288,
+    "vertexColorAttributeNames": [
+      "Color"
+    ],
+    "wheelTireObjects": [
+      "wheel_front_tire_sidewall",
+      "wheel_rear_left_tire_sidewall",
+      "wheel_rear_right_tire_sidewall"
+    ]
+  },
+  "visualCollisionNameOverlap": []
+}

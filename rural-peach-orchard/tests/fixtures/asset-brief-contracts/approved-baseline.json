@@ -1,0 +1,280 @@
+{
+  "baselineId": "task-5-approved-asset-facts-v1",
+  "authority": "Task 5 brief plus independent review approval",
+  "generatedFromBriefOrContract": false,
+  "assets": {
+    "electric-tricycle-a": {
+      "assetId": "vehicle.electric-tricycle-a",
+      "kind": "vehicle",
+      "units": "meter",
+      "upAxis": "Y",
+      "forwardAxis": "-Z",
+      "origin": "ground-center",
+      "lods": [
+        {
+          "level": 0,
+          "minDistance": 0,
+          "maxDistance": 30,
+          "maxTriangles": 60000
+        }
+      ],
+      "textureBudget": {
+        "maxDimension": 2048,
+        "maxTextureCount": 6
+      },
+      "materialBudget": {
+        "maxMaterials": 4
+      },
+      "requiredCollections": [
+        "VISUAL",
+        "COLLISION",
+        "SOCKETS",
+        "RIG"
+      ],
+      "requiredNodes": [
+        "driver_seat",
+        "exit_left",
+        "wheel_front",
+        "wheel_rear_left",
+        "wheel_rear_right",
+        "cargo_slot_01",
+        "cargo_slot_02",
+        "cargo_slot_03",
+        "cargo_slot_04",
+        "cargo_slot_05",
+        "cargo_slot_06"
+      ],
+      "requiredAnimations": [],
+      "requiredAnimationEvents": {},
+      "creationRoute": "original"
+    },
+    "farmer-a": {
+      "assetId": "character.farmer-a",
+      "kind": "character",
+      "units": "meter",
+      "upAxis": "Y",
+      "forwardAxis": "-Z",
+      "origin": "root-bone",
+      "lods": [
+        {
+          "level": 0,
+          "minDistance": 0,
+          "maxDistance": 25,
+          "maxTriangles": 60000
+        }
+      ],
+      "textureBudget": {
+        "maxDimension": 2048,
+        "maxTextureCount": 6
+      },
+      "materialBudget": {
+        "maxMaterials": 4
+      },
+      "requiredCollections": [
+        "VISUAL",
+        "COLLISION",
+        "SOCKETS",
+        "RIG"
+      ],
+      "requiredNodes": [
+        "root",
+        "pelvis",
+        "spine_01",
+        "spine_02",
+        "neck",
+        "head",
+        "clavicle_l",
+        "upper_arm_l",
+        "lower_arm_l",
+        "hand_l",
+        "clavicle_r",
+        "upper_arm_r",
+        "lower_arm_r",
+        "hand_r",
+        "thigh_l",
+        "calf_l",
+        "foot_l",
+        "thigh_r",
+        "calf_r",
+        "foot_r"
+      ],
+      "requiredAnimations": [
+        "idle",
+        "walk",
+        "enter_vehicle",
+        "drive",
+        "exit_vehicle",
+        "pick_low",
+        "pick_mid",
+        "pick_high",
+        "carry_crate",
+        "lift_crate",
+        "load_crate"
+      ],
+      "requiredAnimationEvents": {
+        "pick_low": [
+          "fruit_contact"
+        ],
+        "pick_mid": [
+          "fruit_contact"
+        ],
+        "pick_high": [
+          "fruit_contact"
+        ],
+        "carry_crate": [
+          "crate_gripped"
+        ],
+        "lift_crate": [
+          "crate_gripped"
+        ],
+        "load_crate": [
+          "crate_released"
+        ]
+      },
+      "creationRoute": "original"
+    },
+    "peach-tree-a": {
+      "assetId": "vegetation.peach-tree-a",
+      "kind": "vegetation",
+      "units": "meter",
+      "upAxis": "Y",
+      "forwardAxis": "-Z",
+      "origin": "ground-center",
+      "lods": [
+        {
+          "level": 0,
+          "minDistance": 0,
+          "maxDistance": 20,
+          "maxTriangles": 12000
+        },
+        {
+          "level": 1,
+          "minDistance": 20,
+          "maxDistance": 45,
+          "maxTriangles": 6000
+        },
+        {
+          "level": 2,
+          "minDistance": 45,
+          "maxDistance": 90,
+          "maxTriangles": 1500
+        }
+      ],
+      "textureBudget": {
+        "maxDimension": 2048,
+        "maxTextureCount": 1
+      },
+      "materialBudget": {
+        "maxMaterials": 2
+      },
+      "requiredCollections": [
+        "VISUAL",
+        "COLLISION",
+        "SOCKETS",
+        "RIG"
+      ],
+      "requiredNodes": [
+        "fruit_socket_01",
+        "fruit_socket_02",
+        "fruit_socket_03",
+        "fruit_socket_04",
+        "fruit_socket_05",
+        "fruit_socket_06",
+        "fruit_socket_07",
+        "fruit_socket_08",
+        "fruit_socket_09",
+        "fruit_socket_10",
+        "fruit_socket_11",
+        "fruit_socket_12",
+        "fruit_socket_13",
+        "fruit_socket_14",
+        "fruit_socket_15",
+        "fruit_socket_16",
+        "fruit_socket_17",
+        "fruit_socket_18",
+        "fruit_socket_19",
+        "fruit_socket_20",
+        "fruit_socket_21",
+        "fruit_socket_22",
+        "fruit_socket_23",
+        "fruit_socket_24"
+      ],
+      "requiredAnimations": [],
+      "requiredAnimationEvents": {},
+      "creationRoute": "original"
+    },
+    "farmhouse-a": {
+      "assetId": "environment.farmhouse-a",
+      "kind": "environment",
+      "units": "meter",
+      "upAxis": "Y",
+      "forwardAxis": "-Z",
+      "origin": "ground-center",
+      "lods": [
+        {
+          "level": 0,
+          "minDistance": 0,
+          "maxDistance": 35,
+          "maxTriangles": 40000
+        },
+        {
+          "level": 1,
+          "minDistance": 35,
+          "maxDistance": 75,
+          "maxTriangles": 18000
+        },
+        {
+          "level": 2,
+          "minDistance": 75,
+          "maxDistance": 150,
+          "maxTriangles": 4000
+        }
+      ],
+      "textureBudget": {
+        "maxDimension": 2048,
+        "maxTextureCount": 2
+      },
+      "materialBudget": {
+        "maxMaterials": 6
+      },
+      "requiredCollections": [
+        "VISUAL",
+        "COLLISION",
+        "SOCKETS",
+        "RIG"
+      ],
+      "requiredNodes": [
+        "entry_socket",
+        "yard_socket"
+      ],
+      "requiredAnimations": [],
+      "requiredAnimationEvents": {},
+      "creationRoute": "original",
+      "placementLandmarks": {
+        "space": "blender-authoring",
+        "upAxis": "Z",
+        "forwardAxis": "-Y",
+        "groundCenter": [
+          0,
+          0,
+          0
+        ],
+        "mainThresholdCenter": [
+          0,
+          -2.9,
+          0
+        ],
+        "entrySocket": [
+          0,
+          -3.05,
+          0
+        ],
+        "yardSocket": [
+          0,
+          -6.2,
+          0
+        ]
+      }
+    }
+  }
+}

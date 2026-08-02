@@ -1,0 +1,11 @@
+[
+  {
+    "sourceId": "source.fixture.placeholder-name",
+    "acquisition": "original",
+    "author": "Orchard test fixture generator",
+    "sourceUrl": null,
+    "license": "Test fixture only",
+    "licenseFile": "tests/fixtures/assets/placeholder-name/license.txt",
+    "modifiedByProject": true
+  }
+]

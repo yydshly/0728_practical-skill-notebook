@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "assetId": "vehicle.electric-tricycle-a",
+      "kind": "vehicle",
+      "sourceId": "source.vehicle.electric-tricycle-a",
+      "visual": "/assets/vehicle/electric-tricycle-a/visual.glb",
+      "collider": "/assets/vehicle/electric-tricycle-a/collision.glb",
+      "blenderSource": "resources/blender/vehicle/electric-tricycle-a.blend",
+      "units": "meter",
+      "upAxis": "Y",
+      "forwardAxis": "-Z",
+      "origin": "ground-center",
+      "lods": [
+        {
+          "level": 0,
+          "maxDistance": 30,
+          "maxTriangles": 60000
+        }
+      ],
+      "textureBudget": {
+        "maxDimension": 2048,
+        "maxTextureCount": 6
+      },
+      "materialBudget": {
+        "maxMaterials": 4
+      },
+      "requiredNodes": [
+        "driver_seat",
+        "exit_left",
+        "wheel_front",
+        "wheel_rear_left",
+        "wheel_rear_right",
+        "cargo_slot_01",
+        "cargo_slot_02",
+        "cargo_slot_03",
+        "cargo_slot_04",
+        "cargo_slot_05",
+        "cargo_slot_06"
+      ],
+      "requiredAnimations": [],
+      "requiredAnimationEvents": {},
+      "maxInstances": 2,
+      "critical": true
+    },
+    {
+      "assetId": "character.farmer-a-base",
+      "kind": "character",
+      "sourceId": "source.character.farmer-a-base.mpfb-2.0.17",
+      "visual": "/assets/character/farmer-a-base/visual.glb",
+      "collider": null,
+      "blenderSource": "resources/blender/vendor/farmer-a-base/farmer-a-base.blend",
+      "units": "meter",
+      "upAxis": "Y",
+      "forwardAxis": "-Z",
+      "origin": "root-bone",
+      "lods": [
+        {
+          "level": 0,
+          "maxDistance": 25,
+          "maxTriangles": 60000
+        }
+      ],
+      "textureBudget": {
+        "maxDimension": 2048,
+        "maxTextureCount": 6
+      },
+      "materialBudget": {
+        "maxMaterials": 4
+      },
+      "requiredNodes": [
+        "root",
+        "pelvis",
+        "head"
+      ],
+      "requiredAnimations": [],
+      "requiredAnimationEvents": {},
+      "maxInstances": 1,
+      "critical": true
+    },
+    {
+      "assetId": "environment.peach-tree-overall-v1",
+      "kind": "vegetation",
+      "sourceId": "source.environment.peach-tree-overall-v1",
+      "visual": "/assets/environment/peach-tree-overall-v1/visual.glb",
+      "collider": null,
+      "runtimeCollision": {
+        "authority": "runtime-authored-proxies",
+        "proxySetId": "orchard-tree-trunks-v1"
+      },
+      "blenderSource": "resources/blender/environment/peach-tree-overall-v1.blend",
+      "units": "meter",
+      "upAxis": "Y",
+      "forwardAxis": "-Z",
+      "origin": "ground-center",
+      "lods": [
+        {
+          "level": 0,
+          "maxDistance": 60,
+          "maxTriangles": 3500
+        }
+      ],
+      "triangleBudgetScope": "required-node-subtree",
+      "textureBudget": {
+        "maxDimension": 0,
+        "maxTextureCount": 0
+      },
+      "materialBudget": {
+        "maxMaterials": 3
+      },
+      "requiredNodes": [
+        "peach_tree_variant_a",
+        "peach_tree_variant_b",
+        "peach_tree_variant_c"
+      ],
+      "requiredAnimations": [],
+      "requiredAnimationEvents": {},
+      "maxInstances": 30,
+      "critical": true
+    },
+    {
+      "assetId": "environment.orchard-world-overall-v1",
+      "kind": "environment",
+      "sourceId": "source.environment.orchard-world-overall-v1",
+      "visual": "/assets/environment/orchard-world-overall-v1/visual.glb",
+      "collider": null,
+      "runtimeCollision": {
+        "authority": "runtime-authored-proxies",
+        "proxySetId": "orchard-world-obstacles-v1"
+      },
+      "blenderSource": "resources/blender/environment/orchard-world-overall-v1.blend",
+      "units": "meter",
+      "upAxis": "Y",
+      "forwardAxis": "-Z",
+      "origin": "ground-center",
+      "lods": [
+        {
+          "level": 0,
+          "maxDistance": 120,
+          "maxTriangles": 120000
+        }
+      ],
+      "triangleBudgetScope": "asset-total",
+      "textureBudget": {
+        "maxDimension": 0,
+        "maxTextureCount": 0
+      },
+      "materialBudget": {
+        "maxMaterials": 12
+      },
+      "requiredNodes": [
+        "farmhouse_yard",
+        "village_road",
+        "orchard_gate",
+        "orchard_parking",
+        "orchard_soil_surface",
+        "background_dressing",
+        "crate_instances",
+        "orchard_parking_anchor",
+        "harvest_basket_anchor",
+        "packing_crate_anchor",
+        "farmhouse_delivery_anchor",
+        "harvest_basket_empty",
+        "harvest_basket_full",
+        "packing_crate_empty",
+        "packing_crate_full",
+        "delivery_complete"
+      ],
+      "requiredAnimations": [],
+      "requiredAnimationEvents": {},
+      "maxInstances": 1,
+      "critical": true
+    }
+  ]
+}

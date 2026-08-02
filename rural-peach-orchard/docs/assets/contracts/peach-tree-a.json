@@ -1,0 +1,67 @@
+{
+  "assetId": "vegetation.peach-tree-a",
+  "kind": "vegetation",
+  "units": "meter",
+  "upAxis": "Y",
+  "forwardAxis": "-Z",
+  "origin": "ground-center",
+  "lods": [
+    {
+      "level": 0,
+      "maxDistance": 20,
+      "maxTriangles": 12000
+    },
+    {
+      "level": 1,
+      "maxDistance": 45,
+      "maxTriangles": 6000
+    },
+    {
+      "level": 2,
+      "maxDistance": 90,
+      "maxTriangles": 1500
+    }
+  ],
+  "textureBudget": {
+    "maxDimension": 2048,
+    "maxTextureCount": 1
+  },
+  "materialBudget": {
+    "maxMaterials": 2
+  },
+  "requiredCollections": [
+    "VISUAL",
+    "COLLISION",
+    "SOCKETS",
+    "RIG"
+  ],
+  "requiredNodes": [
+    "fruit_socket_01",
+    "fruit_socket_02",
+    "fruit_socket_03",
+    "fruit_socket_04",
+    "fruit_socket_05",
+    "fruit_socket_06",
+    "fruit_socket_07",
+    "fruit_socket_08",
+    "fruit_socket_09",
+    "fruit_socket_10",
+    "fruit_socket_11",
+    "fruit_socket_12",
+    "fruit_socket_13",
+    "fruit_socket_14",
+    "fruit_socket_15",
+    "fruit_socket_16",
+    "fruit_socket_17",
+    "fruit_socket_18",
+    "fruit_socket_19",
+    "fruit_socket_20",
+    "fruit_socket_21",
+    "fruit_socket_22",
+    "fruit_socket_23",
+    "fruit_socket_24"
+  ],
+  "requiredAnimations": [],
+  "requiredAnimationEvents": {},
+  "creationRoute": "original"
+}

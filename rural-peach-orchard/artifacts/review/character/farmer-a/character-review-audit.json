@@ -1,0 +1,412 @@
+{
+  "animations": {
+    "carry_crate": {
+      "changedBones": [
+        "lower_arm_l",
+        "lower_arm_r",
+        "root",
+        "thigh_l",
+        "thigh_r",
+        "upper_arm_l",
+        "upper_arm_r"
+      ],
+      "events": [
+        {
+          "name": "crate_gripped",
+          "normalizedTime": 0.31
+        }
+      ],
+      "frames": 40,
+      "keyedFrames": [
+        1.0,
+        20.0,
+        40.0
+      ],
+      "keyframePointCount": 72,
+      "loop": true,
+      "valueRange": [
+        -1.13129,
+        0.39552
+      ]
+    },
+    "drive": {
+      "changedBones": [
+        "calf_l",
+        "calf_r",
+        "head",
+        "lower_arm_l",
+        "lower_arm_r",
+        "root",
+        "thigh_l",
+        "thigh_r",
+        "upper_arm_l",
+        "upper_arm_r"
+      ],
+      "events": [],
+      "frames": 60,
+      "keyedFrames": [
+        1.0,
+        30.0,
+        60.0
+      ],
+      "keyframePointCount": 93,
+      "loop": true,
+      "valueRange": [
+        -1.20484,
+        1.20485
+      ]
+    },
+    "enter_vehicle": {
+      "changedBones": [
+        "calf_l",
+        "calf_r",
+        "head",
+        "lower_arm_l",
+        "lower_arm_r",
+        "root",
+        "spine_01",
+        "thigh_l",
+        "thigh_r",
+        "upper_arm_l",
+        "upper_arm_r"
+      ],
+      "events": [],
+      "frames": 75,
+      "keyedFrames": [
+        1.0,
+        18.0,
+        38.0,
+        58.0,
+        75.0
+      ],
+      "keyframePointCount": 84,
+      "loop": false,
+      "valueRange": [
+        -1.42,
+        1.18
+      ]
+    },
+    "exit_vehicle": {
+      "changedBones": [
+        "calf_l",
+        "calf_r",
+        "head",
+        "lower_arm_l",
+        "lower_arm_r",
+        "root",
+        "spine_01",
+        "thigh_l",
+        "thigh_r",
+        "upper_arm_l",
+        "upper_arm_r"
+      ],
+      "events": [],
+      "frames": 70,
+      "keyedFrames": [
+        1.0,
+        16.0,
+        34.0,
+        52.0,
+        70.0
+      ],
+      "keyframePointCount": 81,
+      "loop": false,
+      "valueRange": [
+        -1.25,
+        1.65347
+      ]
+    },
+    "idle": {
+      "changedBones": [
+        "head",
+        "lower_arm_l",
+        "lower_arm_r",
+        "root",
+        "spine_01",
+        "spine_02",
+        "upper_arm_l",
+        "upper_arm_r"
+      ],
+      "events": [],
+      "frames": 90,
+      "keyedFrames": [
+        1.0,
+        30.0,
+        60.0,
+        90.0
+      ],
+      "keyframePointCount": 84,
+      "loop": true,
+      "valueRange": [
+        -1.19864,
+        0.25085
+      ]
+    },
+    "lift_crate": {
+      "changedBones": [
+        "calf_l",
+        "calf_r",
+        "foot_l",
+        "foot_r",
+        "lower_arm_l",
+        "lower_arm_r",
+        "pelvis",
+        "root",
+        "spine_01",
+        "spine_02",
+        "thigh_l",
+        "thigh_r",
+        "upper_arm_l",
+        "upper_arm_r"
+      ],
+      "events": [
+        {
+          "name": "crate_gripped",
+          "normalizedTime": 0.31
+        }
+      ],
+      "frames": 70,
+      "keyedFrames": [
+        1.0,
+        22.0,
+        48.0,
+        70.0
+      ],
+      "keyframePointCount": 177,
+      "loop": false,
+      "valueRange": [
+        -1.23404,
+        0.65986
+      ]
+    },
+    "load_crate": {
+      "changedBones": [
+        "hand_l",
+        "hand_r",
+        "lower_arm_l",
+        "lower_arm_r",
+        "root",
+        "spine_01",
+        "upper_arm_l",
+        "upper_arm_r"
+      ],
+      "events": [
+        {
+          "name": "crate_released",
+          "normalizedTime": 0.76
+        }
+      ],
+      "frames": 65,
+      "keyedFrames": [
+        1.0,
+        30.0,
+        49.0,
+        65.0
+      ],
+      "keyframePointCount": 72,
+      "loop": false,
+      "valueRange": [
+        -1.46601,
+        1.05198
+      ]
+    },
+    "pick_high": {
+      "changedBones": [
+        "calf_l",
+        "hand_l",
+        "lower_arm_l",
+        "root",
+        "spine_01",
+        "thigh_l",
+        "thigh_r",
+        "upper_arm_l"
+      ],
+      "events": [
+        {
+          "name": "fruit_contact",
+          "normalizedTime": 0.58
+        }
+      ],
+      "frames": 65,
+      "keyedFrames": [
+        1.0,
+        22.0,
+        38.0,
+        65.0
+      ],
+      "keyframePointCount": 63,
+      "loop": false,
+      "valueRange": [
+        -2.15,
+        2.2854
+      ]
+    },
+    "pick_low": {
+      "changedBones": [
+        "calf_l",
+        "hand_l",
+        "lower_arm_l",
+        "root",
+        "spine_01",
+        "thigh_l",
+        "thigh_r",
+        "upper_arm_l"
+      ],
+      "events": [
+        {
+          "name": "fruit_contact",
+          "normalizedTime": 0.58
+        }
+      ],
+      "frames": 60,
+      "keyedFrames": [
+        1.0,
+        20.0,
+        35.0,
+        60.0
+      ],
+      "keyframePointCount": 63,
+      "loop": false,
+      "valueRange": [
+        -1.05,
+        0.68
+      ]
+    },
+    "pick_mid": {
+      "changedBones": [
+        "hand_l",
+        "lower_arm_l",
+        "root",
+        "spine_01",
+        "upper_arm_l"
+      ],
+      "events": [
+        {
+          "name": "fruit_contact",
+          "normalizedTime": 0.58
+        }
+      ],
+      "frames": 50,
+      "keyedFrames": [
+        1.0,
+        17.0,
+        29.0,
+        50.0
+      ],
+      "keyframePointCount": 63,
+      "loop": false,
+      "valueRange": [
+        -1.05,
+        0.76091
+      ]
+    },
+    "walk": {
+      "changedBones": [
+        "calf_l",
+        "calf_r",
+        "foot_l",
+        "foot_r",
+        "lower_arm_l",
+        "lower_arm_r",
+        "pelvis",
+        "root",
+        "spine_01",
+        "thigh_l",
+        "thigh_r",
+        "upper_arm_l",
+        "upper_arm_r"
+      ],
+      "events": [],
+      "frames": 30,
+      "keyedFrames": [
+        1.0,
+        8.0,
+        16.0,
+        23.0,
+        30.0
+      ],
+      "keyframePointCount": 192,
+      "loop": true,
+      "valueRange": [
+        -1.39067,
+        0.86882
+      ]
+    }
+  },
+  "assetId": "character.farmer-a",
+  "fixtures": {
+    "crate": "0.50x0.35x0.28m contemporary ventilated plastic crate; review-only",
+    "fruitTargetsM": {
+      "high": 1.67,
+      "low": 0.85,
+      "mid": 1.2
+    },
+    "tricycle": "resources/blender/vehicle/electric-tricycle-a.blend; review-only"
+  },
+  "measurementAuthority": "tools/blender/review_farmer_character.py decoded-GLB evaluation",
+  "runtimeCapsule": {
+    "exportedCollisionGlbEmpty": true,
+    "interaction": {
+      "heightM": 1.5,
+      "radiusM": 0.27
+    },
+    "sourceCollisionCollectionEmpty": true,
+    "standing": {
+      "heightM": 1.62,
+      "radiusM": 0.29
+    },
+    "vehicle": {
+      "heightM": 1.18,
+      "radiusM": 0.25
+    }
+  },
+  "sourceGeometry": {
+    "allMeshesHaveUV": true,
+    "allMeshesSkinned": true,
+    "armature": {
+      "boneCount": 40,
+      "negativeScale": false,
+      "object": "farmer_rig",
+      "rootHead": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "boundsM": {
+      "max": [
+        0.8558,
+        0.153,
+        1.756
+      ],
+      "min": [
+        -0.8558,
+        -0.2103,
+        0.0099
+      ]
+    },
+    "collisionObjectCount": 0,
+    "materialNames": [
+      "M_Farmer_Cloth",
+      "M_Farmer_EyesHair",
+      "M_Farmer_Gear",
+      "M_Farmer_Skin"
+    ],
+    "maxInfluencesPerVertex": 3,
+    "meshCount": 5,
+    "socketNames": [
+      "basket_mount",
+      "hand_grip_left",
+      "hand_grip_right",
+      "root_motion"
+    ],
+    "sourceTriangleCount": 17058,
+    "vertexCount": 8770
+  },
+  "sourceReloadedFromDisk": "resources\\blender\\character\\farmer-a.blend"
+}

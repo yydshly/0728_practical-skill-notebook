@@ -1,0 +1,81 @@
+{
+  "generator": "MPFB",
+  "generatorVersion": "2.0.17",
+  "blenderVersion": "4.5.12",
+  "assetScope": [
+    "core-body",
+    "core-eyes",
+    "game-engine-rig"
+  ],
+  "targetHeightMeters": 1.68,
+  "rig": "GameEngine",
+  "materialMode": "GameEngine",
+  "sourceArchiveSha256": {
+    "mpfbExtension": "4f0a879d64a39bf646fbf5f53601ac678855da329d650617dca5737548239a87",
+    "coreSystemAssets": "b542127a8e25547c7c29c19f2d1d2adb9a664c80396ecd694095dbc8028a0107"
+  },
+  "generatedBaseBlendSha256": "ea7fae26bdbd0b17565fdf2bc46b989c9338b06058231a9b27976bc0e070358d",
+  "measurementMode": "dependency-graph evaluated mesh after shape keys and modifiers",
+  "basisVisibleBoundsZ": [0.003699, 1.767773],
+  "evaluatedVisibleBoundsZ": [0.0, 1.68],
+  "evaluatedVisibleHeightMeters": 1.68,
+  "rigRestBoundsZ": [0.0, 1.674],
+  "rigBottomMinusBodyBottomMeters": 0.0,
+  "rigTopMinusBodyTopMeters": -0.006,
+  "macroParameters": {
+    "gender": 1.0,
+    "age": 0.85,
+    "muscle": 0.44,
+    "weight": 0.57,
+    "proportions": 0.52,
+    "height": 0.46,
+    "cupsize": 0.5,
+    "firmness": 0.5,
+    "race": {
+      "asian": 1.0,
+      "caucasian": 0.0,
+      "african": 0.0
+    }
+  },
+  "detailTargets": [
+    { "target": "head-rectangular", "value": 0.28 },
+    { "target": "head-square", "value": 0.08 },
+    { "target": "forehead-scale-vert-decr", "value": 0.12 },
+    { "target": "head-scale-horiz-decr", "value": 0.03 },
+    { "target": "l-eye-height1-decr", "value": 0.10 },
+    { "target": "r-eye-height1-decr", "value": 0.10 },
+    { "target": "l-eye-epicanthus-in", "value": 0.06 },
+    { "target": "r-eye-epicanthus-in", "value": 0.06 },
+    { "target": "nose-width2-incr", "value": 0.07 },
+    { "target": "nose-point-width-incr", "value": 0.04 },
+    { "target": "nose-scale-depth-incr", "value": 0.13 },
+    { "target": "nose-trans-forward", "value": 0.05 },
+    { "target": "mouth-upperlip-volume-decr", "value": 0.05 },
+    { "target": "mouth-lowerlip-volume-decr", "value": 0.04 },
+    { "target": "mouth-upperlip-ext-down", "value": 0.20 },
+    { "target": "mouth-lowerlip-ext-up", "value": 0.22 },
+    { "target": "chin-width-incr", "value": 0.25 },
+    { "target": "chin-height-incr", "value": 0.08 },
+    { "target": "chin-prominent-incr", "value": 0.07 },
+    { "target": "chin-bones-incr", "value": 0.07 },
+    { "target": "l-cheek-volume-incr", "value": 0.12 },
+    { "target": "r-cheek-volume-incr", "value": 0.12 },
+    { "target": "l-cheek-bones-incr", "value": 0.08 },
+    { "target": "r-cheek-bones-incr", "value": 0.08 },
+    { "target": "forehead-temple-incr", "value": 0.07 },
+    { "target": "l-ear-scale-incr", "value": 0.03 },
+    { "target": "r-ear-scale-incr", "value": 0.03 },
+    { "target": "measure-shoulder-dist-decr", "value": 0.02 },
+    { "target": "torso-scale-depth-incr", "value": 0.04 },
+    { "target": "neck-scale-horiz-incr", "value": 0.12 },
+    { "target": "neck-scale-depth-incr", "value": 0.08 }
+  ],
+  "expressionTargets": [
+    {
+      "target": "targets/expression/units/asian/mouth-compression.target.gz",
+      "value": 0.22
+    }
+  ],
+  "rigVerticalCorrectionMeters": 0.856458,
+  "rigHeadTailShorteningMeters": 0.077148
+}

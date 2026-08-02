@@ -1,0 +1,83 @@
+{
+  "evidenceVersion": 1,
+  "capturedAt": "2026-08-02T21:14:24.5494620+08:00",
+  "canonicalUrl": "http://127.0.0.1:4175/feasibility",
+  "requestedCanonicalUrl": "http://127.0.0.1:4173/feasibility",
+  "portOverrideReason": "Port 4173 was occupied by an unrelated local application and was not stopped or modified.",
+  "viewports": {
+    "desktop": {
+      "width": 1440,
+      "height": 900
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844
+    }
+  },
+  "loadedAssetIds": [
+    "vehicle.electric-tricycle-a",
+    "character.farmer-a-base",
+    "environment.orchard-world-overall-v1",
+    "environment.peach-tree-overall-v1"
+  ],
+  "omittedOptionalAssetIds": [],
+  "world": {
+    "treeInstanceCount": 30,
+    "crateInstanceCount": 8,
+    "vehicleDrawBatchCount": 16,
+    "visibleDebugPrimitiveCount": 0,
+    "drawCalls": 65,
+    "triangles": 160874
+  },
+  "automatedFullLoop": {
+    "status": "pass",
+    "completedLoops": 10,
+    "finalJobState": "delivered",
+    "fallbackCount": 0,
+    "recoveryCount": 0,
+    "ownershipViolations": 0,
+    "stageViolationCount": 0,
+    "physicsStepP95Ms": 0.10000002384185791,
+    "consoleErrors": []
+  },
+  "manualKeyboardPlaythrough": {
+    "status": "partial",
+    "verifiedStages": [
+      "accept",
+      "enter-vehicle",
+      "road-traversal",
+      "park/exit"
+    ],
+    "blockingFinding": "Repeated manual W/A/S/D replays could leave the authored road and miss the narrow parking trigger; a reliable manual delivery loop was not completed.",
+    "deferredCharacterFinding": "The approved base character remains visibly unclothed and unanimated while on foot; it is hidden while seated and its art pass remains deferred."
+  },
+  "finalStateVisibility": {
+    "activeTreeFruit": false,
+    "basketFull": false,
+    "crateFull": false,
+    "cargoLoaded": false,
+    "deliveryComplete": true
+  },
+  "captureProvenance": {
+    "spawn.png": "normal runtime",
+    "road-traversal.png": "real keyboard",
+    "orchard-arrival.png": "real keyboard",
+    "picking-and-packing.png": "deterministic fixture, frame-stepped",
+    "loaded-return.png": "deterministic fixture",
+    "delivery-complete.png": "deterministic fixture",
+    "debug-separated.png": "explicit debug runtime",
+    "mobile-spawn.png": "normal runtime",
+    "mobile-orchard.png": "deterministic fixture, frame-stepped"
+  },
+  "screenshotSha256": {
+    "debug-separated.png": "f6b8be7d4338f86e419c95de636bde932e760e07a5b45d0fe1b8d704246ec5db",
+    "delivery-complete.png": "2d6c58fa882adcaa05134be8079b7ef249a5b950f20ed5cef3faa58b93c335b6",
+    "loaded-return.png": "c177ba0728b363653b40381b2998d15071fd9e38611f172dee32f45658633aff",
+    "mobile-orchard.png": "2f8e65ebd46b50dead1d164dfd4b855df904e819406c72862ccbdaa0b80de910",
+    "mobile-spawn.png": "e3fab894801945236366e997bc32c931b330d37b62e60d5c2a9e70d312ad09fa",
+    "orchard-arrival.png": "18e5ea93796930078b82bf1842965823bc31b08de8588a8ceca9c9e479c6c1a9",
+    "picking-and-packing.png": "b7fef24758e8ef7e96e13d5b717666b04219c87de4bd88c318747279d5d655d9",
+    "road-traversal.png": "973f0ddfe78bcd02d3df02f2fb60998c975952ca1b168739501e9f76eb8d6ff6",
+    "spawn.png": "4aed077bf7965e292e9d64b6325d8dd9d74dd40f1d5d9609ab158882fb45f56c"
+  }
+}

@@ -16,6 +16,7 @@
 | 08 | [r3f-scroll-rig 原库能力与雾屿灯塔应用验证](./r3f-scroll-rig-showcase/) | `r3f-scroll-rig-showcase` | 封装库的 DOM/WebGL 同步、滚动驱动、固定与视差能力，以及雾屿灯塔应用的两种内置对照构图。 |
 | 09 | [Finesse Skill 产品研究](./finesse-skill-product-research/) | `finesse-skill-product-research` | 文档与研究计划：梳理 Finesse 能力、受控验证方法与产品机会；交互研究展厅仍在计划中，当前不可运行。 |
 | 10 | [My Room in 3D 空间化产品承载研究](./my-room-in-3d-research/) | `my-room-in-3d-research` | 研究 Bruno Simon 的 3D 房间作品集如何将空间、内容入口与动态媒体组合为可探索的个人/产品展示形态。 |
+| 11 | [农村桃园业务原型](./rural-peach-orchard/) | `rural-peach-orchard` | 从 Folio 2019 的小车场景研究出发，验证农村桃园中的驾驶、采摘、装载、返程与交付闭环。 |
 
 ## 01 · 雾屿灯塔
 
@@ -178,6 +179,26 @@ npm run build
 
 子项目以固定上游提交 [`5d00b3f`](https://github.com/brunosimon/my-room-in-3d/tree/5d00b3f870da81f103e901e0d12e20bbcc816834) 保存为研究参考；技术结论、产品化缺口和后续可复用架构见 [研究笔记](./docs/research/my-room-in-3d.md)。上游源码、模型和媒体资产的权利归原作者及各自权利人所有；本仓库不将它们表述为自研资产，也不以本研究作为再发布或商用授权依据。
 
+## 11 · 农村桃园业务原型
+
+这一子项目从 [Bruno Simon 的 Folio 2019](https://github.com/brunosimon/folio-2019) 研究“小车、空间、碰撞、事件与内容展示”如何协作，再把能力迁移到农村桃园业务：玩家接受任务、驾驶电动三轮车前往桃园、采摘装载、返程并完成交付。
+
+原始小车场景参考效果：
+
+<img src="./rural-peach-orchard/docs/media/folio-2019-original-demo.gif" alt="Folio 2019 原始小车场景核心效果" width="720">
+
+本仓库的桃园业务闭环：
+
+<img src="./rural-peach-orchard/docs/media/rural-peach-orchard-core-loop.gif" alt="农村桃园驾驶采摘装载返程交付闭环" width="720">
+
+当前版本已完成研究验证并暂时归档。人物最终美术、完整动作集、生产级农村环境资产和车辆手感精修留待下一阶段；现有能力与边界见[项目 README](./rural-peach-orchard/README.md)。
+
+```powershell
+cd rural-peach-orchard
+npm install
+npm run dev
+```
+
 ## 获取项目库代码
 
 ```powershell
@@ -268,3 +289,4 @@ node scripts/check-fungarium-fifth-project.mjs
 - [Finesse Skill 产品研究：受控研究计划](./finesse-skill-product-research/docs/RESEARCH-PLAN.md)
 - [Finesse Skill 产品研究：产品机会方向](./finesse-skill-product-research/docs/PRODUCT-DIRECTIONS.md)
 - [Finesse Skill 产品研究：未来研究展厅计划](./finesse-skill-product-research/docs/SHOWCASE-PLAN.md)
+- [农村桃园业务原型 README](./rural-peach-orchard/README.md)

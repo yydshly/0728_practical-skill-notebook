@@ -1,0 +1,95 @@
+{
+  "sourceId": "source.character.farmer-a-base.mpfb-2.0.17",
+  "assetId": "character.farmer-a-base",
+  "acquisition": "licensed-base",
+  "author": "MakeHuman Community",
+  "sourceUrl": "https://extensions.blender.org/add-ons/mpfb/",
+  "sourceVersion": "2.0.17",
+  "acquiredAt": "2026-08-01",
+  "sourceSha256": "ea7fae26bdbd0b17565fdf2bc46b989c9338b06058231a9b27976bc0e070358d",
+  "generatedBaseBlendSha256": "ea7fae26bdbd0b17565fdf2bc46b989c9338b06058231a9b27976bc0e070358d",
+  "sourceArchiveSha256": {
+    "mpfbExtension": "4f0a879d64a39bf646fbf5f53601ac678855da329d650617dca5737548239a87",
+    "coreSystemAssets": "b542127a8e25547c7c29c19f2d1d2adb9a664c80396ecd694095dbc8028a0107"
+  },
+  "sourceArchives": [
+    {
+      "filename": "mpfb2-2.0.17-extension-platform.zip",
+      "url": "https://extensions.blender.org/download/sha256:4f0a879d64a39bf646fbf5f53601ac678855da329d650617dca5737548239a87/add-on-mpfb-v2.0.17.zip",
+      "version": "2.0.17",
+      "downloadedAt": "2026-08-01",
+      "sha256": "4f0a879d64a39bf646fbf5f53601ac678855da329d650617dca5737548239a87"
+    },
+    {
+      "filename": "makehuman_system_assets_cc0.zip",
+      "url": "https://files2.makehumancommunity.org/asset_packs/makehuman_system_assets/makehuman_system_assets_cc0.zip",
+      "version": "system-assets-cc0-current-at-download-2026-08-01",
+      "downloadedAt": "2026-08-01",
+      "sha256": "b542127a8e25547c7c29c19f2d1d2adb9a664c80396ecd694095dbc8028a0107"
+    }
+  ],
+  "license": "CC0-1.0",
+  "licenseUrl": "https://static.makehumancommunity.org/about/license.html",
+  "licenseFile": "docs/assets/licenses/farmer-a-base/ASSET-LICENSE.md",
+  "distributionMode": "public-source",
+  "rights": {
+    "commercialUse": true,
+    "modify": true,
+    "redistributeSource": true,
+    "redistributeRuntime": true,
+    "attributionRequired": false
+  },
+  "selectedCoreAssets": [
+    "MPFB:data/3dobjs/base.obj",
+    "MPFB:data/rigs/standard/weights.game_engine.json",
+    "MakeHuman:skins/middleage_asian_male/middleage_asian_male.mhmat",
+    "MakeHuman:eyes/high-poly/high-poly.mhclo",
+    "MakeHuman:eyes/materials/brown.mhmat"
+  ],
+  "excludedAssets": [
+    "community clothing",
+    "community hair",
+    "marketplace assets",
+    "MPFB extension source code"
+  ],
+  "modifiedByProject": true,
+  "projectModifications": [
+    "adult East Asian macro phenotype parameters",
+    "project-specific face and body proportion targets",
+    "1.68 m dependency-graph-evaluated scale normalization",
+    "evaluated grounded-body/GameEngine-rest-rig vertical alignment and head display endpoint scalp fit",
+    "GameEngine material setup"
+  ],
+  "generatedBaseAudit": {
+    "measurementMode": "dependency-graph evaluated mesh after shape keys and modifiers",
+    "basisVisibleBoundsZ": [0.003699, 1.767773],
+    "evaluatedVisibleBoundsZ": [0.0, 1.68],
+    "evaluatedVisibleHeightMeters": 1.68,
+    "rigRestBoundsZ": [0.0, 1.674],
+    "rigBottomMinusBodyBottomMeters": 0.0,
+    "rigTopMinusBodyTopMeters": -0.006,
+    "rigVerticalCorrectionMeters": 0.856458,
+    "rigHeadTailShorteningMeters": 0.077148,
+    "objectScales": {
+      "body": 1.0,
+      "eyes": 1.0,
+      "rig": 1.0
+    },
+    "bodyVisibleVertices": 13380,
+    "bodySourceVertices": 19158,
+    "eyeVertices": 1064,
+    "triangleCount": 28796,
+    "materialCount": 2,
+    "boneCount": 53
+  },
+  "priceUsd": 0,
+  "extensionCode": {
+    "license": "GPL-3.0-or-later",
+    "redistributed": false
+  },
+  "auditNotes": [
+    "Neither downloaded ZIP contains a root-level LICENSE or COPYING file.",
+    "Every selected mesh/material file carries an embedded per-file CC0 notice; the GameEngine weights JSON declares license CC0.",
+    "The official MakeHuman license page corroborates CC0 for exported characters and bundled core assets."
+  ]
+}

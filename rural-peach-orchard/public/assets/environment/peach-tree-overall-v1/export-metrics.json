@@ -1,0 +1,23 @@
+[
+  {
+    "crownDiameterM": 4.3394,
+    "heightM": 3.3056,
+    "materialCount": 3,
+    "name": "peach_tree_variant_a",
+    "triangles": 1792
+  },
+  {
+    "crownDiameterM": 4.4563,
+    "heightM": 3.3959,
+    "materialCount": 3,
+    "name": "peach_tree_variant_b",
+    "triangles": 1792
+  },
+  {
+    "crownDiameterM": 4.1737,
+    "heightM": 3.3529,
+    "materialCount": 3,
+    "name": "peach_tree_variant_c",
+    "triangles": 1792
+  }
+]

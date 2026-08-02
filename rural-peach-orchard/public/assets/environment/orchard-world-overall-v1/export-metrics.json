@@ -1,0 +1,18 @@
+{
+  "boundsM": {
+    "max": [
+      45.0,
+      7.2,
+      49.0
+    ],
+    "min": [
+      -45.0,
+      -0.12,
+      -26.0
+    ]
+  },
+  "materialCount": 8,
+  "meshCount": 59,
+  "primitiveCount": 60,
+  "triangles": 8012
+}

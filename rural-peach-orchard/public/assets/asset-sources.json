@@ -1,0 +1,38 @@
+[
+  {
+    "sourceId": "source.vehicle.electric-tricycle-a",
+    "acquisition": "original",
+    "author": "Rural Peach Orchard project",
+    "sourceUrl": null,
+    "license": "Project-original; all rights reserved",
+    "licenseFile": "public/assets/vehicle/electric-tricycle-a/LICENSE.md",
+    "modifiedByProject": true
+  },
+  {
+    "sourceId": "source.character.farmer-a-base.mpfb-2.0.17",
+    "acquisition": "licensed-base",
+    "author": "MakeHuman Community",
+    "sourceUrl": "https://extensions.blender.org/add-ons/mpfb/",
+    "license": "CC0-1.0",
+    "licenseFile": "docs/assets/licenses/farmer-a-base/ASSET-LICENSE.md",
+    "modifiedByProject": true
+  },
+  {
+    "sourceId": "source.environment.peach-tree-overall-v1",
+    "acquisition": "original",
+    "author": "Rural Peach Orchard project",
+    "sourceUrl": null,
+    "license": "Project repository license (ISC)",
+    "licenseFile": "public/assets/environment/peach-tree-overall-v1/LICENSE.md",
+    "modifiedByProject": true
+  },
+  {
+    "sourceId": "source.environment.orchard-world-overall-v1",
+    "acquisition": "original",
+    "author": "Rural Peach Orchard project",
+    "sourceUrl": null,
+    "license": "Project repository license (ISC)",
+    "licenseFile": "public/assets/environment/orchard-world-overall-v1/LICENSE.md",
+    "modifiedByProject": true
+  }
+]
